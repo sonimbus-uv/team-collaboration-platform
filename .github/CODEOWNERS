@@ -1,0 +1,11 @@
+# Revisores asignados automáticamente en cada Pull Request.
+#
+# Mientras el equipo sea de dos integrantes, ambos son dueños de todo el
+# repositorio: la regla de una aprobación en `main` ya obliga a que el otro
+# revise. El responsable principal de cada módulo se indica en su README.
+#
+# Al incorporar integrantes, agregar líneas por ruta debajo de esta (la última
+# coincidencia gana), con al menos dos dueños por ruta. Ejemplo:
+#   /services/auth/  @usuario-principal @usuario-respaldo
+
+* @Maple-M136279841 @tuzc0
