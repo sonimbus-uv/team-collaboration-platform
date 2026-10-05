@@ -203,28 +203,60 @@ La configuración sensible se almacenará en `infrastructure/.env`. Este archivo
 
 ## 5. Organización del repositorio
 
-Estructura inicial recomendada:
-
 ```text
-project/
-├── Vagrantfile
+team-collaboration-platform/
+├── .github/            plantillas, CODEOWNERS y CI
 ├── clients/
-│   ├── desktop/
-│   └── mobile/
+│   ├── desktop/        Java 21 + JavaFX (app/ y livekit-sdk/)
+│   └── mobile/         Flutter + Drift
 ├── services/
-│   ├── auth/
-│   └── core/
-├── infrastructure/
-│   ├── .env.example
-│   └── compose.yaml
-├── scripts/
-│   └── provision.sh
+│   ├── auth/           Rust: identidad, perfil y tokens
+│   ├── core/           Elixir/Phoenix: dominio principal
+│   └── files/          Elixir: archivos sobre MinIO
+├── gateway/
+│   └── nginx/          API gateway
+├── contracts/
+│   ├── openapi/        contratos REST por servicio
+│   └── events/         eventos WebSocket y RabbitMQ
 ├── database/
-│   ├── postgres/
-│   └── cassandra/
+│   ├── postgres/       inicialización de la instancia
+│   └── scylla/         esquemas CQL
+├── infrastructure/     Compose, .env.example y LiveKit
+├── scripts/
 ├── docs/
+│   ├── architecture/
+│   ├── requirements/
+│   ├── database/
+│   ├── deployment/
+│   └── decisions/      ADR
+├── Vagrantfile
 └── README.md
 ```
+
+Cada carpeta de `clients/`, `services/` y `gateway/` es un módulo con un responsable principal, indicado en su `README.md` junto con su responsabilidad, su stack y lo que queda fuera de su alcance.
+
+### Alcances
+
+El nombre del módulo se usa como alcance en los commits y como `<modulo>` en las ramas:
+
+| Ruta | Alcance |
+|---|---|
+| `clients/desktop/` | `desktop` |
+| `clients/mobile/` | `mobile` |
+| `services/auth/` | `auth` |
+| `services/core/` | `core` |
+| `services/files/` | `files` |
+| `gateway/` | `gateway` |
+| `contracts/` | `contracts` |
+| `database/` | `database` |
+| `infrastructure/`, `Vagrantfile`, `scripts/` | `infrastructure` |
+| `docs/` | `docs` |
+
+### Reglas
+
+- Un PR modifica un solo módulo, salvo cambios de contrato acompañados de su implementación.
+- Los clientes y servicios se coordinan mediante `contracts/`, no leyendo el código del otro.
+- Cada servicio es dueño de sus datos; las migraciones viven dentro del servicio.
 
 La organización podrá modificarse si el crecimiento del proyecto lo justifica.
 
