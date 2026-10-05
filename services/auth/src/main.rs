@@ -2,6 +2,7 @@ mod config;
 mod db;
 mod routes;
 mod state;
+mod error;
 
 use state::AppState;
 
