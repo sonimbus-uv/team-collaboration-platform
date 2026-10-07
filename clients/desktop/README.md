@@ -4,7 +4,9 @@
 
 ## Responsabilidad
 
-Aplicación de escritorio de Sonimbus: interfaz de usuario, almacenamiento local y comunicación con el backend a través del gateway (REST y WebSocket). Incluye la comunicación por voz con LiveKit.
+Aplicación de escritorio de Sonimbus: interfaz de usuario, almacenamiento local y comunicación con el backend a través del gateway (REST y WebSocket). Incluye la comunicación por voz con LiveKit (D-01).
+
+Cubre todos los casos de uso del MVP y concentra la administración detallada (RES-06). Ver la trazabilidad en [`docs/requirements/`](../../docs/requirements/README.md#cliente-de-escritorio).
 
 ## Stack
 
@@ -25,7 +27,7 @@ Aplicación de escritorio de Sonimbus: interfaz de usuario, almacenamiento local
 ## Fuera de alcance
 
 - Lógica de negocio que pertenece a los servicios (permisos, validaciones de dominio).
-- Generación de tokens de LiveKit: el cliente los recibe del backend; nunca contiene la clave del servidor.
+- Generación de tokens de LiveKit: el cliente los recibe de Core (D-15); nunca contiene la clave del servidor.
 
 ## Contratos que consume
 

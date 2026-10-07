@@ -8,15 +8,18 @@ El Auth Service administra la identidad y el acceso de los usuarios del sistema.
 
 Incluye:
 
-- Registro de cuentas.
-- Inicio y cierre de sesión.
-- Gestión de sesiones.
-- Emisión y renovación de tokens.
-- Verificación de correo.
-- Recuperación de contraseña.
-- Perfil básico de usuario asociado a la cuenta.
+- Registro de cuentas (CU-01).
+- Verificación de correo (CU-02).
+- Inicio de sesión con correo y contraseña (CU-03) y con Google mediante OAuth 2.0 / OpenID Connect (CU-04).
+- Recuperación de contraseña (CU-05).
+- Cierre de sesión (CU-06).
+- Gestión de sesiones: una activa por tipo de cliente (D-12) y límite de intentos fallidos.
+- Emisión y renovación de tokens firmados con EdDSA (D-07) y publicación de la clave pública para que los demás servicios los verifiquen.
+- Perfil de usuario (CU-07): nombre visible y foto elegida de un paquete predefinido (D-06). Cada cambio publica el evento `user.updated`.
 
-Este servicio es el dueño de los datos de autenticación del usuario. Otros dominios como grupos, proyectos, canales, tareas, mensajería y archivos pertenecen a otros servicios.
+Este servicio es el dueño de los datos de identidad y perfil del usuario. Otros dominios como grupos, proyectos, canales, tareas, mensajería y archivos pertenecen a otros servicios.
+
+Ver la trazabilidad completa en [`docs/requirements/`](../../docs/requirements/README.md#auth-service).
 
 ## Stack
 
@@ -25,7 +28,7 @@ Este servicio es el dueño de los datos de autenticación del usuario. Otros dom
 - Tokio.
 - Tower.
 - SQLx.
-- PostgreSQL.
+- PostgreSQL, esquema `auth` (D-13).
 - Argon2id para contraseñas.
 - EdDSA para tokens firmados.
 - Redis para sesiones, caché o rate limiting cuando corresponda.
@@ -54,7 +57,12 @@ Pendiente:
 - Verificación de correo.
 - Recuperación de contraseña.
 - Integración con Redis.
-- Emisión de tokens firmados.
+- Emisión de tokens firmados y *endpoint* de la clave pública.
+- Inicio de sesión con Google.
+- Perfil (nombre visible y foto predefinida) y evento `user.updated`.
+- Límite de intentos fallidos.
+- Usuario de base de datos propio con permisos solo sobre el esquema `auth` (D-13, tarea T-04 en [`docs/PLAN.md`](../../docs/PLAN.md)).
+- Limpiar los archivos vacíos `src/routes/health.rs` y `src/handlers/` (T-06).
 
 ## Estructura
 
@@ -251,6 +259,4 @@ No pertenecen a este servicio:
 - Canales.
 - Mensajería.
 - Archivos.
-- Foto de perfil almacenada como archivo.
-
-Los archivos deberán gestionarse mediante el File Service.
+- Archivos: la foto de perfil se elige de un paquete predefinido incluido en los clientes y Auth solo guarda su identificador (D-06). Cualquier otro archivo se gestiona en el File Service.

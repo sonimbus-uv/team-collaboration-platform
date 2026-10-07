@@ -2,13 +2,15 @@
 
 ## Reglas
 
-- Cada servicio es dueño de sus datos. Auth y Core usan bases de datos separadas en la misma instancia de PostgreSQL, y ningún servicio lee directamente la base de otro.
+- Cada servicio es dueño de sus datos. Todos usan la misma instancia y la misma base de datos de PostgreSQL, pero cada uno tiene **su propio esquema y su propio usuario** (`auth`, `core`, `files`, `reports`), y ningún servicio lee el esquema de otro (D-13).
 - Las migraciones de PostgreSQL viven dentro de cada servicio, porque sus herramientas las esperan ahí (SQLx en Auth, Ecto en Core).
 - Esta carpeta guarda lo que no pertenece a un solo servicio.
 
-| Carpeta | Contenido |
-|---|---|
-| [`postgres/`](postgres/) | Scripts de inicialización: creación de bases de datos y usuarios por servicio. |
-| [`scylla/`](scylla/) | Esquemas CQL (keyspaces y tablas) de ScyllaDB. |
+| Carpeta | Contenido | Responsable |
+|---|---|---|
+| [`postgres/`](postgres/) | Scripts de inicialización: creación de esquemas y usuarios por servicio | `@tuzc0` |
+| [`scylla/`](scylla/) | Esquemas CQL (*keyspaces* y tablas) de ScyllaDB (D-05) | `@Maple-M136279841` |
 
-Responsables: los scripts de inicialización de PostgreSQL, `@tuzc0` (Infraestructura); las migraciones, cada servicio (`@tuzc0` en Auth, `@Maple-M136279841` en Core); los esquemas de ScyllaDB, `@Maple-M136279841` (Core).
+Las migraciones son responsabilidad de cada servicio: `@tuzc0` en Auth, `@Maple-M136279841` en Core y Files, y `@roluva` en Reports.
+
+El modelo de datos de cada servicio está documentado en [`docs/database/`](../docs/database/).
