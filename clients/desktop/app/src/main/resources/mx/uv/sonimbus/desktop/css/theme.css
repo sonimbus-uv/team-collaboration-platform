@@ -1,0 +1,12 @@
+.root {
+    -fx-font-size: 14px;
+}
+
+.title {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.error {
+    -fx-text-fill: #b00020;
+}
