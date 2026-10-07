@@ -81,3 +81,6 @@ Se descartó porque dependería de la configuración particular de cada integran
 - Los servicios estarán disponibles mediante una red privada de desarrollo.
 - No deberán incorporarse datos de volúmenes al repositorio.
 - No deberán utilizarse credenciales de desarrollo en producción.
+## Actualización (2026-10-07)
+
+La base de mensajes cambia de Cassandra a ScyllaDB (D-05 en [`README.md`](README.md)); el perfil `messaging` se conserva. Para la expo, el mismo Compose corre en Ubuntu nativo (D-14). El resto de esta decisión sigue vigente.
