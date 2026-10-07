@@ -122,3 +122,7 @@ yarn-error.log*
 *.bak
 *.swp
 *.swo
+# NetBeans
+nbproject/
+nbactions.xml
+nb-configuration.xml
