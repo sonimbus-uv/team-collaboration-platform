@@ -1,10 +1,12 @@
 # Estándar de Desarrollo del Proyecto
 
-**Versión:** 0.2  
-**Estado:** Prototipo  
-**Proyecto:** Plataforma de comunicación y gestión ligera de proyectos  
+**Versión:** 0.3  
+**Estado:** Vigente  
+**Proyecto:** Sonimbus, plataforma de comunicación y gestión ligera de proyectos  
 **Clientes:** Aplicación de escritorio y aplicación móvil  
 **Infraestructura:** Ubuntu Server 24.04 LTS, Vagrant, VirtualBox, Docker Engine y Docker Compose
+
+> Las decisiones técnicas (`D-NN`) se registran en [`docs/decisions/`](decisions/README.md). Si este estándar y el registro no coinciden, manda el registro y se corrige este documento.
 
 ---
 
@@ -29,128 +31,56 @@ Este documento deberá actualizarse conforme se incorporen nuevos módulos, tecn
 
 ## 2. Arquitectura general
 
-El sistema estará compuesto inicialmente por dos aplicaciones cliente independientes:
+Arquitectura distribuida orientada a servicios. El detalle de componentes, comunicación, propiedad de datos y concurrencia está en [`docs/architecture/`](architecture/README.md).
 
-### 2.1 Aplicación de escritorio
+| Componente | Tecnologías | Responsabilidad |
+|---|---|---|
+| Aplicación de escritorio | Java 21, JavaFX 21, Maven, SQLite, `webrtc-java` | Interfaz, sesión local, cola de pendientes, voz. Concentra la administración detallada (RES-06). |
+| Aplicación móvil | Flutter, Dart, Drift (SQLite), SDK de LiveKit | Funciones principales con prioridad en comunicación y consulta (RES-05). |
+| API Gateway | Nginx | TLS, enrutamiento REST, WebSocket y gRPC, límite de peticiones. No valida tokens (D-02). |
+| Auth Service | Rust, Axum, Tokio, Tower, SQLx | Registro, verificación, inicio de sesión con correo y Google, sesiones, tokens EdDSA, recuperación de contraseña y **perfil de usuario** (D-06). |
+| Core Service | Elixir, Phoenix, Erlang/OTP | Grupos, membresías, invitaciones, canales, roles, permisos y moderación; mensajería, reacciones e historial; proyectos y tareas; notificaciones; plano de control de la voz (D-15). |
+| File Service | Elixir | Recepción, validación, almacenamiento, vistas previas y entrega de archivos (D-03). |
+| Report Service | Por decidir (propuesta: Elixir) | Agregados de actividad y reportes. |
+| Servidor de medios | LiveKit autoalojado | Audio de los canales de voz (D-01). |
+| Broker | RabbitMQ | Eventos asíncronos entre servicios (D-04). |
 
-Tecnologías previstas:
+Ambos clientes consumen los mismos servicios (RES-03).
 
-- Java;
-- JavaFX;
-- Maven;
-- SQLite para almacenamiento local cuando corresponda.
-
-### 2.2 Aplicación móvil
-
-Tecnologías previstas:
-
-- Flutter;
-- Dart;
-- SQLite mediante Drift para almacenamiento y funcionamiento offline.
-
-Ambos clientes consumirán los mismos servicios proporcionados por el backend.
-
-### 2.3 Auth Service
-
-Tecnologías previstas:
-
-- Rust;
-- Axum;
-- Tokio;
-- Tower;
-- SQLx.
-
-Responsabilidades:
-
-- registro;
-- inicio de sesión;
-- cierre de sesión;
-- recuperación de contraseña;
-- gestión de sesiones;
-- tokens;
-- funciones de seguridad asociadas a identidad.
-
-### 2.4 Core Service
-
-Tecnologías previstas:
-
-- Elixir;
-- Phoenix;
-- Erlang/OTP.
-
-Responsabilidades iniciales:
-
-- usuarios;
-- grupos;
-- roles;
-- permisos;
-- proyectos;
-- tareas;
-- reuniones;
-- mensajería;
-- reacciones;
-- notificaciones;
-- lógica principal del sistema.
-
-Los módulos del Core deberán mantenerse desacoplados para facilitar una posible evolución futura hacia microservicios independientes.
+Los dominios de Core deben mantenerse desacoplados para facilitar una posible separación futura en servicios independientes.
 
 ---
 
 ## 3. Persistencia de datos
 
-Se utilizará persistencia políglota.
+Se utilizará persistencia políglota. Cada servicio es dueño de sus datos y ningún servicio lee los datos de otro. El modelo detallado está en [`docs/database/`](database/README.md).
 
 ### 3.1 PostgreSQL
 
-Se utilizará para información estructurada y fuertemente relacionada:
+Información estructurada y fuertemente relacionada: cuentas, sesiones y perfil (Auth); grupos, miembros, invitaciones, canales, roles, permisos, proyectos, tareas y notificaciones (Core); metadatos de archivos (Files); agregados de actividad (Reports).
 
-- usuarios;
-- grupos;
-- miembros;
-- roles;
-- permisos;
-- proyectos;
-- tareas;
-- reuniones;
-- invitaciones;
-- configuración;
-- información relacionada con autenticación.
+Una sola instancia y una sola base de datos, con **un esquema y un usuario por servicio** (`auth`, `core`, `files`, `reports`) (D-13).
 
-### 3.2 Cassandra
+### 3.2 ScyllaDB
 
-Se utilizará una base NoSQL distribuida para información de gran volumen y acceso orientado a eventos:
+Base NoSQL distribuida para los mensajes y las reacciones, de gran volumen y escritura intensa.
 
-- mensajes;
-- historial de conversaciones;
-- eventos;
-- actividad;
-- información histórica.
-
-Cassandra es la base NoSQL distribuida seleccionada oficialmente para el proyecto.
+ScyllaDB es la base NoSQL seleccionada oficialmente para el proyecto (D-05). Es compatible con CQL y con los drivers de Cassandra.
 
 ### 3.3 Redis
 
 Redis no será el almacenamiento principal. Se utilizará para:
 
-- caché;
-- presencia;
-- usuarios conectados;
-- información temporal;
-- rate limiting;
-- eventos;
-- sesiones cuando sea necesario.
+- sesiones e intentos fallidos (Auth);
+- presencia y usuarios conectados (Core);
+- caché de permisos (Core);
+- rate limiting e información temporal.
 
 ### 3.4 MinIO
 
-Los archivos binarios deberán almacenarse en almacenamiento de objetos:
+Los archivos binarios (imágenes, documentos y adjuntos) se almacenarán en almacenamiento de objetos, administrado por el File Service.
 
-- imágenes;
-- documentos;
-- audios;
-- videos;
-- archivos adjuntos.
-
-Las bases de datos almacenarán únicamente la metadata y referencia correspondiente.
+Las bases de datos almacenarán únicamente los metadatos y la referencia correspondiente.
 
 ---
 
@@ -184,14 +114,20 @@ Equipo anfitrión
             │   ├── redis
             │   └── mailpit
             ├── Perfil messaging
-            │   └── cassandra
-            └── Perfil storage
-                └── minio
+            │   └── cassandra (se reemplaza por scylladb, T-01)
+            ├── Perfil storage
+            │   └── minio
+            └── Pendientes
+                ├── rabbitmq
+                ├── livekit
+                └── nginx
 ```
 
 Mailpit será utilizado exclusivamente en desarrollo para probar recuperación de contraseña, verificación de correo y otras funciones relacionadas con email.
 
-El gateway, Auth Service y Core Service se incorporarán a Compose cuando exista su implementación inicial.
+El gateway, los servicios (Auth, Core, Files y Reports), RabbitMQ y LiveKit se incorporarán a Compose cuando exista su implementación inicial.
+
+Para la expo, el mismo Compose corre en Ubuntu nativo (D-10, D-14); ver [`docs/deployment/`](deployment/README.md).
 
 Los datos persistentes deberán almacenarse en volúmenes nombrados administrados por Docker. No deberán crearse carpetas de datos versionadas dentro del repositorio.
 
@@ -212,28 +148,31 @@ team-collaboration-platform/
 ├── services/
 │   ├── auth/           Rust: identidad, perfil y tokens
 │   ├── core/           Elixir/Phoenix: dominio principal
-│   └── files/          Elixir: archivos sobre MinIO
+│   ├── files/          Elixir: archivos sobre MinIO
+│   └── reports/        reportes de actividad
 ├── gateway/
 │   └── nginx/          API gateway
 ├── contracts/
 │   ├── openapi/        contratos REST por servicio
-│   └── events/         eventos WebSocket y RabbitMQ
+│   ├── events/         eventos WebSocket y RabbitMQ
+│   └── proto/          contratos gRPC (al crearse)
 ├── database/
 │   ├── postgres/       inicialización de la instancia
 │   └── scylla/         esquemas CQL
 ├── infrastructure/     Compose, .env.example y LiveKit
 ├── scripts/
 ├── docs/
+│   ├── PLAN.md         equipo, reparto, fases y tareas
 │   ├── architecture/
-│   ├── requirements/
+│   ├── requirements/   casos de uso y requisitos canónicos
 │   ├── database/
 │   ├── deployment/
-│   └── decisions/      ADR
+│   └── decisions/      registro de decisiones y ADR
 ├── Vagrantfile
 └── README.md
 ```
 
-Cada carpeta de `clients/`, `services/` y `gateway/` es un módulo con un responsable principal, indicado en su `README.md` junto con su responsabilidad, su stack y lo que queda fuera de su alcance.
+Cada carpeta de `clients/`, `services/` y `gateway/` es un módulo con un responsable principal, indicado en su `README.md` junto con su responsabilidad, su stack y lo que queda fuera de su alcance. El reparto vigente está en [`docs/PLAN.md`](PLAN.md#reparto-de-módulos).
 
 ### Alcances
 
@@ -246,6 +185,7 @@ El nombre del módulo se usa como alcance en los commits y como `<modulo>` en la
 | `services/auth/` | `auth` |
 | `services/core/` | `core` |
 | `services/files/` | `files` |
+| `services/reports/` | `reports` |
 | `gateway/` | `gateway` |
 | `contracts/` | `contracts` |
 | `database/` | `database` |
@@ -361,13 +301,13 @@ Ejemplos:
 
 ```text
 feature/auth-login
-feature/groups-create
+feature/core-groups-create
 fix/auth-token-expiration
 tech/docker-compose
 tech/linux-vm
 tech/postgresql-container
-tech/cassandra-setup
-refactor/messages-repository
+tech/scylladb-setup
+refactor/core-messages-repository
 docs/system-architecture
 test/auth-login
 ```
@@ -402,10 +342,10 @@ Ejemplos:
 
 ```text
 feat(auth): add user login
-feat(groups): add group creation
+feat(core): add group creation
 fix(auth): reject expired refresh tokens
-test(messages): add websocket integration tests
-docs(api): document authentication endpoints
+test(core): add websocket integration tests
+docs(contracts): document authentication endpoints
 refactor(core): separate project repository
 ```
 
@@ -595,14 +535,16 @@ Los eventos deberán incluir versión cuando exista riesgo de cambios incompatib
 
 ## 16. Comunicación entre servicios
 
-Los clientes podrán utilizar:
+Los clientes utilizarán:
 
-- REST;
-- WebSocket.
+- REST, a través del gateway;
+- WebSocket (canales de Phoenix) para tiempo real;
+- WebRTC hacia LiveKit para la voz.
 
-La comunicación interna entre servicios podrá utilizar:
+La comunicación interna entre servicios utilizará:
 
-- gRPC.
+- gRPC para consultas síncronas, como `checkAccess` de Core;
+- AMQP (RabbitMQ) para eventos asíncronos, como `message.created` o `user.updated` (D-04).
 
 No deberá añadirse un mecanismo de comunicación únicamente para demostrar el uso de una tecnología.
 
@@ -814,7 +756,7 @@ Servicios opcionales mediante perfiles:
 
 ```text
 messaging:
-  cassandra
+  scylladb   (hoy cassandra; cambio pendiente T-01)
 
 storage:
   minio
@@ -828,6 +770,10 @@ Cuando exista su implementación inicial, se añadirán:
 gateway
 auth-service
 core-service
+files-service
+reports-service
+rabbitmq
+livekit
 ```
 
 Deberá existir una red interna para la comunicación entre contenedores. Los puertos publicados, las credenciales y las opciones locales deberán configurarse mediante variables de entorno.
@@ -843,7 +789,7 @@ Ejemplos:
 ```text
 postgres_data
 redis_data
-cassandra_data
+scylla_data
 minio_data
 ```
 
@@ -916,36 +862,28 @@ El repositorio deberá mantener como mínimo:
 README.md
 
 docs/
+├── PLAN.md
 ├── architecture/
 ├── requirements/
-├── api/
 ├── database/
 ├── deployment/
 └── decisions/
+
+contracts/            documentación de API (OpenAPI, eventos y gRPC)
 ```
 
 ---
 
 ## 31. Architecture Decision Records
 
-Las decisiones arquitectónicas importantes deberán documentarse mediante ADR.
+Las decisiones técnicas se registran en [`docs/decisions/README.md`](decisions/README.md) con un identificador `D-NN`. Las que cambian la arquitectura, tienen alternativas serias o son costosas de revertir se desarrollan además como ADR en la misma carpeta (`ADR-NNN-titulo.md`).
 
-Ejemplos:
-
-```text
-ADR-001 Elección de PostgreSQL
-ADR-002 Uso de Rust para autenticación
-ADR-003 Uso de Elixir/Phoenix como Core
-ADR-004 Uso de Cassandra para mensajería e historial
-ADR-005 Uso de JavaFX para escritorio
-ADR-006 Uso de Vagrant y Docker Compose para el entorno de desarrollo
-```
-
-Formato:
+Formato de un ADR:
 
 ```text
 Título
 Estado
+Fecha
 Contexto
 Decisión
 Alternativas consideradas
@@ -1046,7 +984,7 @@ Toda incorporación tecnológica deberá resolver una necesidad identificable.
 
 ## Estado del documento
 
-**Versión actual:** 0.2  
-**Próxima revisión:** después del diseño de arquitectura y del primer módulo de autenticación.
+**Versión actual:** 0.3 (2026-10-07: alineado con el registro de decisiones, tres integrantes y Report Service).  
+**Próxima revisión:** al cerrar el primer recorrido completo (fase 5 de [`docs/PLAN.md`](PLAN.md)).
 
 Este estándar se considera un documento vivo.

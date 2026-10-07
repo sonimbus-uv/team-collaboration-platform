@@ -12,7 +12,7 @@ Para decisiones técnicas y normas detalladas deberá consultarse:
 
 Antes de desarrollar una funcionalidad deberá existir:
 
-- un requisito o necesidad identificada;
+- un caso de uso o requisito identificado en [`docs/requirements/`](docs/requirements/);
 - un issue asociado;
 - criterios de aceptación claros;
 - una rama específica.
@@ -52,15 +52,17 @@ Ejemplos:
 
 ```text
 feature/auth-login
-feature/groups-create
+feature/core-groups-create
 fix/auth-token-expiration
 tech/docker-compose
 tech/linux-vm
 tech/postgresql-container
-refactor/messages-repository
+refactor/core-messages-repository
 docs/update-api-auth
-test/projects-service
+test/core-projects-service
 ```
+
+`<modulo>` y el `alcance` de los commits deben ser uno de los alcances de la sección 5 de [`docs/STANDARD_DEVELOPMENT.md`](docs/STANDARD_DEVELOPMENT.md#alcances): `desktop`, `mobile`, `auth`, `core`, `files`, `reports`, `gateway`, `contracts`, `database`, `infrastructure` o `docs`. El dominio funcional va en la descripción (`feature/core-groups-create`), no en el alcance.
 
 Las ramas deberán tener una vida corta y centrarse en una sola responsabilidad.
 
@@ -95,8 +97,8 @@ Ejemplos:
 ```text
 feat(auth): add user registration
 fix(auth): reject expired refresh token
-test(groups): add group creation tests
-docs(api): document password recovery
+test(core): add group creation tests
+docs(contracts): document password recovery
 refactor(core): extract project repository
 ```
 
@@ -267,7 +269,11 @@ No deberá fusionarse si existen errores críticos en:
 
 ## 13. Code Review
 
-Cuando sea posible, el código deberá ser revisado por una persona distinta a quien lo desarrolló.
+El código deberá ser revisado por una persona distinta a quien lo desarrolló.
+
+- `.github/CODEOWNERS` asigna automáticamente como revisores a `@Maple-M136279841` y `@tuzc0`, y `main` exige una aprobación de un codeowner.
+- `@roluva` es miembro del equipo, pero todavía no es codeowner: sus PR los aprueba cualquiera de los dos, y sus revisiones en PR de otros son bienvenidas aunque no cuenten para la regla de `main`.
+- Cada módulo tiene un responsable principal (ver [`docs/PLAN.md`](docs/PLAN.md#reparto-de-módulos)); un PR que toca el módulo de otra persona debe pedirle revisión.
 
 Se deberá verificar:
 
