@@ -1,11 +1,16 @@
 use anyhow::Context;
 use std::env;
 
+pub enum EmailProvider {
+    Resend { api_key: String },
+    Mailpit { host: String, port: u16 },
+}
+
 pub struct Config {
     pub server_addr: String,
     pub database_url: String,
     pub database_max_connections: u32,
-    pub resend_api_key: String,
+    pub email_provider: EmailProvider,
     pub email_from: String,
     pub email_verification_url: String,
     pub max_concurrent_hashes: usize,
@@ -26,7 +31,29 @@ impl Config {
             server_addr,
             database_url,
             database_max_connections,
-            resend_api_key: required_env("RESEND_API_KEY")?,
+            email_provider: match env::var("EMAIL_PROVIDER")
+                .unwrap_or_else(|_| "resend".into())
+                .as_str()
+            {
+                "resend" => EmailProvider::Resend {
+                    api_key: required_env("RESEND_API_KEY")?,
+                },
+                "mailpit" => {
+                    let host =
+                        env::var("MAILPIT_SMTP_HOST").unwrap_or_else(|_| "localhost".into());
+                    anyhow::ensure!(
+                        !host.trim().is_empty(),
+                        "MAILPIT_SMTP_HOST must not be empty"
+                    );
+                    let port = env::var("MAILPIT_SMTP_PORT")
+                        .unwrap_or_else(|_| "1025".into())
+                        .parse::<u16>()
+                        .context("MAILPIT_SMTP_PORT must be a valid u16")?;
+                    anyhow::ensure!(port > 0, "MAILPIT_SMTP_PORT must be greater than zero");
+                    EmailProvider::Mailpit { host, port }
+                }
+                _ => anyhow::bail!("EMAIL_PROVIDER must be resend or mailpit"),
+            },
             email_from: required_env("EMAIL_FROM")?,
             email_verification_url: required_env("EMAIL_VERIFICATION_URL")?,
             max_concurrent_hashes: {

@@ -47,7 +47,7 @@ Actualmente cuenta con:
 - Endpoint `GET /health/db` para verificar conexión con PostgreSQL.
 - Manejo básico de errores HTTP con formato Problem Details.
 - Registro de cuentas con contraseña Argon2id y token de verificación atómicos.
-- Envío de verificación mediante Resend, confirmación y reenvío con cooldown.
+- Envío de verificación mediante Resend o Mailpit, confirmación y reenvío con cooldown.
 - Verificación desde el enlace del correo mediante GET con respuesta HTML, conservando POST con JSON para clientes móviles y de escritorio.
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
 
@@ -115,6 +115,38 @@ DATABASE_URL=postgres://team_user:change_me_postgres@postgres:5432/team_collabor
 ```
 
 El archivo `.env` no debe subirse al repositorio.
+
+### Proveedor de correo
+
+`src/config.rs` carga `EMAIL_PROVIDER` desde el entorno: `mailpit` para desarrollo
+o `resend` para producción. Si no se define, se utiliza `resend`.
+Ambos proveedores implementan `VerificationEmailSender` y comparten la plantilla
+HTML y de texto, el idioma y el enlace de verificación.
+
+Para desarrollo, configura `services/auth/.env`:
+
+```env
+EMAIL_PROVIDER=mailpit
+MAILPIT_SMTP_HOST=localhost
+MAILPIT_SMTP_PORT=1025
+EMAIL_FROM="Team <noreply@example.com>"
+EMAIL_VERIFICATION_URL=http://localhost:3001/auth/verify-email
+```
+
+Inicia Mailpit desde la raíz del proyecto:
+
+```bash
+docker compose -f infrastructure/compose.yaml up -d mailpit
+```
+
+El código envía los correos al puerto SMTP **1025**, sin autenticación ni TLS.
+Abre **http://localhost:8025** en el navegador para consultar los correos capturados.
+Si auth corre dentro de la red de Compose, utiliza `MAILPIT_SMTP_HOST=mailpit`.
+Reinicia auth después de cambiar el proveedor.
+
+Para producción, configura `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`,
+`EMAIL_FROM` y una `EMAIL_VERIFICATION_URL` con HTTPS. La clave de Resend
+solo se exige cuando se selecciona ese proveedor.
 
 ## Base de Datos
 

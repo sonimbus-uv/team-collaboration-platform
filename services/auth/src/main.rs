@@ -43,11 +43,24 @@ async fn main() -> anyhow::Result<()> {
 
     let accounts_repository = AccountsRepository::new(pool.clone());
     let password_hasher = Arc::new(Argon2PasswordHasher);
-    let sender = Arc::new(providers::resend::ResendEmailSender::new(
-        config.resend_api_key,
-        config.email_from,
-        config.email_verification_url,
-    )?);
+    let sender: Arc<dyn ports::email_verification::VerificationEmailSender> =
+        match config.email_provider {
+            config::EmailProvider::Resend { api_key } => {
+                Arc::new(providers::resend::ResendEmailSender::new(
+                    api_key,
+                    config.email_from,
+                    config.email_verification_url,
+                )?)
+            }
+            config::EmailProvider::Mailpit { host, port } => {
+                Arc::new(providers::mailpit::MailpitEmailSender::new(
+                    host,
+                    port,
+                    config.email_from,
+                    config.email_verification_url,
+                )?)
+            }
+        };
     let email_verification_service =
         services::email_verification_service::EmailVerificationService::new(
             repositories::one_time_tokens_repository::OneTimeTokensRepository::new(pool.clone()),
