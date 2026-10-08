@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.SVGPath?>
+
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="mx.uv.sonimbus.desktop.ui.chat.TextChannelController"
+            styleClass="content-view"
+            stylesheets="@../../css/theme.css">
+
+    <!-- ================= Historial de mensajes ================= -->
+    <center>
+        <StackPane>
+            <ListView fx:id="messagesList" styleClass="message-list"
+                      accessibleText="Historial de mensajes"/>
+            <!-- Agregado: estado vacío del canal, oculto por defecto -->
+            <Label fx:id="emptyMessagesLabel" text="Todavía no hay mensajes en este canal"
+                   styleClass="empty-state" mouseTransparent="true"
+                   visible="false" managed="false"/>
+        </StackPane>
+    </center>
+
+    <!-- ================= Caja de escritura ================= -->
+    <bottom>
+        <VBox styleClass="composer" spacing="6">
+            <padding>
+                <Insets top="8" right="20" bottom="14" left="20"/>
+            </padding>
+
+            <!-- Barra de respuesta (CU-17), oculta por defecto -->
+            <HBox fx:id="replyBox" styleClass="reply-bar" spacing="6" alignment="CENTER_LEFT"
+                  visible="false" managed="false">
+                <padding>
+                    <Insets top="4" right="4" bottom="4" left="12"/>
+                </padding>
+                <Label text="Respondiendo a" styleClass="reply-bar-caption" minWidth="-Infinity"/>
+                <Label fx:id="replyAuthorLabel" styleClass="reply-bar-author" minWidth="-Infinity"/>
+                <Label fx:id="replyPreviewLabel" styleClass="reply-bar-preview"
+                       HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
+                <Button fx:id="cancelReplyButton" styleClass="icon-button-small"
+                        accessibleText="Cancelar respuesta" onAction="#onCancelReply">
+                    <graphic>
+                        <SVGPath styleClass="icon-stroke, icon-small" content="M6 6l12 12M18 6L6 18"/>
+                    </graphic>
+                    <tooltip>
+                        <Tooltip text="Cancelar respuesta"/>
+                    </tooltip>
+                </Button>
+            </HBox>
+
+            <!-- Campo antes que su Label para que labelFor resuelva -->
+            <GridPane hgap="8" vgap="6">
+                <columnConstraints>
+                    <ColumnConstraints/>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                    <ColumnConstraints/>
+                </columnConstraints>
+
+                <TextField fx:id="messageField" promptText="Escribe un mensaje…"
+                           accessibleText="Mensaje"
+                           GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                <Label fx:id="messageLabel" text="Mensaje para el canal" labelFor="$messageField"
+                       styleClass="composer-label"
+                       GridPane.rowIndex="0" GridPane.columnIndex="0" GridPane.columnSpan="3"/>
+
+                <Button fx:id="attachButton" text="Adjuntar" styleClass="button-secondary"
+                        accessibleText="Adjuntar archivo" onAction="#onAttachFile"
+                        GridPane.rowIndex="1" GridPane.columnIndex="0">
+                    <graphic>
+                        <SVGPath styleClass="icon-stroke, icon-small"
+                                 content="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l8-8"/>
+                    </graphic>
+                    <tooltip>
+                        <Tooltip text="Adjuntar archivo"/>
+                    </tooltip>
+                </Button>
+                <Button fx:id="sendButton" text="Enviar" defaultButton="true"
+                        styleClass="button-primary, button-compact" onAction="#onSend"
+                        GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+            </GridPane>
+        </VBox>
+    </bottom>
+</BorderPane>

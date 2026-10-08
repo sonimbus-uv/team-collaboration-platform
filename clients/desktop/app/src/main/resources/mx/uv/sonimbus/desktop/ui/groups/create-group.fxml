@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Diálogo modal (Stage aparte): por eso la raíz sí lleva prefWidth -->
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="mx.uv.sonimbus.desktop.ui.groups.CreateGroupController"
+      styleClass="dialog-root" spacing="16" prefWidth="520"
+      stylesheets="@../../css/theme.css">
+    <padding>
+        <Insets top="20" right="24" bottom="20" left="24"/>
+    </padding>
+
+    <Label text="Crear grupo" styleClass="dialog-title"/>
+
+    <!-- Error (nombre vacío, fallo al crear), oculto por defecto -->
+    <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
+          visible="false" managed="false">
+        <padding>
+            <Insets top="12" right="14" bottom="12" left="14"/>
+        </padding>
+        <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+        <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+    </HBox>
+
+    <!-- Formulario: campos antes que sus Label para que labelFor resuelva -->
+    <GridPane vgap="6">
+        <columnConstraints>
+            <ColumnConstraints hgrow="ALWAYS"/>
+        </columnConstraints>
+
+        <!-- Nombre -->
+        <TextField fx:id="nameField" accessibleText="Nombre del grupo"
+                   accessibleHelp="Obligatorio." GridPane.rowIndex="1"/>
+        <Label text="Nombre del grupo" labelFor="$nameField" styleClass="field-label"
+               GridPane.rowIndex="0"/>
+
+        <!-- Descripción -->
+        <TextArea fx:id="descriptionArea" promptText="¿Para qué es este grupo?"
+                  prefRowCount="4" wrapText="true" accessibleText="Descripción del grupo"
+                  accessibleHelp="Opcional. Máximo 200 caracteres." GridPane.rowIndex="3"/>
+        <Label text="Descripción (opcional)" labelFor="$descriptionArea" styleClass="field-label"
+               GridPane.rowIndex="2">
+            <GridPane.margin>
+                <Insets top="10"/>
+            </GridPane.margin>
+        </Label>
+        <Label fx:id="descriptionCountLabel" text="0 / 200" styleClass="hint-text"
+               GridPane.rowIndex="4" GridPane.halignment="RIGHT"/>
+
+        <!-- Agregado: imagen del grupo (no está en el prototipo) -->
+        <HBox spacing="12" alignment="CENTER_LEFT" GridPane.rowIndex="6">
+            <StackPane styleClass="group-image-preview">
+                <Label fx:id="imageInitialsLabel" text="?" styleClass="avatar-initials"/>
+                <ImageView fx:id="groupImageView" fitWidth="56" fitHeight="56"
+                           preserveRatio="true" pickOnBounds="true"/>
+            </StackPane>
+            <Button fx:id="chooseImageButton" text="Elegir imagen…" styleClass="button-secondary"
+                    accessibleHelp="Opcional. Si no eliges una imagen se usan las iniciales del grupo."
+                    onAction="#onChooseImage"/>
+            <Button fx:id="removeImageButton" text="Quitar" styleClass="button-secondary"
+                    accessibleText="Quitar imagen del grupo" onAction="#onRemoveImage"
+                    visible="false" managed="false"/>
+        </HBox>
+        <Label text="Imagen (opcional)" labelFor="$chooseImageButton" styleClass="field-label"
+               GridPane.rowIndex="5">
+            <GridPane.margin>
+                <Insets top="4"/>
+            </GridPane.margin>
+        </Label>
+    </GridPane>
+
+    <Label text="Serás el administrador del grupo. Se creará el canal de texto #general."
+           styleClass="hint-text, hint-text-large" wrapText="true"/>
+
+    <HBox styleClass="dialog-actions" alignment="CENTER_RIGHT" spacing="10">
+        <padding>
+            <Insets top="16"/>
+        </padding>
+        <Button fx:id="cancelButton" text="Cancelar" cancelButton="true"
+                styleClass="button-secondary, button-compact" onAction="#onCancel"/>
+        <Button fx:id="createButton" text="Crear grupo" defaultButton="true"
+                styleClass="button-primary, button-compact" onAction="#onCreateGroup"/>
+    </HBox>
+</VBox>
