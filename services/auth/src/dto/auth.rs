@@ -16,6 +16,11 @@ pub struct RegisterResponse {
     pub verification_email_sent: bool,
 }
 
+#[derive(Deserialize)]
+pub struct VerifyEmailQuery {
+    pub token: String,
+}
+
 impl From<Account> for RegisterResponse {
     fn from(account: Account) -> Self {
         Self {

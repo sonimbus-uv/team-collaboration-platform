@@ -48,6 +48,7 @@ Actualmente cuenta con:
 - Manejo básico de errores HTTP con formato Problem Details.
 - Registro de cuentas con contraseña Argon2id y token de verificación atómicos.
 - Envío de verificación mediante Resend, confirmación y reenvío con cooldown.
+- Verificación desde el enlace del correo mediante GET con respuesta HTML, conservando POST con JSON para clientes móviles y de escritorio.
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
 
 Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.

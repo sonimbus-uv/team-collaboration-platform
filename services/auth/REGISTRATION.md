@@ -2,11 +2,30 @@
 
 Configurar `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_VERIFICATION_URL` y
 `MAX_CONCURRENT_HASHES` usando `.env.example`. El remitente debe estar autorizado
-en Resend. La URL de verificación apunta a una página del cliente; esa página
-lee `token` de la URL y lo envía en el cuerpo JSON a `POST /auth/verify-email`.
-Se exige HTTPS salvo para localhost. El cliente no está implementado por este servicio.
+en Resend. La URL de verificación apunta al endpoint público del Auth Service
+`GET /auth/verify-email`. Resend añade el token como parámetro de query.
+Se exige HTTPS salvo para localhost. No se necesita un cliente web.
 
 ## API
+
+- `GET /auth/verify-email?token=...`: confirma mediante el mismo servicio que POST
+  y devuelve HTML: 200 en éxito, 400 para un enlace no utilizable y 500/503 ante
+  errores internos o indisponibilidad. HEAD devuelve 405 sin consumir el token.
+  Las respuestas HTML incluyen `no-store`, `no-referrer` y CSP restrictiva.
+  El límite compartido puede devolver 429 con HTML y `Retry-After`.
+  Un segundo clic devuelve 400, aunque la primera confirmación haya tenido éxito.
+
+La confirmación GET cambia estado para permitir verificar con un solo clic.
+Los escáneres automáticos de correo también pueden consumir el enlace; este flujo
+no demuestra una confirmación humana explícita. Para exigirla, sería necesario
+mostrar un formulario y confirmar mediante POST.
+
+La página invita a volver a Sonimbus. Cuando escritorio y móvil soporten deep links,
+se podrá añadir un botón fijo `sonimbus://email-verified?status=success` únicamente
+tras confirmar. No debe transportar tokens ni aceptar destinos arbitrarios. La app
+debe consultar Auth; `status=success` no constituye prueba de verificación.
+El gateway y la observabilidad deben redactar la query del enlace y evitar registrar
+tokens. No añadir recursos de terceros a la página de verificación.
 
 - `POST /auth/register`: `{"email":"user@example.com","password":"ValidPass123!"}`.
   Devuelve 201 con `user_id`, `email`, `email_verified`, `status` y

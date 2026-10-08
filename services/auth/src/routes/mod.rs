@@ -25,7 +25,18 @@ pub fn router(state: AppState) -> Router {
     let limiter = Arc::new(Mutex::new((Instant::now(), 0u32)));
     let auth_routes = Router::new()
         .route("/auth/register", post(auth::register))
-        .route("/auth/verify-email", post(auth::verify_email))
+        .route(
+            "/auth/verify-email",
+            get(auth::verify_email_page)
+                // Axum otherwise dispatches HEAD to the GET handler.
+                .head(|| async {
+                    crate::email::verification_page::verification_page_response(
+                        axum::http::StatusCode::METHOD_NOT_ALLOWED,
+                        String::new(),
+                    )
+                })
+                .post(auth::verify_email),
+        )
         .route("/auth/resend-verification", post(auth::resend_verification))
         .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests));
     Router::new()
@@ -55,6 +66,18 @@ async fn limit_auth_requests(
     if allowed {
         next.run(request).await
     } else {
+        if request.method() == axum::http::Method::GET
+            && request.uri().path() == "/auth/verify-email"
+        {
+            let mut response = crate::email::verification_page::verification_page_response(
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                crate::email::verification_page::verification_unavailable_page(),
+            );
+            response
+                .headers_mut()
+                .insert("retry-after", axum::http::HeaderValue::from_static("60"));
+            return response;
+        }
         ApiError::Busy.into_response()
     }
 }

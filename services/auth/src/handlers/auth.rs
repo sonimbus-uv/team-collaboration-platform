@@ -1,7 +1,19 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::{rejection::QueryRejection, Query, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 
 use crate::{
-    dto::auth::{RegisterRequest, RegisterResponse, ResendVerificationRequest, VerifyEmailRequest},
+    dto::auth::{
+        RegisterRequest, RegisterResponse, ResendVerificationRequest, VerifyEmailQuery,
+        VerifyEmailRequest,
+    },
+    email::verification_page::{
+        verification_invalid_page, verification_page_response, verification_success_page,
+        verification_unavailable_page,
+    },
     error::ApiError,
     repositories::accounts_repository::CreateAccountError,
     security::password_hasher::PasswordHashingError,
@@ -114,6 +126,40 @@ fn map_verification_error(error: VerificationError) -> ApiError {
         VerificationError::Delivery(error) => {
             tracing::error!(error = %error, "verification email delivery failed");
             ApiError::InternalServerError("Email delivery failed".into())
+        }
+    }
+}
+
+pub async fn verify_email_page(
+    State(state): State<AppState>,
+    query: Result<Query<VerifyEmailQuery>, QueryRejection>,
+) -> Response {
+    let Ok(Query(query)) = query else {
+        return verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page());
+    };
+    match state.email_verification_service.confirm(&query.token).await {
+        Ok(_) => verification_page_response(StatusCode::OK, verification_success_page()),
+        Err(VerificationError::InvalidToken) => {
+            verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page())
+        }
+        Err(VerificationError::Database(error)) => {
+            let status = if matches!(
+                &error,
+                sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_)
+            ) {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            tracing::error!("email verification database operation failed");
+            verification_page_response(status, verification_unavailable_page())
+        }
+        Err(VerificationError::Delivery(_)) => {
+            tracing::error!("email verification operation failed");
+            verification_page_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                verification_unavailable_page(),
+            )
         }
     }
 }

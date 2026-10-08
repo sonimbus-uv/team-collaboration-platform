@@ -68,6 +68,103 @@ fn post(path: &str, body: serde_json::Value) -> Request<Body> {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn email_link_confirms_and_head_does_not_consume(pool: PgPool) {
+    let sender = Arc::new(FakeSender::default());
+    let state = state(pool.clone(), sender.clone());
+    state
+        .auth_service
+        .register("link@example.com".into(), "ValidPass123!".into())
+        .await
+        .unwrap();
+    let token = sender.tokens.lock().unwrap()[0].clone();
+    let app = crate::routes::router(state);
+    let uri = format!("/auth/verify-email?token={token}");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("HEAD")
+                .uri(&uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    let used: bool = sqlx::query_scalar("SELECT used_at IS NOT NULL FROM auth.one_time_tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!used);
+    for path in [
+        "/auth/verify-email",
+        "/auth/verify-email?token=",
+        "/auth/verify-email?token=bad",
+        "/auth/verify-email?token=bad&token=other",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()["content-type"],
+            "text/html; charset=utf-8"
+        );
+    }
+    let response = app
+        .clone()
+        .oneshot(Request::builder().uri(&uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+    assert!(response.headers().contains_key("content-security-policy"));
+    let body = to_bytes(response.into_body(), 8192).await.unwrap();
+    let html = String::from_utf8_lossy(&body);
+    assert!(html.contains("Correo verificado"));
+    assert!(!html.contains(&token));
+    assert!(!html.contains("link@example.com"));
+    let verified: bool =
+        sqlx::query_scalar("SELECT email_verified_at IS NOT NULL FROM auth.accounts")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(verified);
+    let response = app
+        .oneshot(Request::builder().uri(&uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn email_link_hides_unavailable_database_errors() {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@localhost/unused")
+        .unwrap();
+    pool.close().await;
+    let app = crate::routes::router(state(pool, Arc::new(FakeSender::default())));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/auth/verify-email?token={}", "a".repeat(64)))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let body = to_bytes(response.into_body(), 8192).await.unwrap();
+    let html = String::from_utf8_lossy(&body);
+    assert!(html.contains("Inténtalo de nuevo"));
+    assert!(!html.contains("PoolClosed"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn register_confirm_and_reject_reuse(pool: PgPool) {
     let sender = Arc::new(FakeSender::default());
     let app = crate::routes::router(state(pool.clone(), sender.clone()));
