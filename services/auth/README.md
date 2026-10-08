@@ -46,17 +46,15 @@ Actualmente cuenta con:
 - Endpoint `GET /health`.
 - Endpoint `GET /health/db` para verificar conexión con PostgreSQL.
 - Manejo básico de errores HTTP con formato Problem Details.
-- Registro de cuentas con contraseña Argon2id y token de verificación atómicos.
-- Envío de verificación mediante Resend, confirmación y reenvío con cooldown.
-- Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
-
-Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.
 
 Pendiente:
 
+- Registro de cuenta.
+- Hash de contraseñas con Argon2id.
 - Login.
 - Refresh tokens.
 - Logout.
+- Verificación de correo.
 - Recuperación de contraseña.
 - Integración con Redis.
 - Emisión de tokens firmados y *endpoint* de la clave pública.

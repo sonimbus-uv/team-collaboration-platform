@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.TilePane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="mx.uv.sonimbus.desktop.ui.profile.ProfileController"
+           styleClass="content-view"
+           stylesheets="@../../css/theme.css">
+
+    <fx:define>
+        <ToggleGroup fx:id="avatarGroup"/>
+    </fx:define>
+
+    <ScrollPane fx:id="profileScroll" fitToWidth="true" hbarPolicy="NEVER" styleClass="plain-scroll">
+        <GridPane hgap="24" vgap="20">
+            <padding>
+                <Insets top="20" right="24" bottom="20" left="24"/>
+            </padding>
+            <columnConstraints>
+                <ColumnConstraints percentWidth="50"/>
+                <ColumnConstraints percentWidth="50"/>
+            </columnConstraints>
+
+            <!-- ================= Datos del perfil (CU-07) ================= -->
+            <VBox styleClass="info-card" spacing="14" GridPane.columnIndex="0" GridPane.valignment="TOP">
+                <padding>
+                    <Insets top="18" right="20" bottom="18" left="20"/>
+                </padding>
+                <Label text="Datos del perfil" styleClass="card-title"/>
+
+                <!-- Resultado de guardar, ocultos por defecto -->
+                <HBox fx:id="profileSavedBox" styleClass="alert-success" spacing="10"
+                      alignment="CENTER_LEFT" visible="false" managed="false">
+                    <padding>
+                        <Insets top="12" right="14" bottom="12" left="14"/>
+                    </padding>
+                    <Label text="✓" styleClass="success-icon" accessibleText="Listo"/>
+                    <Label fx:id="profileSavedLabel" text="Tu perfil se actualizó."
+                           styleClass="success-text" wrapText="true"/>
+                </HBox>
+                <HBox fx:id="profileErrorBox" styleClass="alert-error" spacing="10"
+                      alignment="CENTER_LEFT" visible="false" managed="false">
+                    <padding>
+                        <Insets top="12" right="14" bottom="12" left="14"/>
+                    </padding>
+                    <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+                    <Label fx:id="profileErrorLabel" styleClass="alert-text" wrapText="true"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="14">
+                    <StackPane styleClass="avatar-large" accessibleText="Foto de perfil actual">
+                        <Label fx:id="avatarInitialsLabel" text="?" styleClass="avatar-initials"/>
+                        <ImageView fx:id="currentAvatarView" fitWidth="84" fitHeight="84"
+                                   preserveRatio="true" pickOnBounds="true"/>
+                    </StackPane>
+                    <VBox spacing="2">
+                        <Label fx:id="displayNameLabel" styleClass="card-title"/>
+                        <Label fx:id="emailLabel" styleClass="section-subtitle"/>
+                    </VBox>
+                </HBox>
+
+                <!-- Campos antes que sus Label para que labelFor resuelva -->
+                <GridPane vgap="6">
+                    <columnConstraints>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <TextField fx:id="nameField" accessibleText="Nombre visible"
+                               GridPane.rowIndex="1"/>
+                    <Label text="Nombre" labelFor="$nameField" styleClass="field-label"
+                           GridPane.rowIndex="0"/>
+
+                    <!-- Cuadrícula de avatares del paquete predefinido (se llena en código) -->
+                    <TilePane fx:id="avatarsPane" hgap="10" vgap="10" prefColumns="6"
+                              accessibleText="Foto de perfil"
+                              accessibleHelp="Elige una de las fotos del paquete."
+                              GridPane.rowIndex="4"/>
+                    <Label text="Foto de perfil" labelFor="$avatarsPane" styleClass="field-label"
+                           GridPane.rowIndex="2">
+                        <GridPane.margin>
+                            <Insets top="10"/>
+                        </GridPane.margin>
+                    </Label>
+                    <Label text="Elige una del paquete." styleClass="hint-text" GridPane.rowIndex="3"/>
+                </GridPane>
+
+                <HBox spacing="10">
+                    <padding>
+                        <Insets top="4"/>
+                    </padding>
+                    <Button fx:id="saveProfileButton" text="Guardar perfil" defaultButton="true"
+                            styleClass="button-primary, button-compact" onAction="#onSaveProfile"/>
+                    <Button fx:id="discardProfileButton" text="Descartar"
+                            styleClass="button-secondary, button-compact"
+                            onAction="#onDiscardProfile"/>
+                </HBox>
+            </VBox>
+
+            <VBox spacing="20" GridPane.columnIndex="1" GridPane.valignment="TOP">
+                <!-- ================= Cambiar contraseña (CU-07) ================= -->
+                <VBox styleClass="info-card" spacing="12">
+                    <padding>
+                        <Insets top="18" right="20" bottom="18" left="20"/>
+                    </padding>
+                    <Label text="Cambiar contraseña" styleClass="card-title"/>
+
+                    <HBox fx:id="passwordSavedBox" styleClass="alert-success" spacing="10"
+                          alignment="CENTER_LEFT" visible="false" managed="false">
+                        <padding>
+                            <Insets top="12" right="14" bottom="12" left="14"/>
+                        </padding>
+                        <Label text="✓" styleClass="success-icon" accessibleText="Listo"/>
+                        <Label fx:id="passwordSavedLabel" text="Tu contraseña se actualizó."
+                               styleClass="success-text" wrapText="true"/>
+                    </HBox>
+                    <HBox fx:id="passwordErrorBox" styleClass="alert-error" spacing="10"
+                          alignment="CENTER_LEFT" visible="false" managed="false">
+                        <padding>
+                            <Insets top="12" right="14" bottom="12" left="14"/>
+                        </padding>
+                        <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+                        <Label fx:id="passwordErrorLabel" styleClass="alert-text" wrapText="true"/>
+                    </HBox>
+
+                    <GridPane vgap="6">
+                        <columnConstraints>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <PasswordField fx:id="currentPasswordField" accessibleText="Contraseña actual"
+                                       GridPane.rowIndex="1"/>
+                        <Label text="Contraseña actual" labelFor="$currentPasswordField"
+                               styleClass="field-label" GridPane.rowIndex="0"/>
+
+                        <PasswordField fx:id="newPasswordField" accessibleText="Nueva contraseña"
+                                       accessibleHelp="Mínimo 8 caracteres, con al menos una letra y un número."
+                                       GridPane.rowIndex="3"/>
+                        <Label text="Nueva contraseña" labelFor="$newPasswordField"
+                               styleClass="field-label" GridPane.rowIndex="2">
+                            <GridPane.margin>
+                                <Insets top="6"/>
+                            </GridPane.margin>
+                        </Label>
+                        <Label text="Mínimo 8 caracteres, con al menos una letra y un número."
+                               styleClass="hint-text" wrapText="true" GridPane.rowIndex="4"/>
+
+                        <PasswordField fx:id="confirmPasswordField"
+                                       accessibleText="Confirmar nueva contraseña"
+                                       GridPane.rowIndex="6"/>
+                        <Label text="Confirmar nueva contraseña" labelFor="$confirmPasswordField"
+                               styleClass="field-label" GridPane.rowIndex="5">
+                            <GridPane.margin>
+                                <Insets top="6"/>
+                            </GridPane.margin>
+                        </Label>
+                        <HBox fx:id="confirmPasswordErrorBox" spacing="6" alignment="CENTER_LEFT"
+                              visible="false" managed="false" GridPane.rowIndex="7">
+                            <Label text="!" styleClass="alert-icon-small" accessibleText="Error"/>
+                            <Label fx:id="confirmPasswordErrorLabel" text="Las contraseñas no coinciden."
+                                   styleClass="field-error-text" wrapText="true"/>
+                        </HBox>
+                    </GridPane>
+
+                    <HBox>
+                        <Button fx:id="updatePasswordButton" text="Actualizar contraseña"
+                                styleClass="button-secondary, button-compact"
+                                onAction="#onUpdatePassword"/>
+                    </HBox>
+                </VBox>
+
+                <!-- ================= Sesión (CU-06) ================= -->
+                <HBox styleClass="session-card" alignment="CENTER_LEFT" spacing="16">
+                    <padding>
+                        <Insets top="16" right="20" bottom="16" left="20"/>
+                    </padding>
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label text="Sesión" styleClass="card-title"/>
+                        <Label text="Sales de Sonimbus en este equipo." styleClass="section-subtitle"
+                               wrapText="true"/>
+                    </VBox>
+                    <Button fx:id="logoutButton" text="Cerrar sesión" minWidth="-Infinity"
+                            styleClass="button-primary, button-compact" onAction="#onLogout"/>
+                </HBox>
+            </VBox>
+        </GridPane>
+    </ScrollPane>
+
+    <!-- ===== Confirmación de cerrar sesión (Perfil-cerrar-sesion), oculta por defecto ===== -->
+    <StackPane fx:id="logoutConfirmOverlay" styleClass="modal-scrim" visible="false" managed="false">
+        <padding>
+            <Insets top="24" right="24" bottom="24" left="24"/>
+        </padding>
+        <VBox styleClass="dialog-card" spacing="14" maxWidth="440" maxHeight="-Infinity">
+            <padding>
+                <Insets top="24" right="24" bottom="24" left="24"/>
+            </padding>
+            <Label text="¿Cerrar sesión?" styleClass="dialog-title"/>
+            <Label text="Tendrás que volver a iniciar sesión para ver tus grupos y mensajes en este equipo."
+                   styleClass="dialog-text" wrapText="true"/>
+            <HBox styleClass="dialog-actions" alignment="CENTER_RIGHT" spacing="10">
+                <padding>
+                    <Insets top="16"/>
+                </padding>
+                <Button fx:id="cancelLogoutButton" text="Cancelar" cancelButton="true"
+                        styleClass="button-secondary, button-compact" onAction="#onCancelLogout"/>
+                <Button fx:id="confirmLogoutButton" text="Cerrar sesión"
+                        styleClass="button-primary, button-compact" onAction="#onConfirmLogout"/>
+            </HBox>
+        </VBox>
+    </StackPane>
+</StackPane>

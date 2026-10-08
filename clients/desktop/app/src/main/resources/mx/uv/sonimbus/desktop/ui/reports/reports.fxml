@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.String?>
+<?import javafx.collections.FXCollections?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="mx.uv.sonimbus.desktop.ui.reports.ReportsController"
+            styleClass="content-view"
+            stylesheets="@../../css/theme.css">
+
+    <!-- ================= Parámetros del reporte (CU-29) ================= -->
+    <top>
+        <!-- Controles antes que sus Label para que labelFor resuelva -->
+        <GridPane styleClass="filter-bar" hgap="12" vgap="4">
+            <padding>
+                <Insets top="14" right="20" bottom="14" left="20"/>
+            </padding>
+            <columnConstraints>
+                <ColumnConstraints/>
+                <ColumnConstraints/>
+                <ColumnConstraints/>
+                <ColumnConstraints/>
+                <ColumnConstraints hgrow="ALWAYS"/>
+                <ColumnConstraints/>
+            </columnConstraints>
+
+            <ComboBox fx:id="reportTypeCombo" prefWidth="260" promptText="Elige un reporte"
+                      accessibleText="Tipo de reporte"
+                      GridPane.rowIndex="1" GridPane.columnIndex="0">
+                <items>
+                    <FXCollections fx:factory="observableArrayList">
+                        <String fx:value="Mensajes por periodo"/>
+                        <String fx:value="Participación por miembro"/>
+                        <String fx:value="Tareas por estado"/>
+                    </FXCollections>
+                </items>
+            </ComboBox>
+            <Label text="Tipo de reporte" labelFor="$reportTypeCombo" styleClass="filter-label"
+                   GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+
+            <DatePicker fx:id="startDatePicker" prefWidth="160" promptText="dd/mm/aaaa"
+                        accessibleText="Fecha de inicio"
+                        GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+            <Label text="Desde" labelFor="$startDatePicker" styleClass="filter-label"
+                   GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+            <DatePicker fx:id="endDatePicker" prefWidth="160" promptText="dd/mm/aaaa"
+                        accessibleText="Fecha de fin"
+                        GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+            <Label text="Hasta" labelFor="$endDatePicker" styleClass="filter-label"
+                   GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+
+            <Button fx:id="queryButton" text="Consultar" defaultButton="true"
+                    styleClass="button-secondary, button-compact" onAction="#onQuery"
+                    GridPane.rowIndex="1" GridPane.columnIndex="3"/>
+
+            <Region GridPane.rowIndex="1" GridPane.columnIndex="4"/>
+
+            <!-- Exportar (CU-30) -->
+            <MenuButton fx:id="exportMenuButton" text="Exportar" styleClass="menu-button-primary"
+                        accessibleText="Exportar reporte" disable="true"
+                        GridPane.rowIndex="1" GridPane.columnIndex="5">
+                <items>
+                    <MenuItem fx:id="exportPdfMenuItem" text="PDF (.pdf)" onAction="#onExportPdf"/>
+                    <MenuItem fx:id="exportCsvMenuItem" text="CSV (.csv)" onAction="#onExportCsv"/>
+                </items>
+            </MenuButton>
+        </GridPane>
+    </top>
+
+    <!-- ================= Resultado ================= -->
+    <center>
+        <VBox spacing="14">
+            <padding>
+                <Insets top="16" right="20" bottom="16" left="20"/>
+            </padding>
+
+            <!-- Error (periodo inválido, sin permiso), oculto por defecto -->
+            <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
+                  visible="false" managed="false">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+                <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+            </HBox>
+
+            <HBox alignment="BASELINE_LEFT" spacing="12">
+                <Label fx:id="reportTitleLabel" styleClass="empty-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="reportRangeLabel" styleClass="section-subtitle"/>
+            </HBox>
+
+            <!-- La gráfica se crea en código y se coloca aquí -->
+            <StackPane fx:id="chartPane" styleClass="info-card" minHeight="200" prefHeight="260"
+                       VBox.vgrow="ALWAYS" accessibleText="Gráfica del reporte">
+                <padding>
+                    <Insets top="14" right="18" bottom="10" left="18"/>
+                </padding>
+                <Label fx:id="chartPlaceholderLabel"
+                       text="Elige un tipo de reporte y un periodo, y pulsa Consultar"
+                       styleClass="empty-state" wrapText="true"/>
+            </StackPane>
+
+            <TableView fx:id="reportTable" styleClass="data-table" minHeight="140" prefHeight="230"
+                       accessibleText="Datos del reporte">
+                <columnResizePolicy>
+                    <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                </columnResizePolicy>
+                <placeholder>
+                    <Label text="Sin datos para mostrar" styleClass="empty-state"/>
+                </placeholder>
+            </TableView>
+        </VBox>
+    </center>
+</BorderPane>
