@@ -40,4 +40,13 @@ Cubre todos los casos de uso del MVP y concentra la administración detallada (R
 
 ## Estado
 
-Sin inicializar. El primer PR del responsable crea el proyecto (`pom.xml` padre y los módulos `app` y `livekit-sdk`) con las versiones exactas de su entorno y actualiza este README con los pasos para compilar y ejecutar.
+**Inicializado (Esqueleto de UI completado).** Todas las ventanas y vistas del MVP han sido creadas. Actualmente, los controladores son esqueletos (los botones aún no ejecutan acciones de negocio), listos para comenzar la integración con la lógica y el gateway.
+
+### Navegación de demostración (Temporal)
+
+Para facilitar la revisión y exposición de las interfaces, se incluyó una lógica temporal en `App.java` que permite saltar directamente a cualquier vista o iterar sobre ellas usando argumentos de ejecución en JavaFX. 
+
+Para navegar por las vistas secuencialmente, ejecuta el siguiente comando o configura tu IDE (Run → Edit Configurations) con los siguientes parámetros:
+
+```bash
+mvn -pl app javafx:run -Djavafx.args=siguiente
