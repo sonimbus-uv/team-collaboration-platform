@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.SVGPath?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="mx.uv.sonimbus.desktop.ui.projects.ProjectsController"
+            styleClass="content-view"
+            stylesheets="@../../css/theme.css">
+
+    <!-- ================= Lista de proyectos (CU-25) ================= -->
+    <left>
+        <VBox styleClass="projects-panel" spacing="8" minWidth="200" prefWidth="220" maxWidth="220">
+            <padding>
+                <Insets top="14" right="10" bottom="14" left="10"/>
+            </padding>
+            <Label fx:id="projectsCountLabel" text="PROYECTOS (0)" styleClass="section-heading">
+                <VBox.margin>
+                    <Insets left="6"/>
+                </VBox.margin>
+            </Label>
+            <ListView fx:id="projectsList" styleClass="project-list"
+                      accessibleText="Proyectos del grupo" VBox.vgrow="ALWAYS"/>
+            <Button fx:id="newProjectButton" text="+ Nuevo proyecto"
+                    styleClass="button-secondary, button-dashed"
+                    maxWidth="1.7976931348623157E308" onAction="#onNewProject"/>
+        </VBox>
+    </left>
+
+    <!-- ================= Tablero de tareas (CU-26) ================= -->
+    <center>
+        <StackPane>
+            <VBox fx:id="boardBox" spacing="12">
+                <padding>
+                    <Insets top="14" right="16" bottom="14" left="16"/>
+                </padding>
+
+                <HBox alignment="BOTTOM_LEFT" spacing="12">
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label fx:id="projectNameLabel" styleClass="dialog-title"/>
+                        <Label fx:id="projectSummaryLabel" styleClass="section-subtitle"/>
+                    </VBox>
+                    <!-- Control antes que su Label para que labelFor resuelva -->
+                    <GridPane vgap="4">
+                        <ComboBox fx:id="assigneeFilterCombo" prefWidth="170" promptText="Todos"
+                                  accessibleText="Filtrar tareas por responsable"
+                                  onAction="#onAssigneeFilterChanged" GridPane.rowIndex="1"/>
+                        <Label text="Responsable" labelFor="$assigneeFilterCombo"
+                               styleClass="filter-label" GridPane.rowIndex="0"/>
+                    </GridPane>
+                    <Button fx:id="newTaskButton" text="+ Nueva tarea"
+                            styleClass="button-primary, button-compact" onAction="#onNewTask"/>
+                </HBox>
+
+                <GridPane hgap="12" VBox.vgrow="ALWAYS">
+                    <columnConstraints>
+                        <ColumnConstraints percentWidth="33.333"/>
+                        <ColumnConstraints percentWidth="33.333"/>
+                        <ColumnConstraints percentWidth="33.334"/>
+                    </columnConstraints>
+                    <rowConstraints>
+                        <RowConstraints vgrow="ALWAYS"/>
+                    </rowConstraints>
+
+                    <!-- Pendiente -->
+                    <VBox styleClass="board-column" spacing="8" GridPane.columnIndex="0">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+                        <HBox alignment="CENTER_LEFT" spacing="8">
+                            <Label text="Pendiente" styleClass="status-chip">
+                                <graphic>
+                                    <SVGPath styleClass="icon-stroke, icon-small"
+                                             content="M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0Z"/>
+                                </graphic>
+                            </Label>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="pendingCountLabel" text="0" styleClass="board-count"
+                                   accessibleText="Tareas pendientes: 0"/>
+                        </HBox>
+                        <ListView fx:id="pendingTasksList" styleClass="task-list"
+                                  accessibleText="Tareas pendientes" VBox.vgrow="ALWAYS"/>
+                        <Button fx:id="addPendingTaskButton" text="+ Agregar tarea"
+                                styleClass="button-secondary, button-dashed"
+                                accessibleText="Agregar tarea pendiente"
+                                maxWidth="1.7976931348623157E308" onAction="#onAddPendingTask"/>
+                    </VBox>
+
+                    <!-- En progreso -->
+                    <VBox styleClass="board-column" spacing="8" GridPane.columnIndex="1">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+                        <HBox alignment="CENTER_LEFT" spacing="8">
+                            <Label text="En progreso" styleClass="status-chip, status-active">
+                                <graphic>
+                                    <SVGPath styleClass="icon-stroke-active, icon-small"
+                                             content="M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0Z M12 7v5l3 2"/>
+                                </graphic>
+                            </Label>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="inProgressCountLabel" text="0" styleClass="board-count"
+                                   accessibleText="Tareas en progreso: 0"/>
+                        </HBox>
+                        <ListView fx:id="inProgressTasksList" styleClass="task-list"
+                                  accessibleText="Tareas en progreso" VBox.vgrow="ALWAYS"/>
+                        <Button fx:id="addInProgressTaskButton" text="+ Agregar tarea"
+                                styleClass="button-secondary, button-dashed"
+                                accessibleText="Agregar tarea en progreso"
+                                maxWidth="1.7976931348623157E308" onAction="#onAddInProgressTask"/>
+                    </VBox>
+
+                    <!-- Completada ("Terminada" en el prototipo) -->
+                    <VBox styleClass="board-column" spacing="8" GridPane.columnIndex="2">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+                        <HBox alignment="CENTER_LEFT" spacing="8">
+                            <Label text="Completada" styleClass="status-chip, status-success">
+                                <graphic>
+                                    <SVGPath styleClass="icon-stroke-success, icon-small"
+                                             content="M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0Z M8 12l3 3 5-6"/>
+                                </graphic>
+                            </Label>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="completedCountLabel" text="0" styleClass="board-count"
+                                   accessibleText="Tareas completadas: 0"/>
+                        </HBox>
+                        <ListView fx:id="completedTasksList" styleClass="task-list"
+                                  accessibleText="Tareas completadas" VBox.vgrow="ALWAYS"/>
+                    </VBox>
+                </GridPane>
+            </VBox>
+
+            <!-- Agregado: sin proyecto seleccionado o grupo sin proyectos, oculto por defecto -->
+            <Label fx:id="noProjectLabel" text="Selecciona un proyecto o crea uno nuevo"
+                   styleClass="empty-state" visible="false" managed="false"/>
+        </StackPane>
+    </center>
+</BorderPane>

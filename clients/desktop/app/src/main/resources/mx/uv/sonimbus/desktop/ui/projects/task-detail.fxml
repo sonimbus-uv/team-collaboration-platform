@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.String?>
+<?import javafx.collections.FXCollections?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Diálogo modal (Stage aparte): por eso la raíz sí lleva prefWidth.
+     No hay prototipo del formulario; sigue el estilo de Grupo-crear. -->
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="mx.uv.sonimbus.desktop.ui.projects.TaskDetailController"
+      styleClass="dialog-root" spacing="16" prefWidth="600"
+      stylesheets="@../../css/theme.css">
+    <padding>
+        <Insets top="20" right="24" bottom="20" left="24"/>
+    </padding>
+
+    <!-- ================= Formulario de la tarea ================= -->
+    <VBox fx:id="formBox" spacing="16">
+        <Label fx:id="dialogTitleLabel" text="Detalle de la tarea" styleClass="dialog-title"/>
+
+        <!-- Error de validación, oculto por defecto -->
+        <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
+              visible="false" managed="false">
+            <padding>
+                <Insets top="12" right="14" bottom="12" left="14"/>
+            </padding>
+            <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+            <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+        </HBox>
+
+        <!-- Campos antes que sus Label para que labelFor resuelva -->
+        <GridPane hgap="14" vgap="6">
+            <columnConstraints>
+                <ColumnConstraints percentWidth="50"/>
+                <ColumnConstraints percentWidth="50"/>
+            </columnConstraints>
+
+            <!-- Título -->
+            <TextField fx:id="titleField" accessibleText="Título de la tarea"
+                       accessibleHelp="Obligatorio."
+                       GridPane.rowIndex="1" GridPane.columnSpan="2"/>
+            <Label text="Título" labelFor="$titleField" styleClass="field-label"
+                   GridPane.rowIndex="0" GridPane.columnSpan="2"/>
+
+            <!-- Descripción -->
+            <TextArea fx:id="descriptionArea" prefRowCount="4" wrapText="true"
+                      accessibleText="Descripción de la tarea"
+                      GridPane.rowIndex="3" GridPane.columnSpan="2"/>
+            <Label text="Descripción (opcional)" labelFor="$descriptionArea" styleClass="field-label"
+                   GridPane.rowIndex="2" GridPane.columnSpan="2">
+                <GridPane.margin>
+                    <Insets top="8"/>
+                </GridPane.margin>
+            </Label>
+
+            <!-- Fecha límite -->
+            <DatePicker fx:id="dueDatePicker" promptText="dd/mm/aaaa"
+                        maxWidth="1.7976931348623157E308" accessibleText="Fecha límite"
+                        GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+            <Label text="Fecha límite" labelFor="$dueDatePicker" styleClass="field-label"
+                   GridPane.rowIndex="4" GridPane.columnIndex="0">
+                <GridPane.margin>
+                    <Insets top="8"/>
+                </GridPane.margin>
+            </Label>
+
+            <!-- Estado (CU-28) -->
+            <ComboBox fx:id="statusCombo" maxWidth="1.7976931348623157E308"
+                      accessibleText="Estado de la tarea"
+                      GridPane.rowIndex="5" GridPane.columnIndex="1">
+                <items>
+                    <FXCollections fx:factory="observableArrayList">
+                        <String fx:value="Pendiente"/>
+                        <String fx:value="En progreso"/>
+                        <String fx:value="Completada"/>
+                    </FXCollections>
+                </items>
+            </ComboBox>
+            <Label text="Estado" labelFor="$statusCombo" styleClass="field-label"
+                   GridPane.rowIndex="4" GridPane.columnIndex="1">
+                <GridPane.margin>
+                    <Insets top="8"/>
+                </GridPane.margin>
+            </Label>
+
+            <!-- Responsable (CU-27) -->
+            <ComboBox fx:id="assigneeCombo" promptText="Sin asignar"
+                      maxWidth="1.7976931348623157E308" accessibleText="Responsable de la tarea"
+                      accessibleHelp="Solo el administrador puede asignar la tarea."
+                      GridPane.rowIndex="7" GridPane.columnSpan="2"/>
+            <Label text="Responsable" labelFor="$assigneeCombo" styleClass="field-label"
+                   GridPane.rowIndex="6" GridPane.columnSpan="2">
+                <GridPane.margin>
+                    <Insets top="8"/>
+                </GridPane.margin>
+            </Label>
+        </GridPane>
+
+        <HBox styleClass="dialog-actions" alignment="CENTER_LEFT" spacing="10">
+            <padding>
+                <Insets top="16"/>
+            </padding>
+            <Button fx:id="deleteButton" text="Eliminar tarea"
+                    styleClass="button-danger-outline, button-danger-tall" onAction="#onDelete"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="cancelButton" text="Cancelar" cancelButton="true"
+                    styleClass="button-secondary, button-compact" onAction="#onCancel"/>
+            <Button fx:id="saveButton" text="Guardar" defaultButton="true"
+                    styleClass="button-primary, button-compact" onAction="#onSave"/>
+        </HBox>
+    </VBox>
+
+    <!-- ===== Conflicto de edición (Proyectos-conflicto), oculto por defecto ===== -->
+    <VBox fx:id="conflictBox" spacing="16" visible="false" managed="false">
+        <HBox alignment="CENTER_LEFT" spacing="12">
+            <Label text="!" styleClass="alert-icon" accessibleText="Advertencia"/>
+            <Label text="Otro miembro modificó esta tarea" styleClass="dialog-title" wrapText="true"/>
+        </HBox>
+        <Label fx:id="conflictLabel"
+               text="Otro miembro guardó cambios en esta tarea mientras la editabas. Tus cambios no se guardaron."
+               styleClass="dialog-text" wrapText="true"/>
+
+        <!-- Comparación -->
+        <GridPane hgap="12">
+            <columnConstraints>
+                <ColumnConstraints percentWidth="50"/>
+                <ColumnConstraints percentWidth="50"/>
+            </columnConstraints>
+
+            <VBox styleClass="compare-card, compare-current" spacing="8" GridPane.columnIndex="0">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label text="VERSIÓN VIGENTE" styleClass="section-heading"/>
+                <GridPane hgap="12" vgap="6">
+                    <Label text="Estado" styleClass="section-subtitle" GridPane.rowIndex="0"/>
+                    <Label fx:id="currentStatusLabel" styleClass="panel-item-title"
+                           GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                    <Label text="Responsable" styleClass="section-subtitle" GridPane.rowIndex="1"/>
+                    <Label fx:id="currentAssigneeLabel" styleClass="panel-item-title"
+                           GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                    <Label text="Fecha límite" styleClass="section-subtitle" GridPane.rowIndex="2"/>
+                    <Label fx:id="currentDueDateLabel" styleClass="panel-item-title"
+                           GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                </GridPane>
+            </VBox>
+
+            <VBox styleClass="compare-card, compare-mine" spacing="8" GridPane.columnIndex="1">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label text="TUS CAMBIOS (NO GUARDADOS)" styleClass="section-heading"/>
+                <GridPane hgap="12" vgap="6">
+                    <Label text="Estado" styleClass="section-subtitle" GridPane.rowIndex="0"/>
+                    <Label fx:id="yourStatusLabel" styleClass="compare-value"
+                           GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                    <Label text="Responsable" styleClass="section-subtitle" GridPane.rowIndex="1"/>
+                    <Label fx:id="yourAssigneeLabel" styleClass="compare-value"
+                           GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                    <Label text="Fecha límite" styleClass="section-subtitle" GridPane.rowIndex="2"/>
+                    <Label fx:id="yourDueDateLabel" styleClass="compare-value"
+                           GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                </GridPane>
+            </VBox>
+        </GridPane>
+
+        <Label text="Recarga para ver la versión vigente y vuelve a aplicar tus cambios si aún son necesarios."
+               styleClass="hint-text, hint-text-large" wrapText="true"/>
+
+        <HBox styleClass="dialog-actions" alignment="CENTER_RIGHT" spacing="10">
+            <padding>
+                <Insets top="16"/>
+            </padding>
+            <Button fx:id="conflictCancelButton" text="Cancelar"
+                    styleClass="button-secondary, button-compact" onAction="#onCancel"/>
+            <Button fx:id="reloadButton" text="Recargar"
+                    styleClass="button-primary, button-compact" onAction="#onReload"/>
+        </HBox>
+    </VBox>
+</VBox>

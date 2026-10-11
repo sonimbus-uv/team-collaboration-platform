@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.SVGPath?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="mx.uv.sonimbus.desktop.ui.shell.MainController"
+            styleClass="shell"
+            stylesheets="@../../css/theme.css">
+
+    <!-- ================= Izquierda: grupos + canales ================= -->
+    <left>
+        <HBox>
+            <!-- Columna 1: grupos del usuario -->
+            <VBox styleClass="groups-rail" alignment="TOP_CENTER" spacing="10"
+                  minWidth="72" prefWidth="72" maxWidth="72"
+                  accessibleText="Mis grupos">
+                <padding>
+                    <Insets top="12" bottom="12"/>
+                </padding>
+
+                <ListView fx:id="groupsList" styleClass="groups-list"
+                          accessibleText="Lista de grupos"
+                          VBox.vgrow="ALWAYS"/>
+
+                <Region styleClass="rail-divider"/>
+
+                <MenuButton fx:id="addGroupMenuButton" text="+" styleClass="rail-add-button"
+                            accessibleText="Crear o unirse a un grupo">
+                    <tooltip>
+                        <Tooltip text="Crear o unirse a un grupo"/>
+                    </tooltip>
+                    <items>
+                        <MenuItem fx:id="createGroupMenuItem" text="Crear grupo"
+                                  onAction="#onCreateGroup"/>
+                        <MenuItem fx:id="joinGroupMenuItem" text="Unirse a un grupo"
+                                  onAction="#onJoinGroup"/>
+                    </items>
+                </MenuButton>
+            </VBox>
+
+            <!-- Columna 2: canales del grupo -->
+            <VBox fx:id="channelsColumn" styleClass="channels-column"
+                  minWidth="240" prefWidth="240" maxWidth="240"
+                  accessibleText="Canales del grupo">
+
+                <!-- Encabezado del grupo -->
+                <HBox styleClass="channels-header" alignment="CENTER_LEFT" spacing="8"
+                      minHeight="52" prefHeight="52">
+                    <padding>
+                        <Insets left="16" right="8"/>
+                    </padding>
+                    <Label fx:id="groupNameLabel" text="Selecciona un grupo"
+                           styleClass="group-name" HBox.hgrow="ALWAYS"
+                           maxWidth="1.7976931348623157E308"/>
+                    <Button fx:id="groupSettingsButton" styleClass="icon-button-dark"
+                            accessibleText="Configuración del grupo"
+                            onAction="#onOpenGroupSettings">
+                        <graphic>
+                            <SVGPath styleClass="icon-stroke-light"
+                                     content="M15 12a3 3 0 1 1-6 0a3 3 0 1 1 6 0Z M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>
+                        </graphic>
+                        <tooltip>
+                            <Tooltip text="Configuración del grupo"/>
+                        </tooltip>
+                    </Button>
+                </HBox>
+
+                <VBox spacing="2" VBox.vgrow="ALWAYS">
+                    <padding>
+                        <Insets top="14" right="8" bottom="14" left="8"/>
+                    </padding>
+
+                    <!-- Canales de texto -->
+                    <HBox alignment="CENTER_LEFT" styleClass="sidebar-section">
+                        <Label text="CANALES DE TEXTO" styleClass="sidebar-section-label"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="createTextChannelButton" text="+" styleClass="sidebar-add-button"
+                                accessibleText="Crear canal de texto"
+                                onAction="#onCreateTextChannel">
+                            <tooltip>
+                                <Tooltip text="Crear canal de texto"/>
+                            </tooltip>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="textChannelsList" styleClass="channel-list"
+                              accessibleText="Canales de texto"
+                              VBox.vgrow="ALWAYS" minHeight="80"/>
+
+                    <!-- Canales de voz -->
+                    <HBox alignment="CENTER_LEFT" styleClass="sidebar-section">
+                        <padding>
+                            <Insets top="12"/>
+                        </padding>
+                        <Label text="CANALES DE VOZ" styleClass="sidebar-section-label"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="createVoiceChannelButton" text="+" styleClass="sidebar-add-button"
+                                accessibleText="Crear canal de voz"
+                                onAction="#onCreateVoiceChannel">
+                            <tooltip>
+                                <Tooltip text="Crear canal de voz"/>
+                            </tooltip>
+                        </Button>
+                    </HBox>
+                    <ListView fx:id="voiceChannelsList" styleClass="channel-list"
+                              accessibleText="Canales de voz y participantes conectados"
+                              VBox.vgrow="ALWAYS" minHeight="80"/>
+
+                    <!-- Secciones del grupo -->
+                    <HBox styleClass="sidebar-section">
+                        <padding>
+                            <Insets top="12"/>
+                        </padding>
+                        <Label text="GRUPO" styleClass="sidebar-section-label"/>
+                    </HBox>
+                    <Button fx:id="sharedFilesButton" text="Archivos compartidos"
+                            styleClass="nav-item" maxWidth="1.7976931348623157E308"
+                            onAction="#onShowSharedFiles"/>
+                    <Button fx:id="projectsButton" text="Proyectos y tareas"
+                            styleClass="nav-item" maxWidth="1.7976931348623157E308"
+                            onAction="#onShowProjects"/>
+                    <Button fx:id="reportsButton" text="Reportes"
+                            styleClass="nav-item" maxWidth="1.7976931348623157E308"
+                            onAction="#onShowReports"/>
+                </VBox>
+            </VBox>
+        </HBox>
+    </left>
+
+    <!-- ================= Centro: barra superior + contenido ================= -->
+    <center>
+        <BorderPane>
+            <top>
+                <HBox styleClass="top-bar" alignment="CENTER_LEFT" spacing="12"
+                      minHeight="52" prefHeight="52">
+                    <padding>
+                        <Insets left="20" right="16"/>
+                    </padding>
+
+                    <!-- Título de la vista actual (lo actualiza MainController) -->
+                    <Label fx:id="sectionTitleLabel" styleClass="section-title"/>
+                    <Separator fx:id="sectionTitleSeparator" orientation="VERTICAL"
+                               styleClass="top-bar-separator" visible="false" managed="false"/>
+                    <Label fx:id="sectionSubtitleLabel" styleClass="section-subtitle"
+                           HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
+
+                    <!-- Notificaciones -->
+                    <Button fx:id="notificationsButton" styleClass="icon-button"
+                            accessibleText="Notificaciones" onAction="#onShowNotifications">
+                        <graphic>
+                            <StackPane>
+                                <SVGPath styleClass="icon-stroke"
+                                         content="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.9 1.9 0 0 0 3.4 0"/>
+                                <Label fx:id="notificationsBadgeLabel" styleClass="badge"
+                                       StackPane.alignment="TOP_RIGHT"
+                                       translateX="12" translateY="-12"
+                                       visible="false" managed="false"/>
+                            </StackPane>
+                        </graphic>
+                        <tooltip>
+                            <Tooltip text="Notificaciones"/>
+                        </tooltip>
+                    </Button>
+
+                    <!-- Perfil -->
+                    <Button fx:id="profileButton" styleClass="avatar-button"
+                            accessibleText="Mi perfil" onAction="#onShowProfile">
+                        <graphic>
+                            <StackPane styleClass="avatar-small">
+                                <Label fx:id="profileInitialsLabel" text="?" styleClass="avatar-initials"/>
+                                <ImageView fx:id="profileAvatarView" fitWidth="40" fitHeight="40"
+                                           preserveRatio="true" pickOnBounds="true"/>
+                            </StackPane>
+                        </graphic>
+                        <tooltip>
+                            <Tooltip text="Mi perfil"/>
+                        </tooltip>
+                    </Button>
+                </HBox>
+            </top>
+
+            <center>
+                <!-- Aquí se cargan las demás vistas -->
+                <StackPane fx:id="contentPane" styleClass="content-pane">
+                    <Label fx:id="emptyStateLabel" text="Selecciona un canal para empezar"
+                           styleClass="empty-state"/>
+                </StackPane>
+            </center>
+        </BorderPane>
+    </center>
+</BorderPane>

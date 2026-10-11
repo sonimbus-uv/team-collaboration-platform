@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Hyperlink?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="mx.uv.sonimbus.desktop.ui.auth.RegisterController"
+            fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER"
+            styleClass="auth-scroll"
+            stylesheets="@../../css/theme.css">
+    <StackPane styleClass="auth-background">
+        <padding>
+            <Insets top="24" right="24" bottom="24" left="24"/>
+        </padding>
+
+        <VBox styleClass="auth-card" spacing="16" maxWidth="460" maxHeight="-Infinity">
+            <padding>
+                <Insets top="28" right="40" bottom="28" left="40"/>
+            </padding>
+
+            <!-- Encabezado -->
+            <VBox alignment="CENTER" spacing="8">
+                <Label text="[Logo]" styleClass="logo-placeholder"
+                       accessibleText="Logotipo de Sonimbus"/>
+                <Label text="Crear cuenta" styleClass="title"/>
+                <Label text="Todos los campos son obligatorios" styleClass="subtitle"/>
+            </VBox>
+
+            <!-- Error general (p. ej. correo ya registrado), oculto por defecto -->
+            <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
+                  visible="false" managed="false">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+                <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+            </HBox>
+
+            <!-- Formulario: campos antes que sus Label para que labelFor resuelva -->
+            <GridPane vgap="6">
+                <columnConstraints>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                </columnConstraints>
+
+                <!-- Nombre -->
+                <TextField fx:id="nameField" accessibleText="Nombre completo"
+                           GridPane.rowIndex="1"/>
+                <Label text="Nombre completo" labelFor="$nameField" styleClass="field-label"
+                       GridPane.rowIndex="0"/>
+
+                <!-- Correo -->
+                <TextField fx:id="emailField" promptText="nombre@correo.com"
+                           accessibleText="Correo electrónico"
+                           GridPane.rowIndex="3"/>
+                <Label text="Correo electrónico" labelFor="$emailField" styleClass="field-label"
+                       GridPane.rowIndex="2">
+                    <GridPane.margin>
+                        <Insets top="6"/>
+                    </GridPane.margin>
+                </Label>
+
+                <!-- Contraseña -->
+                <HBox spacing="8" GridPane.rowIndex="5">
+                    <StackPane HBox.hgrow="ALWAYS">
+                        <PasswordField fx:id="passwordField" accessibleText="Contraseña"
+                                       accessibleHelp="Mínimo 8 caracteres, con al menos una letra y un número."/>
+                        <TextField fx:id="passwordVisibleField" accessibleText="Contraseña visible"
+                                   visible="false" managed="false"/>
+                    </StackPane>
+                    <ToggleButton fx:id="showPasswordToggle" text="Mostrar"
+                                  accessibleText="Mostrar contraseña"
+                                  styleClass="button-secondary"
+                                  onAction="#onTogglePasswordVisibility"/>
+                </HBox>
+                <Label text="Contraseña" labelFor="$passwordField" styleClass="field-label"
+                       GridPane.rowIndex="4">
+                    <GridPane.margin>
+                        <Insets top="6"/>
+                    </GridPane.margin>
+                </Label>
+                <Label fx:id="passwordHintLabel"
+                       text="Mínimo 8 caracteres, con al menos una letra y un número."
+                       styleClass="hint-text" wrapText="true"
+                       GridPane.rowIndex="6"/>
+
+                <!-- Confirmación -->
+                <PasswordField fx:id="confirmPasswordField" accessibleText="Confirmar contraseña"
+                               GridPane.rowIndex="8"/>
+                <Label text="Confirmar contraseña" labelFor="$confirmPasswordField"
+                       styleClass="field-label" GridPane.rowIndex="7">
+                    <GridPane.margin>
+                        <Insets top="6"/>
+                    </GridPane.margin>
+                </Label>
+                <HBox fx:id="confirmPasswordErrorBox" spacing="6" alignment="CENTER_LEFT"
+                      visible="false" managed="false" GridPane.rowIndex="9">
+                    <Label text="!" styleClass="alert-icon-small" accessibleText="Error"/>
+                    <Label fx:id="confirmPasswordErrorLabel" text="Las contraseñas no coinciden."
+                           styleClass="field-error-text" wrapText="true"/>
+                </HBox>
+            </GridPane>
+
+            <Button fx:id="registerButton" text="Crear cuenta" defaultButton="true"
+                    maxWidth="1.7976931348623157E308" styleClass="button-primary"
+                    onAction="#onRegister"/>
+
+            <!-- Agregado: no está en el prototipo (CU-01 / CU-04) -->
+            <HBox alignment="CENTER" spacing="12">
+                <Separator HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
+                <Label text="o" styleClass="subtitle"/>
+                <Separator HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
+            </HBox>
+            <Button fx:id="googleButton" text="Continuar con Google"
+                    maxWidth="1.7976931348623157E308" styleClass="button-secondary, button-large"
+                    onAction="#onGoogleRegister">
+                <graphic>
+                    <Label text="G" styleClass="provider-icon"/>
+                </graphic>
+            </Button>
+
+            <HBox alignment="CENTER" spacing="4">
+                <Label text="¿Ya tienes cuenta?" styleClass="subtitle"/>
+                <Hyperlink fx:id="backToLoginLink" text="Iniciar sesión" styleClass="link-strong"
+                           onAction="#onBackToLogin"/>
+            </HBox>
+        </VBox>
+    </StackPane>
+</ScrollPane>
