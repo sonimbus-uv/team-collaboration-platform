@@ -36,14 +36,7 @@ pub fn verification_unavailable_page() -> String {
     )
 }
 
-fn page(
-    title: &str,
-    message: &str,
-    state: &str,
-    icon: &str,
-    label: &str,
-    hint: &str,
-) -> String {
+fn page(title: &str, message: &str, state: &str, icon: &str, label: &str, hint: &str) -> String {
     let styles = r#"
 :root {
     color-scheme: light;

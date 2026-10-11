@@ -12,13 +12,12 @@ use tower::ServiceExt;
 use crate::{
     ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
     repositories::{
-        accounts_repository::{AccountsRepository, CreateAccountError},
+        accounts_repository::AccountsRepository,
         one_time_tokens_repository::OneTimeTokensRepository,
     },
     security::password_hasher::{PasswordHasher, PasswordHashingError},
     services::{
-        account_service::AuthService,
-        email_verification_service::{new_token, EmailVerificationService},
+        account_service::AuthService, email_verification_service::EmailVerificationService,
     },
     state::AppState,
 };
@@ -68,15 +67,6 @@ fn state(pool: PgPool, sender: Arc<FakeSender>) -> AppState {
         email_verification_service: verification,
         pool,
     }
-}
-
-fn post(path: &str, body: serde_json::Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(path)
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap()
 }
 
 #[sqlx::test(migrations = "./migrations")]

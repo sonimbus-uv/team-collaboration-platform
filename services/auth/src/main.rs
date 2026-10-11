@@ -1,14 +1,40 @@
 mod config;
 mod db;
-mod routes;
-mod state;
+mod dto;
+mod email;
 mod error;
+mod handlers;
+#[cfg(test)]
+mod integration_tests;
+mod ports;
+mod providers;
+mod repositories;
+mod routes;
+mod security;
+mod services;
+mod state;
+mod validators;
 
+use std::sync::Arc;
+
+use repositories::accounts_repository::AccountsRepository;
+use security::password_hasher::Argon2PasswordHasher;
+use services::account_service::AuthService;
 use state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
+    match dotenvy::dotenv() {
+        Ok(_) => {}
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(anyhow::anyhow!("Failed to load .env: {error}")),
+    }
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "auth_service=info".into()),
+        )
+        .init();
 
     let config = config::Config::from_env()?;
     let pool = db::connect(&config.database_url, config.database_max_connections).await?;

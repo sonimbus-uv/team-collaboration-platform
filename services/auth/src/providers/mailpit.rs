@@ -46,7 +46,10 @@ impl VerificationEmailSender for MailpitEmailSender {
             .from(self.from.clone())
             .to(email.parse().map_err(|_| EmailDeliveryError::Transport)?)
             .subject(content.subject)
-            .multipart(MultiPart::alternative_plain_html(content.text, content.html))
+            .multipart(MultiPart::alternative_plain_html(
+                content.text,
+                content.html,
+            ))
             .map_err(|_| EmailDeliveryError::Transport)?;
         self.transport
             .send(message)
@@ -66,8 +69,11 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_invalid_recipient_before_connecting() {
-        let sender = sender("http://localhost:3001/auth/verify-email", "Team <team@example.com>")
-            .unwrap();
+        let sender = sender(
+            "http://localhost:3001/auth/verify-email",
+            "Team <team@example.com>",
+        )
+        .unwrap();
         assert!(matches!(
             sender.send("invalid-address", "token", "es-MX").await,
             Err(EmailDeliveryError::Transport)

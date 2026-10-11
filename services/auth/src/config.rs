@@ -1,3 +1,4 @@
+use anyhow::Context;
 use std::env;
 
 pub enum EmailProvider {
@@ -19,11 +20,12 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         let server_addr = env::var("SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:3001".to_string());
 
-        let database_url = env::var("DATABASE_URL")?;
+        let database_url = required_env("DATABASE_URL")?;
 
         let database_max_connections = env::var("DATABASE_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "10".to_string())
-            .parse::<u32>()?;
+            .parse::<u32>()
+            .context("DATABASE_MAX_CONNECTIONS must be a valid u32")?;
 
         Ok(Self {
             server_addr,
@@ -37,8 +39,7 @@ impl Config {
                     api_key: required_env("RESEND_API_KEY")?,
                 },
                 "mailpit" => {
-                    let host =
-                        env::var("MAILPIT_SMTP_HOST").unwrap_or_else(|_| "localhost".into());
+                    let host = env::var("MAILPIT_SMTP_HOST").unwrap_or_else(|_| "localhost".into());
                     anyhow::ensure!(
                         !host.trim().is_empty(),
                         "MAILPIT_SMTP_HOST must not be empty"

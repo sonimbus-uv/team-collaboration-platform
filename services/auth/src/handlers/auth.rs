@@ -7,16 +7,11 @@ use axum::{
 
 use crate::{
     dto::auth::{
-        RegisterRequest, 
-        RegisterResponse, 
-        ResendVerificationRequest, 
-        VerifyEmailQuery,
+        RegisterRequest, RegisterResponse, ResendVerificationRequest, VerifyEmailQuery,
         VerifyEmailRequest,
     },
     email::verification_page::{
-        verification_invalid_page, 
-        verification_page_response, 
-        verification_success_page,
+        verification_invalid_page, verification_page_response, verification_success_page,
         verification_unavailable_page,
     },
     error::ApiError,

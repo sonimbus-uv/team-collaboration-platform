@@ -55,12 +55,9 @@ Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualiz
 
 Pendiente:
 
-- Registro de cuenta.
-- Hash de contraseñas con Argon2id.
 - Login.
 - Refresh tokens.
 - Logout.
-- Verificación de correo.
 - Recuperación de contraseña.
 - Integración con Redis.
 - Emisión de tokens firmados y *endpoint* de la clave pública.

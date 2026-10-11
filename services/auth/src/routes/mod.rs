@@ -1,7 +1,20 @@
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{
+    extract::Request,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+};
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
 use serde::Serialize;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
-use crate::{error::ApiError, state::AppState};
+use crate::{error::ApiError, handlers::auth, state::AppState};
 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
@@ -29,6 +42,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/health/db", get(health_db))
+        .merge(auth_routes)
         .with_state(state)
 }
 
@@ -78,4 +92,28 @@ async fn health_db(State(state): State<AppState>) -> Result<Json<HealthResponse>
         .await?;
 
     Ok(Json(HealthResponse { status: "ok" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tower::ServiceExt;
+    #[tokio::test]
+    async fn rate_limit_returns_retry_after() {
+        let limiter = Arc::new(Mutex::new((Instant::now(), 120u32)));
+        let app = Router::new()
+            .route("/test", get(|| async { "ok" }))
+            .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/test")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()["retry-after"], "60");
+    }
 }
