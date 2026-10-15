@@ -8,8 +8,13 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class RegisterController {
+public class RegisterController implements Navigable {
+
+    private ViewManager viewManager;
 
     @FXML private TextField nameField;
     @FXML private TextField emailField;
@@ -53,6 +58,11 @@ public class RegisterController {
 
     @FXML
     private void onBackToLogin() {
-        // TODO CU-03: ViewManager.show(View.LOGIN)
+        viewManager.show(View.LOGIN);
+    }
+
+    @Override
+    public void setViewManager(ViewManager viewManager) {
+        this.viewManager = viewManager;
     }
 }

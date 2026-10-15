@@ -10,8 +10,13 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class RecoverPasswordController {
+public class RecoverPasswordController implements Navigable {
+
+    private ViewManager viewManager;
 
     // Indicador de pasos
     @FXML private HBox stepIndicator;
@@ -87,6 +92,11 @@ public class RecoverPasswordController {
 
     @FXML
     private void onBackToLogin() {
-        // TODO CU-03: ViewManager.show(View.LOGIN)
+        viewManager.show(View.LOGIN);
+    }
+
+    @Override
+    public void setViewManager(ViewManager viewManager) {
+        this.viewManager = viewManager;
     }
 }

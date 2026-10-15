@@ -7,8 +7,13 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Text;
+import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class VerifyAccountController {
+public class VerifyAccountController implements Navigable {
+
+    private ViewManager viewManager;
 
     @FXML private Text sentToEmailText;
     @FXML private HBox errorBox;
@@ -42,6 +47,11 @@ public class VerifyAccountController {
 
     @FXML
     private void onBackToLogin() {
-        // TODO CU-03: ViewManager.show(View.LOGIN)
+        viewManager.show(View.LOGIN);
+    }
+
+    @Override
+    public void setViewManager(ViewManager viewManager) {
+        this.viewManager = viewManager;
     }
 }

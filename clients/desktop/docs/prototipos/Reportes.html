@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Reportes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+input{font-family:inherit}
+select{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 11 · CU-29, CU-30</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0">
+
+    <!-- Columna 1: grupos del usuario -->
+    <nav aria-label="Mis grupos" style="width: 72px; flex-shrink: 0; background: #E0E0E0; border-right: 1px solid #8C8C8C; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; box-sizing: border-box">
+      <button aria-label="Inicio / mensajes directos" style="width: 48px; height: 48px; border-radius: 12px; border: 1.5px solid #1A1A1A; background: #FFFFFF; font-size: 11px; font-weight: 600; color: #1A1A1A">Inicio</button>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <div style="position: relative; display: flex; align-items: center">
+        <div style="position: absolute; left: -12px; width: 4px; height: 36px; background: #1A1A1A; border-radius: 0 3px 3px 0"></div>
+        <button aria-label="Grupo Sistemas Distribuidos (seleccionado)" aria-current="true" style="width: 48px; height: 48px; border-radius: 14px; border: 2.5px solid #1A1A1A; background: #FFFFFF; font-size: 15px; font-weight: 700; color: #1A1A1A">SD</button>
+      </div>
+      <button aria-label="Grupo Despliegue de Software" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5; font-size: 15px; font-weight: 600; color: #1A1A1A">DS</button>
+      <button aria-label="Grupo Proyecto Integrador" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5; font-size: 15px; font-weight: 600; color: #1A1A1A">PI</button>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <button aria-label="Crear o unirse a un grupo" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px dashed #1A1A1A; background: transparent; font-size: 22px; color: #1A1A1A">+</button>
+    </nav>
+
+    <!-- Columna 2: canales del grupo -->
+    <nav aria-label="Canales del grupo" style="width: 240px; flex-shrink: 0; background: #F0F0F0; border-right: 1px solid #8C8C8C; display: flex; flex-direction: column">
+      <div style="height: 52px; flex-shrink: 0; box-sizing: border-box; padding: 0 8px 0 16px; border-bottom: 1px solid #8C8C8C; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 15px; font-weight: 700">Sistemas Distribuidos</span>
+        <button aria-label="Configuración del grupo" style="width: 36px; height: 36px; border: 1px solid #8C8C8C; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>
+        </button>
+      </div>
+      <div style="flex-grow: 1; padding: 14px 8px; display: flex; flex-direction: column; gap: 2px; overflow: hidden">
+        <div style="padding: 0 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D">CANALES DE TEXTO</div>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>general</a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>tareas</a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>dudas-examen</a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>avisos</a>
+        <div style="padding: 16px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D">CANALES DE VOZ</div>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>Reunión de equipo</a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>Asesorías</a>
+        <div style="padding: 16px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D">GRUPO</div>
+        <a href="#" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">Archivos compartidos</a>
+        <a href="#" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">Proyectos y tareas</a>
+        <a href="#" aria-current="page" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; background: #CFCFCF; text-decoration: none; font-size: 14px; font-weight: 700; color: #1A1A1A">Reportes</a>
+      </div>
+    </nav>
+
+    <!-- Área central -->
+    <main style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+      <header style="height: 52px; flex-shrink: 0; box-sizing: border-box; padding: 0 16px 0 20px; border-bottom: 1px solid #8C8C8C; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 18px; font-weight: 700">Reportes</span>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <button aria-label="Notificaciones, 3 sin leer" style="position: relative; width: 44px; height: 44px; border: 1px solid #8C8C8C; border-radius: 8px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>
+            <span style="position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #1A1A1A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF">3</span>
+          </button>
+          <button aria-label="Mi perfil" style="width: 44px; height: 44px; border-radius: 22px; border: 1.5px solid #1A1A1A; background: #F0F0F0; padding: 0; display: flex; align-items: center; justify-content: center">
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="#8C8C8C" stroke-width="1"><line x1="9" y1="9" x2="35" y2="35"></line><line x1="35" y1="9" x2="9" y2="35"></line></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Parámetros del reporte -->
+      <div style="flex-shrink: 0; padding: 14px 20px; border-bottom: 1px solid #BDBDBD; display: flex; align-items: flex-end; gap: 12px; position: relative">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="rep-tipo" style="font-size: 12px; font-weight: 600">Tipo de reporte</label>
+          <select id="rep-tipo" style="height: 40px; width: 250px; padding: 0 10px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 14px; background: #FFFFFF; color: #1A1A1A"><option>Tareas terminadas por miembro</option><option>Avance por proyecto</option><option>Actividad de mensajes por canal</option></select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="rep-desde" style="font-size: 12px; font-weight: 600">Desde</label>
+          <input id="rep-desde" type="text" value="01/09/2026" style="height: 40px; width: 130px; box-sizing: border-box; padding: 0 10px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 14px; background: #FFFFFF; color: #1A1A1A">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="rep-hasta" style="font-size: 12px; font-weight: 600">Hasta</label>
+          <input id="rep-hasta" type="text" value="30/09/2026" style="height: 40px; width: 130px; box-sizing: border-box; padding: 0 10px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 14px; background: #FFFFFF; color: #1A1A1A">
+        </div>
+        <button style="height: 40px; padding: 0 16px; border: 1.5px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1A1A1A">Generar</button>
+        <div style="flex-grow: 1"></div>
+        <div style="position: relative">
+          <button aria-haspopup="menu" aria-expanded="{{menuAbierto}}" style="height: 40px; padding: 0 16px; border: none; border-radius: 6px; background: #1A1A1A; color: #FFFFFF; font-size: 14px; font-weight: 600">Exportar ▾</button>
+          <sc-if value="{{mostrarMenu}}" hint-placeholder-val="{{ true }}">
+            <div role="menu" aria-label="Formato de exportación" style="position: absolute; top: 46px; right: 0; z-index: 5; width: 180px; background: #FFFFFF; border: 1.5px solid #1A1A1A; border-radius: 8px; box-shadow: 4px 4px 0 #BDBDBD; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+              <button role="menuitem" style="height: 38px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #E0E0E0; font-size: 14px; font-weight: 600; color: #1A1A1A">PDF (.pdf)</button>
+              <button role="menuitem" style="height: 38px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #FFFFFF; font-size: 14px; color: #1A1A1A">CSV (.csv)</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline">
+          <h1 style="margin: 0; font-size: 18px; font-weight: 700">Tareas terminadas por miembro</h1>
+          <span style="font-size: 13px; color: #4D4D4D">Todos los proyectos · 01/09/2026 – 30/09/2026</span>
+        </div>
+
+        <!-- Gráfica de barras esquemática -->
+        <figure aria-label="Gráfica de barras: tareas terminadas por miembro" style="margin: 0; border: 1.5px solid #8C8C8C; border-radius: 8px; padding: 14px 18px 10px; display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; gap: 10px; height: 200px">
+            <div aria-hidden="true" style="display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: #4D4D4D; text-align: right; width: 18px; padding-bottom: 22px">
+              <span>6</span><span>4</span><span>2</span><span>0</span>
+            </div>
+            <div style="flex-grow: 1; display: flex; flex-direction: column">
+              <div style="flex-grow: 1; display: flex; align-items: flex-end; justify-content: space-around; border-left: 1.5px solid #1A1A1A; border-bottom: 1.5px solid #1A1A1A; padding: 0 20px">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90px"><span style="font-size: 13px; font-weight: 700">5</span><div style="width: 56px; height: 145px; background: #4D4D4D"></div></div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90px"><span style="font-size: 13px; font-weight: 700">4</span><div style="width: 56px; height: 116px; background: #4D4D4D"></div></div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90px"><span style="font-size: 13px; font-weight: 700">3</span><div style="width: 56px; height: 87px; background: #4D4D4D"></div></div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90px"><span style="font-size: 13px; font-weight: 700">2</span><div style="width: 56px; height: 58px; background: #4D4D4D"></div></div>
+              </div>
+              <div style="display: flex; justify-content: space-around; padding: 6px 20px 0; font-size: 12px; color: #1A1A1A">
+                <span style="width: 90px; text-align: center">Luis V.</span><span style="width: 90px; text-align: center">Ana L.</span><span style="width: 90px; text-align: center">Carlos R.</span><span style="width: 90px; text-align: center">María T.</span>
+              </div>
+            </div>
+          </div>
+        </figure>
+
+        <!-- Tabla -->
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px">
+          <thead>
+            <tr style="text-align: left; font-size: 12px; color: #4D4D4D; border-bottom: 1.5px solid #1A1A1A">
+              <th style="padding: 8px; font-weight: 700">Miembro</th>
+              <th style="padding: 8px; font-weight: 700; text-align: right">Asignadas</th>
+              <th style="padding: 8px; font-weight: 700; text-align: right">Terminadas</th>
+              <th style="padding: 8px; font-weight: 700; text-align: right">Vencidas</th>
+              <th style="padding: 8px; font-weight: 700; text-align: right">Cumplimiento</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid #BDBDBD"><td style="padding: 7px 8px">Luis Vázquez</td><td style="padding: 7px 8px; text-align: right">6</td><td style="padding: 7px 8px; text-align: right">5</td><td style="padding: 7px 8px; text-align: right">0</td><td style="padding: 7px 8px; text-align: right">83 %</td></tr>
+            <tr style="border-bottom: 1px solid #BDBDBD"><td style="padding: 7px 8px">Ana López</td><td style="padding: 7px 8px; text-align: right">6</td><td style="padding: 7px 8px; text-align: right">4</td><td style="padding: 7px 8px; text-align: right">1</td><td style="padding: 7px 8px; text-align: right">67 %</td></tr>
+            <tr style="border-bottom: 1px solid #BDBDBD"><td style="padding: 7px 8px">Carlos Ruiz</td><td style="padding: 7px 8px; text-align: right">5</td><td style="padding: 7px 8px; text-align: right">3</td><td style="padding: 7px 8px; text-align: right">0</td><td style="padding: 7px 8px; text-align: right">60 %</td></tr>
+            <tr style="border-bottom: 1px solid #BDBDBD"><td style="padding: 7px 8px">María Torres</td><td style="padding: 7px 8px; text-align: right">4</td><td style="padding: 7px 8px; text-align: right">2</td><td style="padding: 7px 8px; text-align: right">1</td><td style="padding: 7px 8px; text-align: right">50 %</td></tr>
+            <tr style="font-weight: 700; border-top: 1.5px solid #1A1A1A"><td style="padding: 7px 8px">Total</td><td style="padding: 7px 8px; text-align: right">21</td><td style="padding: 7px 8px; text-align: right">14</td><td style="padding: 7px 8px; text-align: right">2</td><td style="padding: 7px 8px; text-align: right">67 %</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mostrarMenu":{"editor":"boolean","default":true},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const m = this.props.mostrarMenu ?? true;
+    return { mostrarMenu: m, menuAbierto: m ? 'true' : 'false' };
+  }
+}
+</script>
+</body>
+</html>
