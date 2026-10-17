@@ -103,6 +103,8 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 
   log "Creando infrastructure/.env a partir de .env.example"
   cp "${ENV_EXAMPLE_FILE}" "${ENV_FILE}"
+  # Con virtiofs (libvirt) el dueño se refleja en el anfitrión; sin esto quedaría de root.
+  chown "${VM_USER}:${VM_USER}" "${ENV_FILE}"
 else
   log "Se conservará el archivo infrastructure/.env existente"
 fi
