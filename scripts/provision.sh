@@ -90,6 +90,8 @@ systemctl enable --now docker
 
 if id "${VM_USER}" >/dev/null 2>&1; then
   usermod -aG docker "${VM_USER}"
+  # La box cloud-image (libvirt) crea el usuario con /bin/sh; bento ya usa bash.
+  usermod -s /bin/bash "${VM_USER}"
 fi
 
 docker --version
