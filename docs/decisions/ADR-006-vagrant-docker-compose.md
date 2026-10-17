@@ -18,7 +18,14 @@ También es necesario controlar el consumo de recursos, ya que la computadora co
 
 ## Decisión
 
-Se utilizará Vagrant con VirtualBox para crear una máquina virtual Ubuntu Server 24.04 LTS.
+Se utilizará Vagrant para crear una máquina virtual Ubuntu Server 24.04 LTS.
+
+El `Vagrantfile` admite dos proveedores y cada integrante elige uno según su sistema:
+
+- **VirtualBox** (Windows, macOS y Linux), con la box `bento/ubuntu-24.04`.
+- **libvirt/KVM** (solo Linux), con la box `cloud-image/ubuntu-24.04`, ya que `bento` no se publica para libvirt, y la carpeta del proyecto compartida mediante virtiofs.
+
+*Actualización del 2026-10-17:* originalmente solo se contemplaba VirtualBox; se agregó libvirt para quienes trabajan en Linux con KVM.
 
 La máquina tendrá:
 
@@ -69,7 +76,8 @@ Se descartó porque dependería de la configuración particular de cada integran
 ## Consecuencias negativas
 
 - Mayor consumo de RAM y almacenamiento.
-- Dependencia de Vagrant y VirtualBox.
+- Dependencia de Vagrant y de un proveedor (VirtualBox o libvirt).
+- Dos boxes distintas según el proveedor; los cambios en el `Vagrantfile` deben probarse con ambos.
 - La primera ejecución requiere descargar la box y las imágenes.
 - Cassandra puede tardar varios minutos en estar disponible.
 - Los cambios en recursos o disco pueden requerir reiniciar o recrear la VM.
