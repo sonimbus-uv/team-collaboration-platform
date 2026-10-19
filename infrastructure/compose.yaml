@@ -54,6 +54,28 @@ services:
     networks:
       - backend
 
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ../gateway/nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      auth_gateway:
+        ipv4_address: 172.30.250.2
   cassandra:
     image: cassandra:5.0.9
     profiles:
@@ -100,6 +122,15 @@ services:
 networks:
   backend:
     driver: bridge
+
+  auth_gateway:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-auth
+    ipam:
+      config:
+        - subnet: 172.30.250.0/29
+          gateway: 172.30.250.1
 
 volumes:
   postgres_data:
