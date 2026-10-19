@@ -1,0 +1,14 @@
+add table inet auth_guard
+flush table inet auth_guard
+
+table inet auth_guard {
+    chain input {
+        type filter hook input priority -10; policy accept;
+
+        iifname "lo" tcp dport 3001 counter accept
+
+        iifname "br-auth" ip saddr 172.30.250.2 tcp dport 3001 counter accept
+
+        tcp dport 3001 counter reject with tcp reset
+    }
+}

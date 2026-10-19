@@ -1,3 +1,5 @@
+mod auth_rate_limiter;
+mod client_ip;
 mod config;
 mod db;
 mod dto;
@@ -9,6 +11,9 @@ mod integration_tests;
 mod ports;
 mod providers;
 mod repositories;
+mod rate_limit;
+mod recipient_key;
+mod redis_connection;
 mod routes;
 mod security;
 mod services;
@@ -37,6 +42,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
+    let auth_rate_limiter = Arc::new(
+        auth_rate_limiter::AuthRateLimiter::from_config(&config)
+            .map_err(|_| anyhow::anyhow!("Invalid Auth rate limiter configuration"))?,
+    );
     let pool = db::connect(&config.database_url, config.database_max_connections).await?;
 
     db::run_migrations(&pool).await?;
@@ -77,12 +86,17 @@ async fn main() -> anyhow::Result<()> {
         pool,
         auth_service,
         email_verification_service,
+        auth_rate_limiter,
     };
 
     let app = routes::router(state);
 
     let listener = tokio::net::TcpListener::bind(config.server_addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

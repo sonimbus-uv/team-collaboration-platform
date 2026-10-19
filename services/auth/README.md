@@ -50,8 +50,12 @@ Actualmente cuenta con:
 - Envío de verificación mediante Resend o Mailpit, confirmación y reenvío con cooldown.
 - Verificación desde el enlace del correo mediante GET con respuesta HTML, conservando POST con JSON para clientes móviles y de escritorio.
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
+- Rate limiting distribuido con Redis por operación, IP y destinatario.
+- Protección del gateway con Nginx, firewall persistente y registros seguros.
 
 Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.
+
+Ver [rate limiting, configuración y diagnóstico](RATE_LIMITING.md).
 
 Pendiente:
 
@@ -59,7 +63,7 @@ Pendiente:
 - Refresh tokens.
 - Logout.
 - Recuperación de contraseña.
-- Integración con Redis.
+- Integración de Redis con la gestión de sesiones.
 - Emisión de tokens firmados y *endpoint* de la clave pública.
 - Inicio de sesión con Google.
 - Perfil (nombre visible y foto predefinida) y evento `user.updated`.

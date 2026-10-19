@@ -12,6 +12,8 @@ pub enum ApiError {
     Validation(String),
     InternalServerError(String),
     Busy,
+    RateLimited { retry_after_secs: u64 },
+    RateLimitUnavailable,
 }
 
 #[derive(Debug, Serialize)]
@@ -31,6 +33,14 @@ impl From<sqlx::Error> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let retry_after_secs = match &self {
+            Self::RateLimited { retry_after_secs } => {
+                Some((*retry_after_secs).max(1))
+            }
+            Self::Busy => Some(60),
+            _ => None,
+        };
+
         let (status, problem) = match self {
             Self::Database(error) => {
                 tracing::error!(error = ?error, "database error");
@@ -92,6 +102,34 @@ impl IntoResponse for ApiError {
                     },
                 )
             }
+            Self::RateLimited { .. } => {
+                let status = StatusCode::TOO_MANY_REQUESTS;
+
+                (
+                    status,
+                    ProblemDetails {
+                        problem_type: "about:blank",
+                        title: "Too many requests",
+                        status: status.as_u16(),
+                        detail: "The request budget is exhausted. Please retry later."
+                            .into(),
+                    },
+                )
+            }
+            Self::RateLimitUnavailable => {
+                let status = StatusCode::SERVICE_UNAVAILABLE;
+
+                (
+                    status,
+                    ProblemDetails {
+                        problem_type: "about:blank",
+                        title: "Service unavailable",
+                        status: status.as_u16(),
+                        detail: "Request protection is temporarily unavailable."
+                            .into(),
+                    },
+                )
+            }
             Self::InternalServerError(reason) => {
                 tracing::error!(%reason, "internal error");
                 let status = StatusCode::INTERNAL_SERVER_ERROR;
@@ -109,11 +147,68 @@ impl IntoResponse for ApiError {
         };
 
         let mut response = (status, Json(problem)).into_response();
-        if status == StatusCode::TOO_MANY_REQUESTS {
+
+        response.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/problem+json"),
+        );
+
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+
+        if let Some(seconds) = retry_after_secs {
+            let header = axum::http::HeaderValue::from_str(&seconds.to_string())
+                .expect("An unsigned decimal integer is a valid header value");
+
             response
                 .headers_mut()
-                .insert("retry-after", axum::http::HeaderValue::from_static("60"));
+                .insert(axum::http::header::RETRY_AFTER, header);
         }
+
         response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn rate_limit_returns_calculated_retry_and_problem_details() {
+        let response = ApiError::RateLimited {
+            retry_after_secs: 7,
+        }
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()["retry-after"], "7");
+        assert_eq!(
+            response.headers()["content-type"],
+            "application/problem+json"
+        );
+        assert_eq!(response.headers()["cache-control"], "no-store");
+
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(problem["status"], 429);
+        assert_eq!(problem["title"], "Too many requests");
+    }
+
+    #[test]
+    fn unavailable_is_not_a_rate_limit_rejection() {
+        let response = ApiError::RateLimitUnavailable.into_response();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(!response.headers().contains_key("retry-after"));
+        assert_eq!(
+            response.headers()["content-type"],
+            "application/problem+json"
+        );
     }
 }

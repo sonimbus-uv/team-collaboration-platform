@@ -1,0 +1,137 @@
+use std::{net::IpAddr, time::Duration};
+
+use tokio::{sync::OnceCell, time::timeout};
+
+use crate::{
+    config::Config,
+    rate_limit::{AuthOperation, BucketPolicy, RateLimitDecision},
+    recipient_key::RecipientKey,
+    redis_connection::{RedisConnection, RedisConnectionError},
+};
+
+pub struct AuthRateLimiter {
+    redis_url: String,
+    connect_timeout: Duration,
+    operation_timeout: Duration,
+    connection: OnceCell<RedisConnection>,
+    trusted_proxy_ips: Vec<IpAddr>,
+    register_policy: BucketPolicy,
+    resend_policy: BucketPolicy,
+    verify_policy: BucketPolicy,
+    recipient_policy: BucketPolicy,
+    recipient_key: RecipientKey,
+}
+
+impl AuthRateLimiter {
+    pub fn from_config(config: &Config) -> anyhow::Result<Self> {
+        redis::Client::open(config.redis_url.as_str())
+            .map_err(|_| anyhow::anyhow!("Invalid Redis URL configuration"))?;
+
+        let recipient_key =
+            RecipientKey::new(config.recipient_hmac_secret.as_bytes())?;
+
+        Ok(Self {
+            redis_url: config.redis_url.clone(),
+            connect_timeout: Duration::from_millis(u64::from(
+                config.redis_connect_timeout_ms,
+            )),
+            operation_timeout: Duration::from_millis(u64::from(
+                config.redis_operation_timeout_ms,
+            )),
+            connection: OnceCell::new(),
+            trusted_proxy_ips: config.trusted_proxy_ips.clone(),
+            register_policy: config.register_ip_policy,
+            resend_policy: config.resend_ip_policy,
+            verify_policy: config.verify_ip_policy,
+            recipient_policy: config.recipient_policy,
+            recipient_key,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_tests(redis_url: String) -> Self {
+        let policy = BucketPolicy::new(10_000, 60)
+            .expect("The fixed test policy must be valid");
+
+        Self {
+            redis_url,
+            connect_timeout: Duration::from_millis(500),
+            operation_timeout: Duration::from_millis(200),
+            connection: OnceCell::new(),
+            trusted_proxy_ips: Vec::new(),
+            register_policy: policy,
+            resend_policy: policy,
+            verify_policy: policy,
+            recipient_policy: policy,
+            recipient_key: RecipientKey::new(&[0x11; 32])
+                .expect("The fixed test HMAC secret must be valid"),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_recipient_policy_for_tests(
+        mut self,
+        policy: BucketPolicy,
+    ) -> Self {
+        self.recipient_policy = policy;
+        self
+    }
+
+    pub fn trusted_proxy_ips(&self) -> &[IpAddr] {
+        &self.trusted_proxy_ips
+    }
+
+    pub async fn check_ip(
+        &self,
+        operation: AuthOperation,
+        ip: IpAddr,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        let policy = self.policy_for(operation);
+        let key = operation.ip_key(ip);
+
+        self.check_bucket(&key, policy).await
+    }
+
+    pub async fn check_recipient(
+        &self,
+        email: &str,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        let key = self.recipient_key.redis_key(email);
+
+        self.check_bucket(&key, self.recipient_policy).await
+    }
+
+    async fn check_bucket(
+        &self,
+        key: &str,
+        policy: BucketPolicy,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        let request_timeout = self.connect_timeout + self.operation_timeout;
+
+        timeout(request_timeout, async {
+            let connection = self
+                .connection
+                .get_or_try_init(|| async {
+                    RedisConnection::connect(
+                        &self.redis_url,
+                        self.connect_timeout,
+                        self.operation_timeout,
+                    )
+                    .await
+                })
+                .await?;
+
+            connection.consume(key, policy).await
+        })
+        .await
+        .map_err(|_| RedisConnectionError::OperationTimeout)?
+    }
+
+    fn policy_for(&self, operation: AuthOperation) -> BucketPolicy {
+        match operation {
+            AuthOperation::Register => self.register_policy,
+            AuthOperation::Resend => self.resend_policy,
+            AuthOperation::Verify => self.verify_policy,
+        }
+    }
+}

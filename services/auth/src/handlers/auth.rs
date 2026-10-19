@@ -23,18 +23,37 @@ use crate::{
     validators::auth_validator::RegisterInputValidationError,
 };
 
+use crate::{
+    auth_rate_limiter::AuthRateLimiter,
+    rate_limit::RateLimitDecision,
+};
+
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), ApiError> {
+    let valid_input =
+        crate::validators::auth_validator::validate_register_input(
+            request.email,
+            request.password,
+        )
+        .map_err(map_register_validation_error)?;
+
+    enforce_recipient_budget(
+        state.auth_rate_limiter.as_ref(),
+        &valid_input.email,
+    )
+    .await?;
+
     let (account, sent) = state
         .auth_service
-        .register(request.email, request.password)
+        .register(valid_input.email, valid_input.password)
         .await
         .map_err(map_register_error)?;
 
     let mut response = RegisterResponse::from(account);
     response.verification_email_sent = sent;
+
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -106,14 +125,23 @@ pub async fn resend_verification(
     Json(request): Json<ResendVerificationRequest>,
 ) -> Result<StatusCode, ApiError> {
     let email = request.email.trim().to_lowercase();
+
     if !crate::validators::auth_validator::is_valid_email_format(&email) {
         return Err(ApiError::Validation("Invalid email format".into()));
     }
+
+    enforce_recipient_budget(
+        state.auth_rate_limiter.as_ref(),
+        &email,
+    )
+    .await?;
+
     state
         .email_verification_service
         .resend(&email)
         .await
         .map_err(map_verification_error)?;
+
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -160,6 +188,26 @@ pub async fn verify_email_page(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 verification_unavailable_page(),
             )
+        }
+    }
+}
+
+async fn enforce_recipient_budget(
+    limiter: &AuthRateLimiter,
+    email: &str,
+) -> Result<(), ApiError> {
+    match limiter.check_recipient(email).await {
+        Ok(RateLimitDecision::Allowed) => Ok(()),
+        Ok(RateLimitDecision::Limited { retry_after_secs }) => {
+            Err(ApiError::RateLimited { retry_after_secs })
+        }
+        Err(error) => {
+            tracing::warn!(
+                error_kind = ?error,
+                "Recipient rate limit check unavailable"
+            );
+
+            Err(ApiError::RateLimitUnavailable)
         }
     }
 }
