@@ -6,9 +6,6 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.TextField?>
-<?import javafx.scene.layout.ColumnConstraints?>
-<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
@@ -39,60 +36,49 @@
                 </StackPane>
                 <Label text="Verifica tu cuenta" styleClass="title"/>
                 <TextFlow textAlignment="CENTER" lineSpacing="2">
-                    <Text text="Enviamos un código de verificación a&#10;" styleClass="flow-text"/>
-                    <Text fx:id="sentToEmailText" text="[correo]" styleClass="flow-text-strong"/>
-                    <Text text=".&#10;Escríbelo para activar tu cuenta." styleClass="flow-text"/>
+                    <Text text="Enviamos un enlace de verificación a&#10;" styleClass="flow-text"/>
+                    <!-- El controlador pone el correo registrado; sin él (demostración) queda «tu correo» -->
+                    <Text fx:id="sentToEmailText" text="tu correo" styleClass="flow-text-strong"/>
+                    <Text text=".&#10;Ábrelo desde tu correo para activar tu cuenta." styleClass="flow-text"/>
                 </TextFlow>
             </VBox>
 
-            <!-- Error (código incorrecto o caducado), oculto por defecto -->
+            <!-- Error (el correo no se pudo enviar al registrar o falló el reenvío), oculto por defecto -->
             <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
                   visible="false" managed="false">
                 <padding>
                     <Insets top="12" right="14" bottom="12" left="14"/>
                 </padding>
-                <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+                <Label fx:id="errorIconLabel" text="!" styleClass="alert-icon" accessibleText="Error"/>
                 <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
             </HBox>
 
-            <!-- Confirmación de reenvío, oculta por defecto -->
-            <HBox fx:id="infoBox" styleClass="alert-success" spacing="10" alignment="CENTER_LEFT"
+            <!-- Resultado del reenvío: mensaje neutro (no revela si la cuenta existe), oculto por defecto.
+                 Antes era un código de 6 dígitos (codeField); se recuperaría si #14 adopta la alternativa A. -->
+            <HBox fx:id="infoBox" styleClass="alert-info" spacing="10" alignment="CENTER_LEFT"
                   visible="false" managed="false">
                 <padding>
                     <Insets top="12" right="14" bottom="12" left="14"/>
                 </padding>
-                <Label text="✓" styleClass="success-icon" accessibleText="Listo"/>
-                <Label fx:id="infoLabel" text="Te enviamos un nuevo código."
-                       styleClass="success-text" wrapText="true"/>
+                <Label text="i" styleClass="info-icon" accessibleText="Información"/>
+                <Label fx:id="infoLabel"
+                       text="Si la cuenta existe y no está verificada, te enviamos un nuevo enlace."
+                       styleClass="info-text" wrapText="true"/>
             </HBox>
 
-            <!-- Código -->
-            <GridPane vgap="6">
-                <columnConstraints>
-                    <ColumnConstraints hgrow="ALWAYS"/>
-                </columnConstraints>
-
-                <TextField fx:id="codeField" promptText="000000" styleClass="code-field"
-                           accessibleText="Código de verificación"
-                           accessibleHelp="6 dígitos. El código caduca en 15 minutos."
-                           GridPane.rowIndex="1"/>
-                <Label text="Código de verificación" labelFor="$codeField" styleClass="field-label"
-                       GridPane.rowIndex="0"/>
-                <Label text="6 dígitos. El código caduca en 15 minutos." styleClass="hint-text"
-                       wrapText="true" GridPane.rowIndex="2"/>
-            </GridPane>
-
-            <Button fx:id="verifyButton" text="Verificar cuenta" defaultButton="true"
+            <Button fx:id="verifyButton" text="Ya verifiqué mi cuenta" defaultButton="true"
+                    accessibleHelp="Vuelve a iniciar sesión después de abrir el enlace del correo."
                     maxWidth="1.7976931348623157E308" styleClass="button-primary"
-                    onAction="#onVerify"/>
+                    onAction="#onAlreadyVerified"/>
 
             <!-- Reenvío -->
             <Separator/>
             <VBox alignment="CENTER" spacing="8">
                 <Label text="¿No te llegó el correo? Revisa tu carpeta de spam."
                        styleClass="subtitle" wrapText="true"/>
-                <Button fx:id="resendButton" text="Reenviar código" styleClass="button-secondary"
-                        onAction="#onResendCode"/>
+                <Button fx:id="resendButton" text="Reenviar correo" styleClass="button-secondary"
+                        accessibleText="Reenviar correo de verificación"
+                        onAction="#onResendEmail"/>
             </VBox>
 
             <HBox alignment="CENTER">

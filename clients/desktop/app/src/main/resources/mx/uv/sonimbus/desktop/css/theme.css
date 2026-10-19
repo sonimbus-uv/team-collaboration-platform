@@ -799,3 +799,17 @@
     -fx-background-color: -sn-accent-soft; -fx-border-color: -sn-primary; -fx-border-width: 4;
 }
 .avatar-option:focused { -fx-border-color: -sn-accent; -fx-border-width: 3; }
+
+/* ===== Autenticación: conexión con Auth Service ===== */
+/* Indicador dentro de un botón ocupado (BusyButton): blanco sobre -sn-primary = 5.1:1 */
+.button-spinner {
+    -fx-progress-color: #FFFFFF;
+    -fx-pref-width: 18; -fx-pref-height: 18; -fx-max-width: 18; -fx-max-height: 18;
+}
+.button-secondary .button-spinner { -fx-progress-color: -sn-text; }
+/* Enlace dentro de un aviso de error: -sn-error sobre -sn-error-bg = 7:1
+   (-sn-primary quedaría en 4.5:1, en el límite) */
+.alert-error .hyperlink, .alert-error .hyperlink:visited {
+    -fx-text-fill: -sn-error; -fx-font-weight: bold; -fx-padding: 0;
+}
+.alert-error .hyperlink:hover { -fx-text-fill: -sn-text; }

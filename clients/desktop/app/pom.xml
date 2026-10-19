@@ -31,10 +31,41 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>testfx-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>openjfx-monocle</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <!-- Pruebas de interfaz (TestFX) sin pantalla, con Monocle -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <testfx.robot>glass</testfx.robot>
+            <testfx.headless>true</testfx.headless>
+            <glass.platform>Monocle</glass.platform>
+            <monocle.platform>Headless</monocle.platform>
+            <prism.order>sw</prism.order>
+            <prism.text>t2k</prism.text>
+            <java.awt.headless>true</java.awt.headless>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.openjfx</groupId>
         <artifactId>javafx-maven-plugin</artifactId>

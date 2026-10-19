@@ -1,5 +1,6 @@
 package mx.uv.sonimbus.desktop.ui.auth;
 
+import java.util.Objects;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -10,13 +11,19 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class RecoverPasswordController implements Navigable {
+/**
+ * CU-05. Auth todavía no tiene recuperación de contraseña: el paso 1 valida el correo y avisa que
+ * no está disponible. El paso 2 queda como esqueleto.
+ */
+public class RecoverPasswordController {
 
-    private ViewManager viewManager;
+    private static final String FIELD_INVALID = "field-invalid";
+
+    private final ViewManager viewManager;
 
     // Indicador de pasos
     @FXML private HBox stepIndicator;
@@ -31,6 +38,7 @@ public class RecoverPasswordController implements Navigable {
     @FXML private TextField emailField;
     @FXML private Button sendCodeButton;
     @FXML private HBox sentInfoBox;
+    @FXML private Label sentInfoIconLabel;
     @FXML private Label sentInfoLabel;
     @FXML private Hyperlink backToLoginLink;
     @FXML private Hyperlink haveCodeLink;
@@ -50,8 +58,16 @@ public class RecoverPasswordController implements Navigable {
     @FXML private Button resetButton;
     @FXML private Hyperlink resetBackToLoginLink;
 
+    public RecoverPasswordController(ViewManager viewManager) {
+        this.viewManager = Objects.requireNonNull(viewManager);
+    }
+
     @FXML
     private void initialize() {
+        emailField.textProperty().addListener((obs, old, text) -> {
+            emailField.getStyleClass().remove(FIELD_INVALID);
+            AlertBox.hide(sentInfoBox);
+        });
         // TODO CU-05: enlazar newPasswordVisibleField.textProperty() con newPasswordField.textProperty()
         // TODO CU-05: TextFormatter en codeField para aceptar solo 6 dígitos
         // TODO CU-05: ocultar errores y quitar "field-invalid" al editar los campos
@@ -59,12 +75,25 @@ public class RecoverPasswordController implements Navigable {
 
     @FXML
     private void onSendCode() {
-        // TODO CU-05: validar formato de correo, solicitar código y mostrar sentInfoBox
-        //             (mensaje neutro: no revelar si el correo existe); después pasar al paso 2
+        if (emailField.getText() == null || emailField.getText().isBlank()) {
+            if (!emailField.getStyleClass().contains(FIELD_INVALID)) {
+                emailField.getStyleClass().add(FIELD_INVALID);
+            }
+            AlertBox.show(sentInfoBox, sentInfoIconLabel, sentInfoLabel, AlertBox.Kind.ERROR,
+                    "Escribe tu correo electrónico.");
+            emailField.requestFocus();
+            return;
+        }
+        // TODO CU-05: cuando Auth tenga el endpoint, validar formato de correo, solicitar código y
+        //             mostrar sentInfoBox con el mensaje neutro «Si el correo está registrado,
+        //             recibirás un código…» (no revelar si existe); después pasar al paso 2
+        showUnavailable();
     }
 
     @FXML
     private void onShowResetStep() {
+        // Sin endpoint de recuperación el paso 2 no sirve todavía.
+        showUnavailable();
         // TODO CU-05: cambiar al paso 2:
         //   - emailStepBox oculto / resetStepBox visible (visible + managed)
         //   - sendCodeButton.setDefaultButton(false); resetButton.setDefaultButton(true)
@@ -95,8 +124,8 @@ public class RecoverPasswordController implements Navigable {
         viewManager.show(View.LOGIN);
     }
 
-    @Override
-    public void setViewManager(ViewManager viewManager) {
-        this.viewManager = viewManager;
+    private void showUnavailable() {
+        AlertBox.show(sentInfoBox, sentInfoIconLabel, sentInfoLabel, AlertBox.Kind.INFO,
+                AuthMessages.RECOVERY_UNAVAILABLE);
     }
 }

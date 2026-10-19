@@ -80,7 +80,7 @@ public class MainController implements Navigable, ContentHost {
 
     @FXML
     private void onOpenGroupSettings() {
-        showSection(View.GROUP_SETTINGS, "Configuración del grupo", "", null);
+        viewManager.showContent(View.GROUP_SETTINGS);
     }
 
     @FXML
@@ -95,28 +95,27 @@ public class MainController implements Navigable, ContentHost {
 
     @FXML
     private void onShowSharedFiles() {
-        showSection(View.SHARED_FILES, "Archivos compartidos",
-                "Archivos enviados en los canales del grupo", sharedFilesButton);
+        viewManager.showContent(View.SHARED_FILES);
     }
 
     @FXML
     private void onShowProjects() {
-        showSection(View.PROJECTS, "Proyectos y tareas", "", projectsButton);
+        viewManager.showContent(View.PROJECTS);
     }
 
     @FXML
     private void onShowReports() {
-        showSection(View.REPORTS, "Reportes", "", reportsButton);
+        viewManager.showContent(View.REPORTS);
     }
 
     @FXML
     private void onShowNotifications() {
-        showSection(View.NOTIFICATIONS, "Notificaciones", "", null);
+        viewManager.showContent(View.NOTIFICATIONS);
     }
 
     @FXML
     private void onShowProfile() {
-        showSection(View.PROFILE, "Mi perfil", "", null);
+        viewManager.showContent(View.PROFILE);
     }
 
     @Override
@@ -125,19 +124,30 @@ public class MainController implements Navigable, ContentHost {
     }
 
     @Override
-    public void setContent(Parent content) {
+    public void setContent(View view, Parent content) {
         contentPane.getChildren().setAll(content);
+        switch (view) {
+            // TODO CU-16 / CU-22: título con el nombre del canal seleccionado
+            case TEXT_CHANNEL -> showSectionHeader("Canal de texto", "", null);
+            case VOICE_CHANNEL -> showSectionHeader("Canal de voz", "", null);
+            case SHARED_FILES -> showSectionHeader("Archivos compartidos",
+                    "Archivos enviados en los canales del grupo", sharedFilesButton);
+            case GROUP_SETTINGS -> showSectionHeader("Configuración del grupo", "", null);
+            case PROJECTS -> showSectionHeader("Proyectos y tareas", "", projectsButton);
+            case REPORTS -> showSectionHeader("Reportes", "", reportsButton);
+            case NOTIFICATIONS -> showSectionHeader("Notificaciones", "", null);
+            case PROFILE -> showSectionHeader("Mi perfil", "", null);
+            default -> showSectionHeader("", "", null);
+        }
     }
 
     @Override
     public void clearContent() {
         contentPane.getChildren().setAll(emptyStateLabel);
-        setSectionHeader("", "");
-        selectNavItem(null);
+        showSectionHeader("", "", null);
     }
 
-    private void showSection(View view, String title, String subtitle, Button navItem) {
-        viewManager.showContent(view);
+    private void showSectionHeader(String title, String subtitle, Button navItem) {
         setSectionHeader(title, subtitle);
         selectNavItem(navItem);
     }

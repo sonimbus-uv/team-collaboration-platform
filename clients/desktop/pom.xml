@@ -20,6 +20,10 @@
     <javafx.version>21.0.8</javafx.version>
     <junit.version>5.13.4</junit.version>
     <jackson.version>2.22.2</jackson.version>
+    <mockito.version>5.24.0</mockito.version>
+    <testfx.version>4.0.18</testfx.version>
+    <!-- Monocle publica una versión por JavaFX mayor; 21.0.2 es la de JavaFX 21 -->
+    <monocle.version>21.0.2</monocle.version>
   </properties>
 
   <dependencyManagement>
@@ -38,6 +42,21 @@
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-junit-jupiter</artifactId>
+        <version>${mockito.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testfx</groupId>
+        <artifactId>testfx-junit5</artifactId>
+        <version>${testfx.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testfx</groupId>
+        <artifactId>openjfx-monocle</artifactId>
+        <version>${monocle.version}</version>
       </dependency>
       <dependency>
         <groupId>org.junit</groupId>

@@ -9,40 +9,77 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
-import java.util.Map;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
- * Cliente HTTP del Auth Service. Las llamadas bloquean: deben hacerse fuera del hilo de JavaFX.
+ * Cliente HTTP del Auth Service. Las llamadas bloquean: deben hacerse fuera del hilo de JavaFX
+ * (ver {@code ui.common.BackgroundTasks}).
  */
 public class AuthApi {
 
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    /** Operaciones del servicio; el mismo código HTTP puede significar cosas distintas en cada una. */
+    enum Operation {
+        REGISTER("register", AuthPaths.REGISTER),
+        VERIFY_EMAIL("verify-email", AuthPaths.VERIFY_EMAIL),
+        RESEND_VERIFICATION("resend-verification", AuthPaths.RESEND_VERIFICATION);
+
+        private final String label;
+        private final String path;
+
+        Operation(String label, String path) {
+            this.label = label;
+            this.path = path;
+        }
+    }
+
+    /** Cuerpo de {@code POST /auth/register}. {@link #toString()} oculta la contraseña. */
+    record RegisterRequest(String email, String password) {
+        @Override
+        public String toString() {
+            return "RegisterRequest[email=" + email + ", password=[REDACTED]]";
+        }
+    }
+
+    /** Cuerpo de {@code POST /auth/verify-email}. {@link #toString()} oculta el token. */
+    record VerifyEmailRequest(String token) {
+        @Override
+        public String toString() {
+            return "VerifyEmailRequest[token=[REDACTED]]";
+        }
+    }
+
+    record ResendVerificationRequest(String email) {
+    }
 
     private final HttpClient http;
     private final String baseUrl;
+    private final Duration requestTimeout;
     private final ObjectMapper json = new ObjectMapper()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    public AuthApi(URI baseUrl) {
-        this(HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build(), baseUrl);
+    public AuthApi(ApiConfig config) {
+        this(HttpClient.newBuilder().connectTimeout(config.connectTimeout()).build(), config);
     }
 
-    AuthApi(HttpClient http, URI baseUrl) {
+    AuthApi(HttpClient http, ApiConfig config) {
         this.http = http;
-        this.baseUrl = baseUrl.toString().replaceAll("/+$", "");
+        this.baseUrl = config.authBaseUrl().toString().replaceAll("/+$", "");
+        this.requestTimeout = config.requestTimeout();
     }
 
     /** CU-01. Si {@code verificationEmailSent} es falso, hay que ofrecer el reenvío. */
     public Account register(String email, String password) throws ApiException {
-        return read(post("/auth/register", Map.of("email", email, "password", password)));
+        return read(Operation.REGISTER, post(Operation.REGISTER, new RegisterRequest(email, password)));
     }
 
-    /** CU-02. */
+    /** CU-02. El escritorio todavía no lo usa: la verificación se hace con el enlace del correo. */
     public Account verifyEmail(String token) throws ApiException {
-        return read(post("/auth/verify-email", Map.of("token", token)));
+        return read(Operation.VERIFY_EMAIL, post(Operation.VERIFY_EMAIL, new VerifyEmailRequest(token)));
     }
 
     /**
@@ -50,90 +87,82 @@ public class AuthApi {
      * reenvío anterior tenga menos de 60 segundos.
      */
     public void resendVerification(String email) throws ApiException {
-        post("/auth/resend-verification", Map.of("email", email));
+        post(Operation.RESEND_VERIFICATION, new ResendVerificationRequest(email));
     }
 
-    private HttpResponse<String> post(String path, Map<String, String> body) throws ApiException {
+    private HttpResponse<String> post(Operation operation, Object body) throws ApiException {
         HttpRequest request;
         try {
-            request = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                    .timeout(REQUEST_TIMEOUT)
+            request = HttpRequest.newBuilder(URI.create(baseUrl + operation.path))
+                    .timeout(requestTimeout)
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
                     .build();
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.UNEXPECTED, e);
+            // Sin la causa: el mensaje de Jackson podría citar el cuerpo con la contraseña.
+            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
         }
 
         HttpResponse<String> response;
         try {
             response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (HttpTimeoutException e) {
+            throw new ApiException(ApiErrorKind.TIMEOUT, operation.label, e);
         } catch (IOException e) {
-            throw new ApiException(ApiError.NETWORK, e);
+            throw new ApiException(ApiErrorKind.NETWORK, operation.label, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ApiException(ApiError.NETWORK, e);
+            throw new ApiException(ApiErrorKind.NETWORK, operation.label, e);
         }
 
-        if (response.statusCode() / 100 != 2) {
-            throw toException(response);
+        int status = response.statusCode();
+        if (status / 100 != 2) {
+            Duration retryAfter = response.headers().firstValue("Retry-After")
+                    .map(AuthApi::parseRetryAfter)
+                    .orElse(null);
+            throw new ApiException(classify(operation, status), operation.label, status, retryAfter);
         }
         return response;
     }
 
-    private Account read(HttpResponse<String> response) throws ApiException {
+    private Account read(Operation operation, HttpResponse<String> response) throws ApiException {
         try {
             return json.readValue(response.body(), Account.class);
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiError.UNEXPECTED, e);
+            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, e);
         }
-    }
-
-    private ApiException toException(HttpResponse<String> response) {
-        int status = response.statusCode();
-        String detail = problemDetail(response.body());
-        Duration retryAfter = response.headers().firstValue("Retry-After")
-                .map(AuthApi::parseSeconds)
-                .orElse(null);
-        return new ApiException(classify(status, detail), status, detail, retryAfter);
     }
 
     /**
-     * El servicio todavía envía {@code type: "about:blank"} en todos sus errores, así que los
-     * casos de un 400 solo se distinguen por el texto de {@code detail}. Cuando el contrato
-     * defina un {@code type} por caso, hay que decidir con él y quitar la comparación de textos.
+     * Decide el caso solo con el código HTTP y la operación. El servicio envía
+     * {@code type: "about:blank"} en todos sus errores y su {@code detail} no es contrato (#14).
      */
-    private static ApiError classify(int status, String detail) {
+    static ApiErrorKind classify(Operation operation, int status) {
         return switch (status) {
-            case 400 -> switch (detail) {
-                case "Invalid email format" -> ApiError.INVALID_EMAIL;
-                case "Password is too short", "Password is too long", "Invalid password format" ->
-                        ApiError.INVALID_PASSWORD;
-                case "Invalid or expired verification token" -> ApiError.INVALID_TOKEN;
-                default -> ApiError.INVALID_REQUEST;
-            };
-            case 409 -> ApiError.EMAIL_ALREADY_EXISTS;
-            case 422 -> ApiError.INVALID_REQUEST;
-            case 429 -> ApiError.TOO_MANY_REQUESTS;
-            case 502, 503, 504 -> ApiError.SERVICE_UNAVAILABLE;
-            default -> ApiError.UNEXPECTED;
+            case 400 -> ApiErrorKind.VALIDATION;
+            case 409 -> operation == Operation.REGISTER ? ApiErrorKind.EMAIL_TAKEN : ApiErrorKind.UNEXPECTED;
+            case 429 -> ApiErrorKind.RATE_LIMITED;
+            case 500 -> ApiErrorKind.SERVER;
+            case 502, 503, 504 -> ApiErrorKind.UNAVAILABLE;
+            // 422 y 415 los produce Axum cuando el JSON enviado no es válido: es un error del cliente.
+            default -> ApiErrorKind.UNEXPECTED;
         };
     }
 
-    private String problemDetail(String body) {
+    /** {@code Retry-After} en segundos o como fecha HTTP (RFC 9110); {@code null} si no se entiende. */
+    static Duration parseRetryAfter(String value) {
+        String text = value.strip();
         try {
-            ProblemDetails problem = json.readValue(body, ProblemDetails.class);
-            return problem != null && problem.detail() != null ? problem.detail() : "";
-        } catch (JsonProcessingException e) {
-            return "";
-        }
-    }
-
-    private static Duration parseSeconds(String value) {
-        try {
-            return Duration.ofSeconds(Long.parseLong(value.strip()));
+            return Duration.ofSeconds(Math.max(0, Long.parseLong(text)));
         } catch (NumberFormatException e) {
+            // No son segundos: puede ser una fecha.
+        }
+        try {
+            Duration wait = Duration.between(ZonedDateTime.now(),
+                    ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME));
+            return wait.isNegative() ? Duration.ZERO : wait;
+        } catch (DateTimeParseException e) {
             return null;
         }
     }
