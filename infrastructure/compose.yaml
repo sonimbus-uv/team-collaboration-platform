@@ -73,6 +73,18 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ../gateway/nginx/services
+        target: /etc/nginx/services
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../gateway/nginx/routes
+        target: /etc/nginx/routes
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       auth_gateway:
         ipv4_address: 172.30.250.2
