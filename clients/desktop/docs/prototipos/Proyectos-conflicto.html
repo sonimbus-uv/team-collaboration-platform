@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Conflicto al editar tarea</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden; position: relative">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A; position: relative; z-index: 3">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 10b (conflicto) · CU-25, CU-26, CU-27, CU-28</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <!-- Fondo: tablero (simplificado) -->
+  <div aria-hidden="true" style="flex-grow: 1; display: flex; min-height: 0">
+    <div style="width: 72px; flex-shrink: 0; background: #E0E0E0; border-right: 1px solid #8C8C8C"></div>
+    <div style="width: 240px; flex-shrink: 0; background: #F0F0F0; border-right: 1px solid #8C8C8C"></div>
+    <div style="flex-grow: 1; display: flex; flex-direction: column">
+      <div style="height: 52px; border-bottom: 1px solid #8C8C8C"></div>
+      <div style="flex-grow: 1; display: flex">
+        <div style="width: 200px; border-right: 1px solid #BDBDBD"></div>
+        <div style="flex-grow: 1; padding: 70px 16px 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <div style="background: #F0F0F0; border: 1px solid #8C8C8C; border-radius: 8px; padding: 40px 10px 10px; display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div></div>
+          <div style="background: #F0F0F0; border: 1px solid #8C8C8C; border-radius: 8px; padding: 40px 10px 10px; display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div></div>
+          <div style="background: #F0F0F0; border: 1px solid #8C8C8C; border-radius: 8px; padding: 40px 10px 10px; display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div><div style="height: 64px; background: #FFFFFF; border: 1px solid #8C8C8C; border-radius: 6px"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; top: 34px; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.45); z-index: 1"></div>
+
+  <!-- Diálogo de conflicto -->
+  <div role="alertdialog" aria-modal="true" aria-labelledby="conf-titulo" aria-describedby="conf-desc" style="position: absolute; top: 110px; left: 340px; width: 600px; z-index: 2; box-sizing: border-box; padding: 24px; background: #FFFFFF; border: 2px solid #1A1A1A; border-radius: 10px; box-shadow: 6px 6px 0 #4D4D4D; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span aria-hidden="true" style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 14px; background: #1A1A1A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700">!</span>
+      <h2 id="conf-titulo" style="margin: 0; font-size: 20px; font-weight: 700">Otro miembro modificó esta tarea</h2>
+    </div>
+    <p id="conf-desc" style="margin: 0; font-size: 14px; line-height: 1.5">Ana López guardó cambios en «Prototipo de baja fidelidad» a las 11:42, mientras la editabas. Tus cambios no se guardaron.</p>
+
+    <!-- Comparación -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <section style="border: 2.5px solid #1A1A1A; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <h3 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em">VERSIÓN VIGENTE</h3>
+        <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px">
+          <dt style="color: #4D4D4D">Estado</dt><dd style="margin: 0; font-weight: 700">Terminada</dd>
+          <dt style="color: #4D4D4D">Responsable</dt><dd style="margin: 0">Ana López</dd>
+          <dt style="color: #4D4D4D">Fecha límite</dt><dd style="margin: 0; font-weight: 700">03/10/2026</dd>
+        </dl>
+      </section>
+      <section style="border: 1.5px dashed #8C8C8C; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; color: #4D4D4D">
+        <h3 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em">TUS CAMBIOS (NO GUARDADOS)</h3>
+        <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px">
+          <dt>Estado</dt><dd style="margin: 0">En progreso</dd>
+          <dt>Responsable</dt><dd style="margin: 0">Ana López</dd>
+          <dt>Fecha límite</dt><dd style="margin: 0">08/10/2026</dd>
+        </dl>
+      </section>
+    </div>
+
+    <p style="margin: 0; font-size: 13px; color: #4D4D4D">Recarga para ver la versión vigente y vuelve a aplicar tus cambios si aún son necesarios.</p>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 12px; border-top: 1px solid #BDBDBD">
+      <button style="height: 44px; padding: 0 20px; border: 1.5px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1A1A1A">Cancelar</button>
+      <button style="height: 44px; padding: 0 20px; border: none; border-radius: 6px; background: #1A1A1A; font-size: 14px; font-weight: 600; color: #FFFFFF">Recargar</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

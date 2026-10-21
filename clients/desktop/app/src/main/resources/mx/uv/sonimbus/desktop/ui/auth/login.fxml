@@ -36,13 +36,14 @@
             <Label text="Entra a tus grupos de Sonimbus" styleClass="subtitle"/>
         </VBox>
 
-        <!-- Mensaje de error genérico (Fig. 10b), oculto por defecto -->
+        <!-- Mensaje de error genérico (Fig. 10b), oculto por defecto. Mientras Auth no tenga
+             inicio de sesión (CU-03, #35) también muestra avisos informativos (AlertBox). -->
         <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
               visible="false" managed="false">
             <padding>
                 <Insets top="12" right="14" bottom="12" left="14"/>
             </padding>
-            <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
+            <Label fx:id="errorIconLabel" text="!" styleClass="alert-icon" accessibleText="Error"/>
             <Label fx:id="errorLabel" text="Correo o contraseña incorrectos"
                    styleClass="alert-text" wrapText="true"/>
         </HBox>

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Canal de texto</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden; position: relative">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 5 · CU-16, CU-17, CU-18, CU-19, CU-20, CU-23</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0">
+
+    <!-- Columna 1: grupos del usuario -->
+    <nav aria-label="Mis grupos" style="width: 72px; flex-shrink: 0; background: #E0E0E0; border-right: 1px solid #8C8C8C; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; box-sizing: border-box">
+      <button aria-label="Inicio / mensajes directos" style="width: 48px; height: 48px; border-radius: 12px; border: 1.5px solid #1A1A1A; background: #FFFFFF; font-size: 11px; font-weight: 600; color: #1A1A1A">Inicio</button>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <div style="position: relative; display: flex; align-items: center">
+        <div style="position: absolute; left: -12px; width: 4px; height: 36px; background: #1A1A1A; border-radius: 0 3px 3px 0"></div>
+        <button aria-label="Grupo Sistemas Distribuidos (seleccionado)" aria-current="true" style="width: 48px; height: 48px; border-radius: 14px; border: 2.5px solid #1A1A1A; background: #FFFFFF; font-size: 15px; font-weight: 700; color: #1A1A1A">SD</button>
+      </div>
+      <button aria-label="Grupo Despliegue de Software" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5; font-size: 15px; font-weight: 600; color: #1A1A1A">DS</button>
+      <div style="position: relative">
+        <button aria-label="Grupo Proyecto Integrador, 2 sin leer" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5; font-size: 15px; font-weight: 600; color: #1A1A1A">PI</button>
+        <div style="position: absolute; right: -4px; bottom: -2px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #1A1A1A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #E0E0E0">2</div>
+      </div>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <button aria-label="Crear o unirse a un grupo" style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px dashed #1A1A1A; background: transparent; font-size: 22px; color: #1A1A1A">+</button>
+    </nav>
+
+    <!-- Columna 2: canales del grupo -->
+    <nav aria-label="Canales del grupo" style="width: 240px; flex-shrink: 0; background: #F0F0F0; border-right: 1px solid #8C8C8C; display: flex; flex-direction: column">
+      <div style="height: 52px; flex-shrink: 0; box-sizing: border-box; padding: 0 8px 0 16px; border-bottom: 1px solid #8C8C8C; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 15px; font-weight: 700">Sistemas Distribuidos</span>
+        <button aria-label="Configuración del grupo" style="width: 36px; height: 36px; border: 1px solid #8C8C8C; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>
+        </button>
+      </div>
+
+      <div style="flex-grow: 1; padding: 14px 8px; display: flex; flex-direction: column; gap: 2px; overflow: hidden">
+        <div style="padding: 0 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D; display: flex; justify-content: space-between; align-items: center">
+          <span>CANALES DE TEXTO</span>
+          <button aria-label="Crear canal de texto" style="border: none; background: transparent; font-size: 16px; color: #1A1A1A; padding: 0 4px">+</button>
+        </div>
+        <a href="#" aria-current="page" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; background: #CFCFCF; text-decoration: none; font-size: 14px; font-weight: 700; color: #1A1A1A"><span style="font-size: 16px">#</span>general</a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>tareas</a>
+        <a href="#" style="display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 700; color: #1A1A1A"><span style="display: flex; gap: 8px; align-items: center"><span style="font-size: 16px">#</span>dudas-examen</span><span style="font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #1A1A1A; color: #FFFFFF">4</span></a>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A"><span style="font-size: 16px">#</span>avisos</a>
+
+        <div style="padding: 16px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D; display: flex; justify-content: space-between; align-items: center">
+          <span>CANALES DE VOZ</span>
+          <button aria-label="Crear canal de voz" style="border: none; background: transparent; font-size: 16px; color: #1A1A1A; padding: 0 4px">+</button>
+        </div>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>Reunión de equipo</a>
+        <div style="display: flex; flex-direction: column; gap: 4px; padding: 2px 8px 6px 32px; font-size: 13px; color: #4D4D4D">
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #4D4D4D; box-sizing: border-box"></span>Ana López</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 18px; border-radius: 9px; border: 1px solid #4D4D4D; box-sizing: border-box"></span>Carlos Ruiz</span>
+        </div>
+        <a href="#" style="display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>Asesorías</a>
+
+        <div style="padding: 16px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #4D4D4D">GRUPO</div>
+        <a href="#" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">Archivos compartidos</a>
+        <a href="#" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">Proyectos y tareas</a>
+        <a href="#" style="display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: 6px; text-decoration: none; font-size: 14px; color: #1A1A1A">Reportes</a>
+      </div>
+    </nav>
+
+    <!-- Área central -->
+    <main style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+
+      <!-- Barra superior -->
+      <header style="height: 52px; flex-shrink: 0; box-sizing: border-box; padding: 0 16px 0 20px; border-bottom: 1px solid #8C8C8C; display: flex; align-items: center; justify-content: space-between">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 18px; font-weight: 700"># general</span>
+          <span style="width: 1px; height: 20px; background: #8C8C8C"></span>
+          <span style="font-size: 13px; color: #4D4D4D">Avisos y conversación general del grupo</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <button aria-label="Notificaciones, 3 sin leer" style="position: relative; width: 44px; height: 44px; border: 1px solid #8C8C8C; border-radius: 8px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>
+            <span style="position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #1A1A1A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF">3</span>
+          </button>
+          <button aria-label="Mi perfil" style="width: 44px; height: 44px; border-radius: 22px; border: 1.5px solid #1A1A1A; background: #F0F0F0; padding: 0; display: flex; align-items: center; justify-content: center">
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="#8C8C8C" stroke-width="1"><line x1="9" y1="9" x2="35" y2="35"></line><line x1="35" y1="9" x2="9" y2="35"></line></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Historial de mensajes -->
+      <section aria-label="Historial de mensajes" style="flex-grow: 1; min-height: 0; overflow: hidden; padding: 12px 0; display: flex; flex-direction: column; gap: 4px">
+
+        <div style="display: flex; align-items: center; gap: 12px; padding: 4px 20px; font-size: 12px; font-weight: 600; color: #4D4D4D">
+          <div style="flex-grow: 1; height: 1px; background: #BDBDBD"></div>
+          <span>Hoy</span>
+          <div style="flex-grow: 1; height: 1px; background: #BDBDBD"></div>
+        </div>
+
+        <!-- Mensaje 1: con reacciones -->
+        <article style="display: flex; gap: 12px; padding: 6px 20px">
+          <div aria-label="[Avatar] Ana López" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid #4D4D4D; box-sizing: border-box; background: #F0F0F0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">Ana López</span><span style="font-size: 12px; color: #4D4D4D">10:02</span></div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45">¿Ya revisaron el documento de especificación? Faltan los diagramas de secuencia.</p>
+            <div style="display: flex; gap: 6px; margin-top: 2px">
+              <button aria-pressed="true" aria-label="Reacción De acuerdo, 3 personas, incluida tú" style="height: 26px; padding: 0 10px; border-radius: 13px; border: 2px solid #1A1A1A; background: #E0E0E0; font-size: 12px; font-weight: 600; color: #1A1A1A">[De acuerdo] 3</button>
+              <button aria-pressed="false" aria-label="Reacción Visto, 1 persona" style="height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid #8C8C8C; background: #FFFFFF; font-size: 12px; color: #1A1A1A">[Visto] 1</button>
+              <button aria-label="Agregar reacción" style="height: 26px; padding: 0 10px; border-radius: 13px; border: 1px dashed #8C8C8C; background: #FFFFFF; font-size: 12px; color: #1A1A1A">+ Reaccionar</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Mensaje 2: propio, editado, con menú contextual -->
+        <article style="position: relative; display: flex; gap: 12px; padding: 6px 20px; background: #EDEDED; border-top: 1px solid #BDBDBD; border-bottom: 1px solid #BDBDBD">
+          <div aria-label="[Avatar] Tú" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid #1A1A1A; box-sizing: border-box; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">Luis Vázquez (tú)</span><span style="font-size: 12px; color: #4D4D4D">10:05</span></div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45">Sí, ya agregué la sección de casos de uso. Los diagramas los subo hoy. <span style="font-size: 12px; color: #4D4D4D">(editado)</span></p>
+          </div>
+          <button aria-label="Más opciones del mensaje" aria-haspopup="menu" aria-expanded="true" style="position: absolute; top: 6px; right: 20px; width: 36px; height: 30px; border: 1px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 16px; font-weight: 700; color: #1A1A1A; line-height: 1">···</button>
+
+          <sc-if value="{{showMenu}}" hint-placeholder-val="{{ true }}">
+            <div role="menu" aria-label="Opciones del mensaje" style="position: absolute; top: 40px; right: 20px; z-index: 5; width: 200px; background: #FFFFFF; border: 1.5px solid #1A1A1A; border-radius: 8px; box-shadow: 4px 4px 0 #BDBDBD; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+              <button role="menuitem" style="height: 36px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #FFFFFF; font-size: 14px; color: #1A1A1A">Responder</button>
+              <button role="menuitem" style="height: 36px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #FFFFFF; font-size: 14px; color: #1A1A1A; display: flex; justify-content: space-between; align-items: center"><span>Reaccionar</span><span>›</span></button>
+              <button role="menuitem" style="height: 36px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #E0E0E0; font-size: 14px; font-weight: 600; color: #1A1A1A">Editar</button>
+              <div style="height: 1px; background: #BDBDBD; margin: 4px 0"></div>
+              <button role="menuitem" style="height: 36px; text-align: left; padding: 0 12px; border: none; border-radius: 4px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1A1A1A; text-decoration: underline">Eliminar</button>
+              <div style="padding: 2px 12px 4px; font-size: 11px; color: #4D4D4D">Editar y Eliminar solo en mensajes propios</div>
+            </div>
+          </sc-if>
+        </article>
+
+        <!-- Mensaje 3: respuesta con referencia al original -->
+        <article style="display: flex; flex-direction: column; gap: 4px; padding: 6px 20px">
+          <div style="display: flex; align-items: center; gap: 6px; padding-left: 20px; font-size: 12px; color: #4D4D4D">
+            <div style="width: 26px; height: 10px; border-left: 1.5px solid #8C8C8C; border-top: 1.5px solid #8C8C8C; border-radius: 6px 0 0 0; margin-top: 8px"></div>
+            <span style="font-weight: 700; color: #1A1A1A">Respondiendo a Luis Vázquez:</span>
+            <span>“Sí, ya agregué la sección de casos de uso…”</span>
+          </div>
+          <div style="display: flex; gap: 12px">
+            <div aria-label="[Avatar] Carlos Ruiz" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid #4D4D4D; box-sizing: border-box; background: #F0F0F0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+            <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+              <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">Carlos Ruiz</span><span style="font-size: 12px; color: #4D4D4D">10:11</span></div>
+              <p style="margin: 0; font-size: 14px; line-height: 1.45">Perfecto, lo reviso en la tarde y dejo comentarios.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Mensaje 4: eliminado -->
+        <article style="display: flex; gap: 12px; padding: 6px 20px">
+          <div aria-label="[Avatar] María Torres" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid #4D4D4D; box-sizing: border-box; background: #F0F0F0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">María Torres</span><span style="font-size: 12px; color: #4D4D4D">10:14</span></div>
+            <p style="margin: 0; padding: 6px 10px; border: 1px dashed #8C8C8C; border-radius: 6px; font-size: 14px; font-style: italic; color: #4D4D4D">Mensaje eliminado</p>
+          </div>
+        </article>
+
+        <!-- Mensaje 5: archivo adjunto -->
+        <article style="display: flex; gap: 12px; padding: 6px 20px">
+          <div aria-label="[Avatar] Ana López" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid #4D4D4D; box-sizing: border-box; background: #F0F0F0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+            <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">Ana López</span><span style="font-size: 12px; color: #4D4D4D">10:20</span></div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45">Les dejo la plantilla del documento.</p>
+            <div style="display: flex; align-items: center; gap: 12px; width: 340px; padding: 10px 12px; border: 1.5px solid #8C8C8C; border-radius: 8px; box-sizing: border-box">
+              <div style="width: 36px; height: 44px; flex-shrink: 0; border: 1.5px solid #4D4D4D; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">PDF</div>
+              <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+                <span style="font-size: 14px; font-weight: 600">plantilla_especificacion.pdf</span>
+                <span style="font-size: 12px; color: #4D4D4D">1.2 MB</span>
+              </div>
+              <button style="height: 32px; padding: 0 10px; border: 1px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 13px; color: #1A1A1A">Descargar</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Mensaje 6: propio, pendiente de envío -->
+        <article aria-busy="true" style="display: flex; gap: 12px; padding: 6px 20px">
+          <div aria-label="[Avatar] Tú" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; border: 1.5px dashed #8C8C8C; box-sizing: border-box; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #4D4D4D">Avatar</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 700">Luis Vázquez (tú)</span><span style="font-size: 12px; color: #4D4D4D; display: flex; align-items: center; gap: 4px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4D4D4D" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Enviando…</span></div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.45; color: #4D4D4D">Gracias, Ana. ¿La entrega es el viernes?</p>
+          </div>
+        </article>
+      </section>
+
+      <!-- Caja de escritura -->
+      <div style="flex-shrink: 0; padding: 8px 20px 14px; border-top: 1px solid #8C8C8C; display: flex; flex-direction: column; gap: 6px">
+        <label for="mensaje" style="font-size: 12px; font-weight: 600; color: #4D4D4D">Mensaje para #general</label>
+        <div style="display: flex; gap: 8px; align-items: center">
+          <button aria-label="Adjuntar archivo" style="height: 44px; padding: 0 14px; border: 1.5px solid #1A1A1A; border-radius: 8px; background: #FFFFFF; display: flex; align-items: center; gap: 6px; font-size: 14px; color: #1A1A1A">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l8-8"></path></svg>Adjuntar</button>
+          <input id="mensaje" type="text" placeholder="Escribe un mensaje…" style="flex-grow: 1; height: 44px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #4D4D4D; border-radius: 8px; font-size: 14px; color: #1A1A1A; background: #FFFFFF">
+          <button style="height: 44px; padding: 0 20px; border: none; border-radius: 8px; background: #1A1A1A; color: #FFFFFF; font-size: 14px; font-weight: 600">Enviar</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"showMenu":{"editor":"boolean","default":true},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { showMenu: this.props.showMenu ?? true };
+  }
+}
+</script>
+</body>
+</html>

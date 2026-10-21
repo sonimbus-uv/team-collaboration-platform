@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Verificar cuenta</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 3 · CU-02</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <!-- Contenido -->
+  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #F0F0F0">
+    <main style="width: 460px; box-sizing: border-box; padding: 36px 40px; background: #FFFFFF; border: 1.5px solid #1A1A1A; border-radius: 10px; display: flex; flex-direction: column; gap: 20px">
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+        <div aria-label="[Ícono] Correo" style="width: 64px; height: 48px; border: 1.5px solid #4D4D4D; border-radius: 6px; box-sizing: border-box; display: flex; align-items: center; justify-content: center">
+          <svg width="40" height="26" viewBox="0 0 40 26" fill="none" stroke="#4D4D4D" stroke-width="1.5"><polyline points="2,2 20,15 38,2"></polyline></svg>
+        </div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700">Verifica tu cuenta</h1>
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #4D4D4D">Enviamos un código de verificación a<br><strong style="color: #1A1A1A">ana.lopez@correo.com</strong>.<br>Escríbelo para activar tu cuenta.</p>
+      </div>
+
+      <form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="codigo" style="font-size: 14px; font-weight: 600">Código de verificación</label>
+          <input id="codigo" type="text" inputmode="numeric" maxlength="6" placeholder="000000" aria-describedby="codigo-ayuda" style="height: 52px; box-sizing: border-box; padding: 0 16px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 24px; letter-spacing: 0.5em; text-align: center; color: #1A1A1A; background: #FFFFFF">
+          <span id="codigo-ayuda" style="font-size: 12px; color: #4D4D4D">6 dígitos. El código caduca en 15 minutos.</span>
+        </div>
+        <button type="submit" style="height: 46px; border: none; border-radius: 6px; background: #1A1A1A; color: #FFFFFF; font-size: 15px; font-weight: 600">Verificar cuenta</button>
+      </form>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 16px; border-top: 1px solid #BDBDBD">
+        <span style="font-size: 14px; color: #4D4D4D">¿No te llegó el correo? Revisa tu carpeta de spam.</span>
+        <button type="button" style="height: 44px; padding: 0 20px; border: 1.5px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1A1A1A">Reenviar correo</button>
+      </div>
+
+      <p style="margin: 0; text-align: center; font-size: 14px"><a href="#">Volver a iniciar sesión</a></p>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

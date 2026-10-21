@@ -1,6 +1,7 @@
 package mx.uv.sonimbus.desktop.ui.shell;
 
 import javafx.fxml.FXML;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
@@ -10,8 +11,16 @@ import javafx.scene.control.Separator;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import mx.uv.sonimbus.desktop.ui.navigation.ContentHost;
+import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class MainController {
+public class MainController implements Navigable, ContentHost {
+
+    private static final String SELECTED = "selected";
+
+    private ViewManager viewManager;
 
     // Columna de grupos
     @FXML private ListView<Object> groupsList;           // TODO: cambiar Object por el modelo de grupo
@@ -61,17 +70,17 @@ public class MainController {
 
     @FXML
     private void onCreateGroup() {
-        // TODO CU-08: abrir groups/create-group.fxml en un diálogo modal
+        viewManager.showDialog(View.CREATE_GROUP, "Crear grupo");
     }
 
     @FXML
     private void onJoinGroup() {
-        // TODO CU-11: abrir groups/join-group.fxml en un diálogo modal
+        viewManager.showDialog(View.JOIN_GROUP, "Unirse a un grupo");
     }
 
     @FXML
     private void onOpenGroupSettings() {
-        // TODO CU-09: cargar groups/group-settings.fxml en contentPane
+        viewManager.showContent(View.GROUP_SETTINGS);
     }
 
     @FXML
@@ -86,26 +95,78 @@ public class MainController {
 
     @FXML
     private void onShowSharedFiles() {
-        // TODO CU-24: cargar files/shared-files.fxml en contentPane
+        viewManager.showContent(View.SHARED_FILES);
     }
 
     @FXML
     private void onShowProjects() {
-        // TODO CU-25: cargar projects/projects.fxml en contentPane
+        viewManager.showContent(View.PROJECTS);
     }
 
     @FXML
     private void onShowReports() {
-        // TODO CU-29: cargar reports/reports.fxml en contentPane
+        viewManager.showContent(View.REPORTS);
     }
 
     @FXML
     private void onShowNotifications() {
-        // TODO CU-31: cargar notifications/notifications.fxml en contentPane
+        viewManager.showContent(View.NOTIFICATIONS);
     }
 
     @FXML
     private void onShowProfile() {
-        // TODO CU-07: cargar profile/profile.fxml en contentPane
+        viewManager.showContent(View.PROFILE);
+    }
+
+    @Override
+    public void setViewManager(ViewManager viewManager) {
+        this.viewManager = viewManager;
+    }
+
+    @Override
+    public void setContent(View view, Parent content) {
+        contentPane.getChildren().setAll(content);
+        switch (view) {
+            // TODO CU-16 / CU-22: título con el nombre del canal seleccionado
+            case TEXT_CHANNEL -> showSectionHeader("Canal de texto", "", null);
+            case VOICE_CHANNEL -> showSectionHeader("Canal de voz", "", null);
+            case SHARED_FILES -> showSectionHeader("Archivos compartidos",
+                    "Archivos enviados en los canales del grupo", sharedFilesButton);
+            case GROUP_SETTINGS -> showSectionHeader("Configuración del grupo", "", null);
+            case PROJECTS -> showSectionHeader("Proyectos y tareas", "", projectsButton);
+            case REPORTS -> showSectionHeader("Reportes", "", reportsButton);
+            case NOTIFICATIONS -> showSectionHeader("Notificaciones", "", null);
+            case PROFILE -> showSectionHeader("Mi perfil", "", null);
+            default -> showSectionHeader("", "", null);
+        }
+    }
+
+    @Override
+    public void clearContent() {
+        contentPane.getChildren().setAll(emptyStateLabel);
+        showSectionHeader("", "", null);
+    }
+
+    private void showSectionHeader(String title, String subtitle, Button navItem) {
+        setSectionHeader(title, subtitle);
+        selectNavItem(navItem);
+    }
+
+    private void setSectionHeader(String title, String subtitle) {
+        sectionTitleLabel.setText(title);
+        sectionSubtitleLabel.setText(subtitle);
+        boolean hasSubtitle = !subtitle.isEmpty();
+        sectionTitleSeparator.setVisible(hasSubtitle);
+        sectionTitleSeparator.setManaged(hasSubtitle);
+    }
+
+    /** Marca en la columna de canales la sección abierta; {@code null} las desmarca todas. */
+    private void selectNavItem(Button selected) {
+        for (Button navItem : new Button[] {sharedFilesButton, projectsButton, reportsButton}) {
+            navItem.getStyleClass().remove(SELECTED);
+        }
+        if (selected != null) {
+            selected.getStyleClass().add(SELECTED);
+        }
     }
 }

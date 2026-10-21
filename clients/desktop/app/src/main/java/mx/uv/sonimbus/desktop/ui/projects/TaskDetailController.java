@@ -76,6 +76,6 @@ public class TaskDetailController {
 
     @FXML
     private void onCancel() {
-        // TODO CU-26: cerrar el diálogo (Stage) sin guardar
+        cancelButton.getScene().getWindow().hide();
     }
 }

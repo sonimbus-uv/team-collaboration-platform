@@ -18,8 +18,12 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-public class GroupSettingsController {
+public class GroupSettingsController implements Navigable {
+
+    private ViewManager viewManager;
 
     // Barra de la vista
     @FXML private BorderPane settingsPane;
@@ -126,7 +130,7 @@ public class GroupSettingsController {
 
     @FXML
     private void onBackToGroup() {
-        // TODO: volver a la vista anterior del grupo en contentPane del shell
+        viewManager.closeContent();
     }
 
     @FXML
@@ -222,5 +226,10 @@ public class GroupSettingsController {
 
     private void unblockMember(Object member) {
         // TODO CU-15: retirar el bloqueo del miembro
+    }
+
+    @Override
+    public void setViewManager(ViewManager viewManager) {
+        this.viewManager = viewManager;
     }
 }
