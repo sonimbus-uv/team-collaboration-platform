@@ -23,31 +23,13 @@ use crate::{
     validators::auth_validator::RegisterInputValidationError,
 };
 
-use crate::{
-    auth_rate_limiter::AuthRateLimiter,
-    rate_limit::RateLimitDecision,
-};
-
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), ApiError> {
-    let valid_input =
-        crate::validators::auth_validator::validate_register_input(
-            request.email,
-            request.password,
-        )
-        .map_err(map_register_validation_error)?;
-
-    enforce_recipient_budget(
-        state.auth_rate_limiter.as_ref(),
-        &valid_input.email,
-    )
-    .await?;
-
     let (account, sent) = state
         .auth_service
-        .register(valid_input.email, valid_input.password)
+        .register(request.email, request.password)
         .await
         .map_err(map_register_error)?;
 
@@ -55,6 +37,72 @@ pub async fn register(
     response.verification_email_sent = sent;
 
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Json(request): Json<VerifyEmailRequest>,
+) -> Result<Json<RegisterResponse>, ApiError> {
+    let account = state
+        .email_verification_service
+        .confirm(&request.token)
+        .await
+        .map_err(map_verification_error)?;
+    Ok(Json(RegisterResponse::from(account)))
+}
+
+pub async fn resend_verification(
+    State(state): State<AppState>,
+    Json(request): Json<ResendVerificationRequest>,
+) -> Result<StatusCode, ApiError> {
+    let email = request.email.trim().to_lowercase();
+
+    if !crate::validators::auth_validator::is_valid_email_format(&email) {
+        return Err(ApiError::Validation("Invalid email format".into()));
+    }
+
+    state
+        .email_verification_service
+        .resend(&email, state.auth_rate_limiter.as_ref())
+        .await
+        .map_err(map_verification_error)?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+fn map_verification_error(error: VerificationError) -> ApiError {
+    match error {
+        VerificationError::InvalidToken => {
+            ApiError::Validation("Invalid or expired verification token".into())
+        }
+        VerificationError::Database(error) => ApiError::Database(error),
+    }
+}
+
+pub async fn verify_email_page(
+    State(state): State<AppState>,
+    query: Result<Query<VerifyEmailQuery>, QueryRejection>,
+) -> Response {
+    let Ok(Query(query)) = query else {
+        return verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page());
+    };
+    match state.email_verification_service.confirm(&query.token).await {
+        Ok(_) => verification_page_response(StatusCode::OK, verification_success_page()),
+        Err(VerificationError::InvalidToken) => {
+            verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page())
+        }
+        Err(VerificationError::Database(error)) => {
+            let status = if matches!(
+                &error,
+                sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_)
+            ) {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            tracing::error!("email verification database operation failed");
+            verification_page_response(status, verification_unavailable_page())
+        }
+    }
 }
 
 fn map_register_error(error: RegisterError) -> ApiError {
@@ -105,109 +153,5 @@ fn map_create_account_error(error: CreateAccountError) -> ApiError {
             ApiError::Conflict("Email already exists".to_string())
         }
         CreateAccountError::Database(error) => ApiError::Database(error),
-    }
-}
-
-pub async fn verify_email(
-    State(state): State<AppState>,
-    Json(request): Json<VerifyEmailRequest>,
-) -> Result<Json<RegisterResponse>, ApiError> {
-    let account = state
-        .email_verification_service
-        .confirm(&request.token)
-        .await
-        .map_err(map_verification_error)?;
-    Ok(Json(RegisterResponse::from(account)))
-}
-
-pub async fn resend_verification(
-    State(state): State<AppState>,
-    Json(request): Json<ResendVerificationRequest>,
-) -> Result<StatusCode, ApiError> {
-    let email = request.email.trim().to_lowercase();
-
-    if !crate::validators::auth_validator::is_valid_email_format(&email) {
-        return Err(ApiError::Validation("Invalid email format".into()));
-    }
-
-    enforce_recipient_budget(
-        state.auth_rate_limiter.as_ref(),
-        &email,
-    )
-    .await?;
-
-    state
-        .email_verification_service
-        .resend(&email)
-        .await
-        .map_err(map_verification_error)?;
-
-    Ok(StatusCode::ACCEPTED)
-}
-
-fn map_verification_error(error: VerificationError) -> ApiError {
-    match error {
-        VerificationError::InvalidToken => {
-            ApiError::Validation("Invalid or expired verification token".into())
-        }
-        VerificationError::Database(error) => ApiError::Database(error),
-        VerificationError::Delivery(error) => {
-            tracing::error!(error = %error, "verification email delivery failed");
-            ApiError::InternalServerError("Email delivery failed".into())
-        }
-    }
-}
-
-pub async fn verify_email_page(
-    State(state): State<AppState>,
-    query: Result<Query<VerifyEmailQuery>, QueryRejection>,
-) -> Response {
-    let Ok(Query(query)) = query else {
-        return verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page());
-    };
-    match state.email_verification_service.confirm(&query.token).await {
-        Ok(_) => verification_page_response(StatusCode::OK, verification_success_page()),
-        Err(VerificationError::InvalidToken) => {
-            verification_page_response(StatusCode::BAD_REQUEST, verification_invalid_page())
-        }
-        Err(VerificationError::Database(error)) => {
-            let status = if matches!(
-                &error,
-                sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_)
-            ) {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            tracing::error!("email verification database operation failed");
-            verification_page_response(status, verification_unavailable_page())
-        }
-        Err(VerificationError::Delivery(_)) => {
-            tracing::error!("email verification operation failed");
-            verification_page_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                verification_unavailable_page(),
-            )
-        }
-    }
-}
-
-async fn enforce_recipient_budget(
-    limiter: &AuthRateLimiter,
-    email: &str,
-) -> Result<(), ApiError> {
-    match limiter.check_recipient(email).await {
-        Ok(RateLimitDecision::Allowed) => Ok(()),
-        Ok(RateLimitDecision::Limited { retry_after_secs }) => {
-            Err(ApiError::RateLimited { retry_after_secs })
-        }
-        Err(error) => {
-            tracing::warn!(
-                error_kind = ?error,
-                "Recipient rate limit check unavailable"
-            );
-
-            Err(ApiError::RateLimitUnavailable)
-        }
     }
 }

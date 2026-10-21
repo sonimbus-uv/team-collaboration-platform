@@ -134,7 +134,7 @@ EMAIL_PROVIDER=mailpit
 MAILPIT_SMTP_HOST=localhost
 MAILPIT_SMTP_PORT=1025
 EMAIL_FROM="Team <noreply@example.com>"
-EMAIL_VERIFICATION_URL=http://localhost:3001/auth/verify-email
+EMAIL_VERIFICATION_URL=http://localhost:8080/auth/verify-email
 ```
 
 Inicia Mailpit desde la raíz del proyecto:
@@ -204,12 +204,13 @@ El servicio ejecuta las migraciones SQLx al iniciar.
 
 ## Verificar Funcionamiento
 
-Los ejemplos asumen `SERVER_ADDR=0.0.0.0:3001`.
+Los ejemplos asumen `SERVER_ADDR=0.0.0.0:3001` y acceso mediante Nginx
+en el puerto 8080. El firewall bloquea el acceso directo al puerto 3001.
 
 Health del servicio:
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:8080/health
 ```
 
 Respuesta esperada:
@@ -223,7 +224,7 @@ Respuesta esperada:
 Health de base de datos:
 
 ```bash
-curl http://localhost:3001/health/db
+curl http://localhost:8080/health/db
 ```
 
 Respuesta esperada:

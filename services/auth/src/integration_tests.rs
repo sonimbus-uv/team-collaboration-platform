@@ -1,6 +1,9 @@
 //! Each sqlx test creates an isolated database; DATABASE_URL needs CREATEDB.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 use axum::{
     body::{to_bytes, Body},
@@ -10,7 +13,7 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 use crate::{
-    ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
+    ports::email_verification::{EmailDeliveryError, RecipientBudget, VerificationEmailSender},
     repositories::{
         accounts_repository::AccountsRepository,
         one_time_tokens_repository::OneTimeTokensRepository,
@@ -43,6 +46,202 @@ impl VerificationEmailSender for FakeSender {
 
 struct FakeHasher;
 
+struct FakeBudget {
+    calls: AtomicUsize,
+    outcome: Result<bool, ()>,
+}
+
+impl FakeBudget {
+    fn new(outcome: Result<bool, ()>) -> Self {
+        Self {
+            calls: AtomicUsize::new(0),
+            outcome,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl RecipientBudget for FakeBudget {
+    async fn consume(&self, _: &str) -> Result<bool, ()> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.outcome
+    }
+}
+
+async fn registered_service(
+    pool: &PgPool,
+    email: &str,
+) -> (EmailVerificationService, Arc<FakeSender>) {
+    let sender = Arc::new(FakeSender::default());
+    let verification =
+        EmailVerificationService::new(OneTimeTokensRepository::new(pool.clone()), sender.clone());
+    AuthService::new(
+        AccountsRepository::new(pool.clone()),
+        Arc::new(FakeHasher),
+        verification.clone(),
+        4,
+    )
+    .register(email.into(), "ValidPass123!".into())
+    .await
+    .unwrap();
+    (verification, sender)
+}
+
+async fn age_tokens(pool: &PgPool, email: &str) {
+    sqlx::query(
+        "UPDATE auth.one_time_tokens SET created_at = now() - interval '61 seconds' WHERE sent_to_email = $1",
+    ).bind(email).execute(pool).await.unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn ineligible_resends_do_not_consume_budget(pool: PgPool) {
+    let email = "cooldown@example.com";
+    let (service, sender) = registered_service(&pool, email).await;
+    let budget = FakeBudget::new(Ok(true));
+    service
+        .resend("missing@example.com", &budget)
+        .await
+        .unwrap();
+    service.resend(email, &budget).await.unwrap();
+    assert_eq!(budget.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(sender.tokens.lock().unwrap().len(), 1);
+
+    let token = sender.tokens.lock().unwrap()[0].clone();
+    service.confirm(&token).await.unwrap();
+    age_tokens(&pool, email).await;
+    service.resend(email, &budget).await.unwrap();
+    assert_eq!(budget.calls.load(Ordering::SeqCst), 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn unavailable_or_exhausted_budget_preserves_token(pool: PgPool) {
+    for (index, outcome) in [Ok(false), Err(())].into_iter().enumerate() {
+        let email = format!("budget-{index}@example.com");
+        let (service, sender) = registered_service(&pool, &email).await;
+        let token = sender.tokens.lock().unwrap()[0].clone();
+        age_tokens(&pool, &email).await;
+        let budget = FakeBudget::new(outcome);
+        service.resend(&email, &budget).await.unwrap();
+        assert_eq!(budget.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(sender.tokens.lock().unwrap().len(), 1);
+        service.confirm(&token).await.unwrap();
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_resends_send_once_and_preserve_both_links(pool: PgPool) {
+    // Exercise confirmation with either the original or replacement link.
+    for chosen in 0..2 {
+        let email = format!("concurrent-{chosen}@example.com");
+        let (service, sender) = registered_service(&pool, &email).await;
+        age_tokens(&pool, &email).await;
+        let budget = FakeBudget::new(Ok(true));
+        let (first, second) = tokio::join!(
+            service.resend(&email, &budget),
+            service.resend(&email, &budget),
+        );
+        first.unwrap();
+        second.unwrap();
+        assert_eq!(budget.calls.load(Ordering::SeqCst), 1);
+        let tokens = sender.tokens.lock().unwrap().clone();
+        assert_eq!(tokens.len(), 2);
+        let pending: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM auth.one_time_tokens WHERE sent_to_email = $1 AND used_at IS NULL AND invalidated_at IS NULL",
+        ).bind(&email).fetch_one(&pool).await.unwrap();
+        assert_eq!(pending, 2);
+        service.confirm(&tokens[chosen]).await.unwrap();
+        assert!(matches!(
+            service.confirm(&tokens[1 - chosen]).await,
+            Err(crate::services::email_verification_service::VerificationError::InvalidToken)
+        ));
+        let invalidated: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM auth.one_time_tokens WHERE sent_to_email = $1 AND invalidated_at IS NOT NULL",
+        ).bind(&email).fetch_one(&pool).await.unwrap();
+        assert_eq!(invalidated, 1);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delivery_failure_preserves_original_link(pool: PgPool) {
+    let email = "delivery-failure@example.com";
+    let (_, sender) = registered_service(&pool, email).await;
+    let token = sender.tokens.lock().unwrap()[0].clone();
+    age_tokens(&pool, email).await;
+    let failing_service = EmailVerificationService::new(
+        OneTimeTokensRepository::new(pool),
+        Arc::new(FakeSender {
+            tokens: Mutex::new(Vec::new()),
+            fail: true,
+        }),
+    );
+    failing_service
+        .resend(email, &FakeBudget::new(Ok(true)))
+        .await
+        .unwrap();
+    failing_service.confirm(&token).await.unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn redis_outage_keeps_real_verification_available(pool: PgPool) {
+    let email = "redis-outage@example.com";
+    let (_, sender) = registered_service(&pool, email).await;
+    let token = sender.tokens.lock().unwrap()[0].clone();
+    // Build the complete application without requiring a live Redis connection.
+    let verification =
+        EmailVerificationService::new(OneTimeTokensRepository::new(pool.clone()), sender);
+    let app = crate::routes::router(AppState {
+        pool: pool.clone(),
+        auth_service: AuthService::new(
+            AccountsRepository::new(pool),
+            Arc::new(FakeHasher),
+            verification.clone(),
+            4,
+        ),
+        email_verification_service: verification,
+        auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
+            "redis://127.0.0.1:1/0".into(),
+        )),
+    });
+    for path in [
+        "/auth/register",
+        "/auth/resend-verification",
+        "/health/redis",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(if path.starts_with("/health") {
+                        "GET"
+                    } else {
+                        "POST"
+                    })
+                    .uri(path)
+                    .extension(axum::extract::ConnectInfo(
+                        "192.0.2.55:45000".parse::<std::net::SocketAddr>().unwrap(),
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/auth/verify-email?token={token}"))
+                .extension(axum::extract::ConnectInfo(
+                    "192.0.2.55:45000".parse::<std::net::SocketAddr>().unwrap(),
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
 impl PasswordHasher for FakeHasher {
     fn hash_password(&self, _: &str) -> Result<String, PasswordHashingError> {
         Ok("test-only-hash".into())
@@ -57,13 +256,12 @@ fn state(pool: PgPool, sender: Arc<FakeSender>) -> AppState {
     let verification =
         EmailVerificationService::new(OneTimeTokensRepository::new(pool.clone()), sender);
 
-    let redis_url = std::env::var("REDIS_URL")
-        .expect("Router integration tests require REDIS_URL");
+    let redis_url = std::env::var("REDIS_URL").expect("Router integration tests require REDIS_URL");
 
     AppState {
-        auth_rate_limiter: Arc::new(
-            crate::auth_rate_limiter::AuthRateLimiter::for_tests(redis_url),
-        ),
+        auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
+            redis_url,
+        )),
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
             Arc::new(FakeHasher),
@@ -79,8 +277,7 @@ fn state(pool: PgPool, sender: Arc<FakeSender>) -> AppState {
 async fn email_link_confirms_and_head_does_not_consume(pool: PgPool) {
     match dotenvy::dotenv() {
         Ok(_) => {}
-        Err(dotenvy::Error::Io(error))
-            if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => panic!("Invalid local environment file: {error}"),
     }
 
@@ -104,9 +301,8 @@ async fn email_link_confirms_and_head_does_not_consume(pool: PgPool) {
     .parse()
     .unwrap();
 
-    let app = crate::routes::router(state).layer(axum::Extension(
-        axum::extract::ConnectInfo(test_peer),
-    ));
+    let app =
+        crate::routes::router(state).layer(axum::Extension(axum::extract::ConnectInfo(test_peer)));
 
     let uri = format!("/auth/verify-email?token={token}");
 
@@ -185,43 +381,31 @@ async fn email_link_confirms_and_head_does_not_consume(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn exhausted_recipient_budget_preserves_existing_verification_link(
-    pool: PgPool,
-) {
+async fn exhausted_recipient_budget_preserves_existing_verification_link(pool: PgPool) {
     match dotenvy::dotenv() {
         Ok(_) => {}
-        Err(dotenvy::Error::Io(error))
-            if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => panic!("Invalid local environment file: {error}"),
     }
 
     let sender = Arc::new(FakeSender::default());
     let mut app_state = state(pool.clone(), sender.clone());
 
-    let redis_url = std::env::var("REDIS_URL")
-        .expect("Router integration tests require REDIS_URL");
+    let redis_url = std::env::var("REDIS_URL").expect("Router integration tests require REDIS_URL");
 
-    let recipient_policy =
-        crate::rate_limit::BucketPolicy::new(1, 3600).unwrap();
+    let recipient_policy = crate::rate_limit::BucketPolicy::new(1, 3600).unwrap();
 
     app_state.auth_rate_limiter = Arc::new(
         crate::auth_rate_limiter::AuthRateLimiter::for_tests(redis_url)
             .with_recipient_policy_for_tests(recipient_policy),
     );
 
+    let limiter = app_state.auth_rate_limiter.clone();
     let app = crate::routes::router(app_state);
 
-    let email = format!(
-        "recipient-{:032x}@example.com",
-        rand::random::<u128>()
-    );
+    let email = format!("recipient-{:032x}@example.com", rand::random::<u128>());
 
-    let request = |
-        method: &str,
-        uri: &str,
-        body: Body,
-        peer: &str,
-    | {
+    let request = |method: &str, uri: &str, body: Body, peer: &str| {
         Request::builder()
             .method(method)
             .uri(uri)
@@ -254,6 +438,11 @@ async fn exhausted_recipient_budget_preserves_existing_verification_link(
 
     let token = sender.tokens.lock().unwrap()[0].clone();
 
+    assert_eq!(
+        limiter.check_recipient(&email).await.unwrap(),
+        crate::rate_limit::RateLimitDecision::Allowed
+    );
+
     let aged = sqlx::query(
         r#"
         UPDATE auth.one_time_tokens
@@ -284,20 +473,8 @@ async fn exhausted_recipient_budget_preserves_existing_verification_link(
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(
-        response.headers()["content-type"],
-        "application/problem+json"
-    );
-
-    let retry_after: u64 = response.headers()["retry-after"]
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-
-    assert!(retry_after > 0);
-    assert!(retry_after <= 3600);
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert!(!response.headers().contains_key("retry-after"));
 
     assert_eq!(
         sender.tokens.lock().unwrap().len(),

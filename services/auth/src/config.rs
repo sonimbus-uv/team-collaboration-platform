@@ -1,6 +1,6 @@
+use crate::rate_limit::BucketPolicy;
 use anyhow::Context;
 use std::{env, net::IpAddr};
-use crate::rate_limit::BucketPolicy;
 
 pub enum EmailProvider {
     Resend { api_key: String },
@@ -38,24 +38,30 @@ impl Config {
             }
         };
 
+        let require_trusted_proxy = match env::var("REQUIRE_TRUSTED_PROXY") {
+            Ok(value) if value == "true" => true,
+            Ok(value) if value == "false" => false,
+            Err(env::VarError::NotPresent) => false,
+            _ => anyhow::bail!("REQUIRE_TRUSTED_PROXY must be true or false"),
+        };
+
+        anyhow::ensure!(
+            !require_trusted_proxy || !trusted_proxy_ips.is_empty(),
+            "TRUSTED_PROXY_IPS must not be empty when REQUIRE_TRUSTED_PROXY=true"
+        );
+
         let recipient_hmac_secret = required_env("AUTH_RECIPIENT_HMAC_SECRET")?;
 
         anyhow::ensure!(
-            recipient_hmac_secret.len() >= 32
-                && !recipient_hmac_secret.trim().is_empty(),
+            recipient_hmac_secret.len() >= 32 && !recipient_hmac_secret.trim().is_empty(),
             "AUTH_RECIPIENT_HMAC_SECRET must contain at least 32 bytes and must not be blank"
         );
 
         let redis_url = required_env("REDIS_URL")?;
-        anyhow::ensure!(
-            !redis_url.trim().is_empty(),
-            "REDIS_URL must not be empty"
-        );
+        anyhow::ensure!(!redis_url.trim().is_empty(), "REDIS_URL must not be empty");
 
-        let redis_connect_timeout_ms =
-            optional_u32_env("REDIS_CONNECT_TIMEOUT_MS", 500)?;
-        let redis_operation_timeout_ms =
-            optional_u32_env("REDIS_OPERATION_TIMEOUT_MS", 200)?;
+        let redis_connect_timeout_ms = optional_u32_env("REDIS_CONNECT_TIMEOUT_MS", 500)?;
+        let redis_operation_timeout_ms = optional_u32_env("REDIS_OPERATION_TIMEOUT_MS", 200)?;
 
         anyhow::ensure!(
             (1..=5_000).contains(&redis_connect_timeout_ms),
@@ -80,26 +86,10 @@ impl Config {
             redis_url,
             redis_connect_timeout_ms,
             redis_operation_timeout_ms,
-            register_ip_policy: bucket_policy_from_env(
-                "AUTH_REGISTER_IP",
-                6,
-                60,
-            )?,
-            resend_ip_policy: bucket_policy_from_env(
-                "AUTH_RESEND_IP",
-                3,
-                60,
-            )?,
-            verify_ip_policy: bucket_policy_from_env(
-                "AUTH_VERIFY_IP",
-                20,
-                60,
-            )?,
-            recipient_policy: bucket_policy_from_env(
-                "AUTH_RECIPIENT",
-                3,
-                3600,
-            )?,
+            register_ip_policy: bucket_policy_from_env("AUTH_REGISTER_IP", 6, 60)?,
+            resend_ip_policy: bucket_policy_from_env("AUTH_RESEND_IP", 3, 60)?,
+            verify_ip_policy: bucket_policy_from_env("AUTH_VERIFY_IP", 20, 60)?,
+            recipient_policy: bucket_policy_from_env("AUTH_RECIPIENT", 3, 3600)?,
             database_url,
             database_max_connections,
             email_provider: match env::var("EMAIL_PROVIDER")
@@ -171,8 +161,7 @@ fn bucket_policy_from_env(
     let refill_name = format!("{prefix}_REFILL_SECS");
 
     let capacity = optional_u32_env(&capacity_name, default_capacity)?;
-    let refill_period_secs =
-        optional_u32_env(&refill_name, default_refill_period_secs)?;
+    let refill_period_secs = optional_u32_env(&refill_name, default_refill_period_secs)?;
 
     BucketPolicy::new(capacity, refill_period_secs)
         .with_context(|| format!("Invalid bucket policy for {prefix}"))

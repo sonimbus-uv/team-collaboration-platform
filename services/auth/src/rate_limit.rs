@@ -93,7 +93,7 @@ mod tests {
         assert!(BucketPolicy::new(6, 86_401).is_err());
     }
 
-        #[test]
+    #[test]
     fn keys_separate_clients_and_operations() {
         let first_ip = "192.0.2.10".parse().unwrap();
         let second_ip = "192.0.2.11".parse().unwrap();
@@ -119,12 +119,10 @@ mod tests {
         let ip = "192.0.2.10".parse().unwrap();
 
         let get_operation =
-            AuthOperation::from_request(&Method::GET, "/auth/verify-email")
-                .unwrap();
+            AuthOperation::from_request(&Method::GET, "/auth/verify-email").unwrap();
 
         let post_operation =
-            AuthOperation::from_request(&Method::POST, "/auth/verify-email")
-                .unwrap();
+            AuthOperation::from_request(&Method::POST, "/auth/verify-email").unwrap();
 
         assert_eq!(get_operation.ip_key(ip), post_operation.ip_key(ip));
     }
@@ -137,10 +135,7 @@ mod tests {
         );
 
         for path in ["/health", "/health/db"] {
-            assert_eq!(
-                AuthOperation::from_request(&Method::GET, path),
-                None
-            );
+            assert_eq!(AuthOperation::from_request(&Method::GET, path), None);
         }
     }
 }

@@ -8,7 +8,7 @@ La protección cubre:
 - `POST /auth/resend-verification`.
 - `GET` y `POST /auth/verify-email`.
 
-`GET /health`, `GET /health/db` y `HEAD /auth/verify-email` no consumen
+`GET /health`, `GET /health/db`, `GET /health/redis` y `HEAD /auth/verify-email` no consumen
 presupuesto del limitador de Auth.
 
 `HEAD /auth/verify-email` responde `405` sin confirmar el correo.
@@ -34,7 +34,7 @@ Se utiliza `nodelay`: las solicitudes admitidas dentro del burst
 continúan sin una espera deliberada.
 
 Los rechazos propios del gateway responden `429` e incluyen
-`X-RateLimit-Layer: nginx`.
+`X-RateLimit-Layer: nginx` y `Retry-After: 60` (espera conservadora).
 
 Para GET de verificación, la respuesta es HTML. Para las operaciones
 de API, es `application/problem+json`.
@@ -76,6 +76,7 @@ En la configuración actual de desarrollo:
 
 ```env
 TRUSTED_PROXY_IPS=172.30.250.2
+REQUIRE_TRUSTED_PROXY=true
 ```
 
 Nginx sobrescribe `X-Real-IP` con la dirección que observa y elimina
@@ -127,18 +128,30 @@ Por ello no se reintenta automáticamente el consumo.
 
 ## Presupuesto por destinatario y cooldown
 
-Registro y reenvío comparten el presupuesto por destinatario.
+El presupuesto por destinatario se aplica únicamente a reenvíos elegibles.
+El registro inicial no lo consume; los registros duplicados no envían correo.
 
 Este presupuesto cuenta intentos admitidos hacia una operación que
 puede enviar correo. No representa un contador de correos entregados.
 
-Un reenvío que no envía correo por el cooldown puede consumir presupuesto.
-No se devuelven tokens por errores o por operaciones sin envío.
+La cuenta se bloquea en PostgreSQL y se comprueban su estado y el cooldown
+antes de consumir presupuesto. Las cuentas inexistentes, verificadas o
+inactivas y las solicitudes durante el cooldown no lo consumen.
+Si Redis rechaza el consumo o falla, se revierte la transacción sin crear
+un token y se responde `202`. No se devuelve presupuesto si después falla
+la base de datos o el proveedor: un timeout no demuestra que no hubo consumo.
 
 El cooldown de PostgreSQL de 60 segundos sigue siendo una protección
 independiente.
 
 Un `202` de reenvío no garantiza que se haya enviado otro correo.
+Los errores del proveedor se registran sin cambiar ese estado HTTP.
+Esto no garantiza tiempos de respuesta indistinguibles; el registro
+conserva su respuesta `409` para cuentas existentes.
+
+Reenviar no invalida los enlaces anteriores: conservan su caducidad original.
+Confirmar uno verifica la cuenta e invalida los demás enlaces pendientes
+en la misma transacción. Los tokens solo se persisten como hashes.
 
 La confirmación del token no consume presupuesto por destinatario.
 
@@ -146,14 +159,20 @@ La confirmación del token no consume presupuesto por destinatario.
 
 | Situación | Respuesta |
 |---|---|
-| Presupuesto de Auth agotado | `429` con `Retry-After` |
-| Protección de Auth no disponible | `503` |
-| Presupuesto de Nginx agotado | `429` con `X-RateLimit-Layer: nginx` |
+| Presupuesto por IP de Auth agotado | `429` con `Retry-After` |
+| Redis no disponible para registro o reenvío por IP | `503` |
+| Redis no disponible para verificación por IP | Continúa la verificación |
+| Presupuesto por destinatario agotado o no disponible | `202` sin generar token |
+| Presupuesto de Nginx agotado | `429` con `X-RateLimit-Layer: nginx` y `Retry-After: 60` |
+| Dirección ausente o inválida desde un proxy confiable | `500` |
 | Token inválido admitido por los limitadores | `400` |
 | HEAD de verificación | `405` |
 
-Auth aplica cierre ante fallos de Redis en las operaciones protegidas:
-responde `503` en lugar de permitirlas sin protección.
+Registro y reenvío fallan con `503` si falla su comprobación por IP.
+GET y POST de verificación continúan cuando esa comprobación de Redis falla:
+el token tiene 256 bits aleatorios y Nginx mantiene su límite independiente.
+La validación del token y la transacción de PostgreSQL siguen siendo obligatorias.
+Un rechazo explícito de Redis por presupuesto agotado sigue produciendo `429`.
 
 GET de verificación conserva respuestas HTML.
 Las operaciones de API utilizan Problem Details.
@@ -161,15 +180,16 @@ Las operaciones de API utilizan Problem Details.
 Un `502` del gateway indica un problema al obtener una respuesta válida
 del upstream; no es un rechazo del rate limit.
 
-Los endpoints de salud existentes no comprueban la disponibilidad de Redis.
+`GET /health` comprueba que el proceso responde; `GET /health/db` comprueba
+PostgreSQL. `GET /health/redis` ejecuta PING con los mismos timeouts y conexión
+del limitador: responde `200` o `503`. No es una comprobación conjunta de readiness.
 
 ## Protección del acceso directo
 
 El firewall protege el puerto 3001:
 
-- Permite acceso por loopback para desarrollo.
 - Permite a Nginx desde `172.30.250.2` por `br-auth`.
-- Rechaza las demás conexiones dirigidas al puerto.
+- Rechaza las demás conexiones dirigidas al puerto, incluido loopback.
 
 La red `auth_gateway` fija el nombre del bridge y la IP de Nginx.
 
@@ -185,8 +205,10 @@ de aplicar correctamente las reglas.
 Los cambios del archivo del repositorio deben instalarse también en
 la ruta de `/etc` antes de recargar el servicio.
 
-La unidad ordena su ejecución antes de Docker, pero no convierte
-el éxito del firewall en un requisito obligatorio para iniciar Docker.
+El aprovisionamiento instala nftables, las reglas y la unidad; aplica y
+recarga la protección. Un drop-in de Docker requiere `auth-firewall.service`
+y ordena su ejecución antes de Docker. También comprueba la IP real de Nginx.
+No ejecutar el aprovisionamiento deja el despliegue existente sin actualizar.
 
 ## Registros
 
@@ -220,6 +242,8 @@ cargo test --locked redis_connection::tests:: -- --ignored
 Se necesitan PostgreSQL y Redis de desarrollo disponibles y las variables
 de conexión configuradas en el `.env` local.
 Las pruebas SQLx requieren permisos para crear bases de datos temporales.
+El workflow `.github/workflows/auth.yml` proporciona PostgreSQL y Redis y
+ejecuta `cargo test --locked -- --include-ignored`; sus fallos no se omiten.
 
 ## Diagnóstico básico
 
@@ -228,8 +252,10 @@ sudo systemctl status auth-firewall.service --no-pager
 sudo nft list table inet auth_guard
 sudo ss -ltnp 'sport = :3001'
 
-curl --noproxy '*' -i http://127.0.0.1:3001/health
+# Debe fallar: el acceso directo está bloqueado.
+curl --noproxy '*' -i --connect-timeout 2 http://127.0.0.1:3001/health
 curl --noproxy '*' -i http://127.0.0.1:8080/health
+curl --noproxy '*' -i http://127.0.0.1:8080/health/redis
 
 docker compose --env-file /vagrant/infrastructure/.env \
     -f /vagrant/infrastructure/compose.yaml logs --since 5m nginx

@@ -36,6 +36,7 @@ apt-get install -y --no-install-recommends \
   jq \
   make \
   net-tools \
+  nftables \
   unzip
 
 if ! command -v docker >/dev/null 2>&1 || \
@@ -85,6 +86,24 @@ else
   log "Docker ya está instalado; se conserva la instalación actual"
 fi
 
+log "Instalando la protección de acceso a Auth"
+install -D -m 0644 \
+  "${PROJECT_DIR}/infrastructure/firewall/auth.nft" \
+  /etc/team-collaboration-platform/auth.nft
+install -D -m 0644 \
+  "${PROJECT_DIR}/infrastructure/firewall/auth-firewall.service" \
+  /etc/systemd/system/auth-firewall.service
+install -d -m 0755 /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/auth-firewall.conf <<'EOF'
+[Unit]
+Requires=auth-firewall.service
+After=auth-firewall.service
+EOF
+systemctl daemon-reload
+systemctl enable --now auth-firewall.service
+# oneshot units already active must be reloaded after reinstalling their rules.
+systemctl reload auth-firewall.service
+
 log "Habilitando Docker y configurando el usuario vagrant"
 systemctl enable --now docker
 
@@ -118,6 +137,19 @@ docker compose \
   --env-file "${ENV_FILE}" \
   -f "${COMPOSE_FILE}" \
   up -d
+
+log "Comprobando la IP del gateway"
+nginx_id="$(
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps -q nginx
+)"
+[[ -n "${nginx_id}" ]] || fail "No se encontró el contenedor Nginx."
+nginx_ip="$(
+  docker inspect \
+    --format '{{(index .NetworkSettings.Networks "team-collaboration-platform_auth_gateway").IPAddress}}' \
+    "${nginx_id}"
+)"
+[[ "${nginx_ip}" == "172.30.250.2" ]] || \
+  fail "La IP de Nginx no coincide con la IP autorizada por Auth y el firewall."
 
 log "Estado de los servicios predeterminados"
 docker compose \

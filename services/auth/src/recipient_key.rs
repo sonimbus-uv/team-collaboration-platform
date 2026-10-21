@@ -29,10 +29,7 @@ impl RecipientKey {
 
         let digest = mac.finalize().into_bytes();
 
-        let identifier: String = digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
+        let identifier: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
 
         format!("auth:rl:v1:email-send:recipient:{identifier}")
     }
@@ -83,11 +80,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(identifier.len(), 64);
-        assert!(
-            identifier
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
-        );
+        assert!(identifier.bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert!(!key.contains("person@example.com"));
         assert!(!key.contains('@'));
     }
