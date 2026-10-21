@@ -111,7 +111,7 @@ Coincide con la migración actual de Auth, que crea el esquema `auth`.
 
 ### D-14. Desarrollo en VM Vagrant; expo en Ubuntu nativo
 
-- **Desarrollo:** cada integrante usa la VM de Vagrant + VirtualBox (Ubuntu Server 24.04, 6 GB) descrita en [ADR-006](ADR-006-vagrant-docker-compose.md). Es lo que ya existe en el repositorio.
+- **Desarrollo:** cada integrante usa la VM de Vagrant (Ubuntu Server 24.04, 6 GB) descrita en [ADR-006](ADR-006-vagrant-docker-compose.md), con VirtualBox o libvirt (KVM) como proveedor. Es lo que ya existe en el repositorio.
 - **Expo:** el servidor corre en Ubuntu nativo (D-10) con el mismo `compose.yaml`.
 - Quien trabaje en Ubuntu nativo puede usar Docker directamente, pero el repositorio debe estar en ext4 (no NTFS) y Java 21 debe ser el JDK predeterminado.
 

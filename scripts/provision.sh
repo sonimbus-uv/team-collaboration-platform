@@ -92,6 +92,8 @@ systemctl enable --now docker
 
 if id "${VM_USER}" >/dev/null 2>&1; then
   usermod -aG docker "${VM_USER}"
+  # La box cloud-image (libvirt) crea el usuario con /bin/sh; bento ya usa bash.
+  usermod -s /bin/bash "${VM_USER}"
 fi
 
 docker --version
@@ -122,6 +124,8 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 
   log "Creando infrastructure/.env a partir de .env.example"
   cp "${ENV_EXAMPLE_FILE}" "${ENV_FILE}"
+  # Con virtiofs (libvirt) el dueño se refleja en el anfitrión; sin esto quedaría de root.
+  chown "${VM_USER}:${VM_USER}" "${ENV_FILE}"
 else
   log "Se conservará el archivo infrastructure/.env existente"
 fi

@@ -88,7 +88,7 @@ Las bases de datos almacenarán únicamente los metadatos y la referencia corres
 
 El sistema será desplegado inicialmente en una máquina virtual con **Ubuntu Server 24.04 LTS**.
 
-El entorno local se administrará mediante Vagrant y VirtualBox. La configuración común de desarrollo será:
+El entorno local se administrará mediante Vagrant, con VirtualBox o libvirt (KVM) como proveedor a elección de cada integrante. La configuración común de desarrollo será:
 
 ```text
 RAM:        6 GB
@@ -104,7 +104,7 @@ Durante las primeras etapas, los componentes del servidor se ejecutarán mediant
 ```text
 Equipo anfitrión
 │
-└── Vagrant + VirtualBox
+└── Vagrant + VirtualBox o libvirt (KVM)
     │
     └── Ubuntu Server 24.04 LTS
         │
