@@ -35,6 +35,6 @@ public class JoinGroupController {
 
     @FXML
     private void onCancel() {
-        // TODO CU-11: cerrar el diálogo (Stage) sin unirse
+        cancelButton.getScene().getWindow().hide();
     }
 }

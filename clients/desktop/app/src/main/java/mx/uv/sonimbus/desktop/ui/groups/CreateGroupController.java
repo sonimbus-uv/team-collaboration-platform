@@ -50,6 +50,6 @@ public class CreateGroupController {
 
     @FXML
     private void onCancel() {
-        // TODO CU-08: cerrar el diálogo (Stage) sin crear el grupo
+        cancelButton.getScene().getWindow().hide();
     }
 }

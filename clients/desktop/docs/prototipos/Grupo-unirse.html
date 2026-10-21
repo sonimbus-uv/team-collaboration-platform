@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Unirse a grupo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden; position: relative">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A; position: relative; z-index: 3">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 8b · CU-11</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <!-- Marco de fondo (simplificado) -->
+  <div aria-hidden="true" style="flex-grow: 1; display: flex; min-height: 0">
+    <div style="width: 72px; flex-shrink: 0; background: #E0E0E0; border-right: 1px solid #8C8C8C; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; box-sizing: border-box">
+      <div style="width: 48px; height: 48px; border-radius: 12px; border: 1.5px solid #1A1A1A; background: #FFFFFF"></div>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <div style="width: 48px; height: 48px; border-radius: 14px; border: 2.5px solid #1A1A1A; background: #FFFFFF"></div>
+      <div style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5"></div>
+      <div style="width: 48px; height: 48px; border-radius: 24px; border: 1.5px solid #4D4D4D; background: #F5F5F5"></div>
+      <div style="width: 32px; height: 2px; background: #8C8C8C"></div>
+      <div style="width: 48px; height: 48px; border-radius: 24px; border: 2.5px solid #1A1A1A; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 22px">+</div>
+    </div>
+    <div style="width: 240px; flex-shrink: 0; background: #F0F0F0; border-right: 1px solid #8C8C8C; padding: 18px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+      <div style="width: 150px; height: 14px; background: #BDBDBD"></div>
+      <div style="width: 110px; height: 10px; background: #D0D0D0"></div>
+      <div style="width: 160px; height: 10px; background: #D0D0D0"></div>
+      <div style="width: 130px; height: 10px; background: #D0D0D0"></div>
+      <div style="width: 120px; height: 10px; background: #D0D0D0"></div>
+    </div>
+    <div style="flex-grow: 1; display: flex; flex-direction: column">
+      <div style="height: 52px; border-bottom: 1px solid #8C8C8C"></div>
+      <div style="flex-grow: 1; padding: 24px; display: flex; flex-direction: column; gap: 22px">
+        <div style="width: 60%; height: 12px; background: #D0D0D0"></div>
+        <div style="width: 45%; height: 12px; background: #D0D0D0"></div>
+        <div style="width: 70%; height: 12px; background: #D0D0D0"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Capa oscura -->
+  <div style="position: absolute; top: 34px; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.45); z-index: 1"></div>
+
+  <!-- Diálogo -->
+  <div role="dialog" aria-modal="true" aria-labelledby="titulo-dialogo-u" style="position: absolute; top: 120px; left: 380px; width: 520px; z-index: 2; background: #FFFFFF; border: 2px solid #1A1A1A; border-radius: 10px; box-shadow: 6px 6px 0 #4D4D4D; display: flex; flex-direction: column">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 10px 24px">
+      <h2 id="titulo-dialogo-u" style="margin: 0; font-size: 20px; font-weight: 700">Agregar un grupo</h2>
+      <button aria-label="Cerrar diálogo" style="width: 40px; height: 40px; border: 1px solid #8C8C8C; border-radius: 6px; background: #FFFFFF; font-size: 16px; color: #1A1A1A">✕</button>
+    </div>
+
+    <div role="tablist" aria-label="Opciones" style="display: flex; padding: 0 24px; border-bottom: 1.5px solid #8C8C8C">
+      <button role="tab" aria-selected="false" style="height: 44px; padding: 0 18px; border: none; background: transparent; font-size: 15px; color: #4D4D4D">Crear grupo</button>
+      <button role="tab" aria-selected="true" style="height: 44px; padding: 0 18px; margin-bottom: -1.5px; border: none; border-bottom: 4px solid #1A1A1A; background: transparent; font-size: 15px; font-weight: 700; color: #1A1A1A">Unirse a grupo</button>
+    </div>
+
+    <form role="tabpanel" style="margin: 0; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px">
+      <p style="margin: 0; font-size: 14px; color: #4D4D4D; line-height: 1.45">Escribe el código de invitación que te compartió un administrador del grupo.</p>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="codigo-inv" style="font-size: 14px; font-weight: 600">Código de invitación</label>
+        <input id="codigo-inv" type="text" value="SD-4K9Q2" aria-describedby="codigo-inv-ayuda" style="height: 48px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 18px; letter-spacing: 0.15em; color: #1A1A1A; background: #FFFFFF">
+        <span id="codigo-inv-ayuda" style="font-size: 12px; color: #4D4D4D">También puedes pegar el enlace de invitación completo.</span>
+      </div>
+
+      <!-- Vista previa del grupo encontrado -->
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1.5px solid #8C8C8C; border-radius: 8px">
+        <div aria-label="[Ícono del grupo]" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; border: 1.5px solid #4D4D4D; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">SD</div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 14px; font-weight: 700">Sistemas Distribuidos 2026</span>
+          <span style="font-size: 13px; color: #4D4D4D">12 miembros · Invitación válida</span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 8px; border-top: 1px solid #BDBDBD">
+        <button type="button" style="height: 44px; margin-top: 12px; padding: 0 20px; border: 1.5px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1A1A1A">Cancelar</button>
+        <button type="submit" style="height: 44px; margin-top: 12px; padding: 0 20px; border: none; border-radius: 6px; background: #1A1A1A; font-size: 14px; font-weight: 600; color: #FFFFFF">Unirse</button>
+      </div>
+    </form>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

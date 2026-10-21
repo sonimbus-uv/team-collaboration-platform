@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sonimbus · Inicio de sesión con error</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1A1A1A}a:hover{color:#000000}
+button{font-family:inherit}
+input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1A1A1A; background: #FFFFFF; border: 2px solid #1A1A1A; overflow: hidden">
+
+  <!-- Barra de título de la ventana -->
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 12px; background: #D9D9D9; border-bottom: 2px solid #1A1A1A">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
+      <div style="width: 16px; height: 16px; border: 1.5px solid #1A1A1A; box-sizing: border-box"></div>
+      <span>Sonimbus</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 100%">
+      <div style="margin-right: 16px; padding: 2px 8px; border: 1.5px dashed #1A1A1A; background: #FFFFFF; font-size: 12px; font-weight: 600">Pantalla 1b (error) · CU-03, CU-04, CU-05</div>
+      <button aria-label="Minimizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">–</button>
+      <button aria-label="Maximizar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 13px; color: #1A1A1A">□</button>
+      <button aria-label="Cerrar" style="width: 44px; height: 100%; border: none; border-left: 1px solid #8C8C8C; background: transparent; font-size: 14px; color: #1A1A1A">✕</button>
+    </div>
+  </div>
+
+  <!-- Contenido -->
+  <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #F0F0F0">
+    <main style="width: 440px; box-sizing: border-box; padding: 36px 40px; background: #FFFFFF; border: 1.5px solid #1A1A1A; border-radius: 10px; display: flex; flex-direction: column; gap: 18px">
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+        <div aria-label="[Logo] Sonimbus" style="width: 56px; height: 56px; border: 1.5px solid #4D4D4D; border-radius: 12px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #4D4D4D">[Logo]</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700">Iniciar sesión</h1>
+        <p style="margin: 0; font-size: 14px; color: #4D4D4D">Entra a tus grupos de Sonimbus</p>
+      </div>
+
+      <!-- Mensaje de error genérico -->
+      <div role="alert" style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 2px solid #1A1A1A; border-radius: 6px; background: #E0E0E0">
+        <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; border-radius: 11px; background: #1A1A1A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">!</span>
+        <span style="font-size: 14px; font-weight: 600">Correo o contraseña incorrectos</span>
+      </div>
+
+      <form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="correo-e" style="font-size: 14px; font-weight: 600">Correo electrónico</label>
+          <input id="correo-e" type="email" value="ana.lopez@correo.com" style="height: 44px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 14px; color: #1A1A1A; background: #FFFFFF">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; justify-content: space-between; align-items: baseline">
+            <label for="contrasena-e" style="font-size: 14px; font-weight: 600">Contraseña</label>
+            <a href="#" style="font-size: 13px">¿Olvidaste tu contraseña?</a>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <input id="contrasena-e" type="password" placeholder="Vuelve a escribir tu contraseña" style="flex-grow: 1; height: 44px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid #4D4D4D; border-radius: 6px; font-size: 14px; color: #1A1A1A; background: #FFFFFF">
+            <button type="button" aria-label="Mostrar contraseña" style="height: 44px; padding: 0 12px; border: 1.5px solid #4D4D4D; border-radius: 6px; background: #FFFFFF; font-size: 13px; color: #1A1A1A">Mostrar</button>
+          </div>
+        </div>
+        <button type="submit" style="height: 46px; margin-top: 4px; border: none; border-radius: 6px; background: #1A1A1A; color: #FFFFFF; font-size: 15px; font-weight: 600">Iniciar sesión</button>
+      </form>
+
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: #4D4D4D">
+        <div style="flex-grow: 1; height: 1px; background: #BDBDBD"></div>
+        <span>o</span>
+        <div style="flex-grow: 1; height: 1px; background: #BDBDBD"></div>
+      </div>
+
+      <button type="button" style="height: 46px; border: 1.5px solid #1A1A1A; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; font-weight: 600; color: #1A1A1A">
+        <span aria-hidden="true" style="width: 22px; height: 22px; border: 1.5px solid #4D4D4D; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700">G</span>
+        Continuar con Google
+      </button>
+
+      <p style="margin: 4px 0 0; text-align: center; font-size: 14px; color: #4D4D4D">¿No tienes cuenta? <a href="#" style="font-weight: 600">Crear cuenta</a></p>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -54,7 +54,7 @@ Detalle en [`docs/architecture/`](docs/architecture/) y decisiones en [`docs/dec
 El entorno local se ejecuta sobre una máquina virtual común para todo el equipo (D-14, [ADR-006](docs/decisions/ADR-006-vagrant-docker-compose.md)):
 
 - Ubuntu Server 24.04 LTS;
-- Vagrant y VirtualBox;
+- Vagrant con VirtualBox o libvirt (KVM), a elección de cada integrante;
 - Docker Engine;
 - Docker Compose.
 
@@ -77,29 +77,60 @@ La máquina virtual utiliza:
 
 ## Inicio rápido
 
-Requisitos del equipo anfitrión:
+El mismo `Vagrantfile` funciona con dos proveedores. Cada integrante elige uno según su sistema; la VM resultante es equivalente (Ubuntu 24.04, mismos recursos, misma IP y mismo aprovisionamiento).
+
+| | VirtualBox | libvirt (KVM) |
+|---|---|---|
+| Sistemas | Windows, macOS y Linux | Solo Linux |
+| Box | `bento/ubuntu-24.04` | `cloud-image/ubuntu-24.04` (la de `bento` no existe para libvirt) |
+| Carpeta `/vagrant` | Carpeta compartida de VirtualBox | virtiofs |
+
+Requisitos comunes del equipo anfitrión:
 
 - Vagrant 2.4.9 o una versión compatible;
-- VirtualBox 7.2 o una versión compatible;
 - virtualización de hardware habilitada;
 - al menos 16 GB de RAM;
 - conexión a Internet durante el primer aprovisionamiento.
 
-Crear la configuración local en PowerShell:
+Requisitos según el proveedor:
+
+- **VirtualBox:** VirtualBox 7.2 o una versión compatible.
+- **libvirt:** QEMU/KVM y libvirt, el plugin `vagrant-libvirt` y `virtiofsd`. El usuario debe pertenecer a los grupos `libvirt` y `kvm` (cerrar sesión y volver a entrar tras agregarlo). En Ubuntu o Debian:
+
+  ```bash
+  sudo apt install qemu-kvm libvirt-daemon-system libvirt-dev virtiofsd
+  sudo usermod -aG libvirt,kvm "$USER"
+  vagrant plugin install vagrant-libvirt
+  ```
+
+Crear la configuración local:
 
 ```powershell
-Copy-Item .\infrastructure\.env.example .\infrastructure\.env
+Copy-Item .\infrastructure\.env.example .\infrastructure\.env   # PowerShell
 ```
 
-El archivo `infrastructure/.env` no debe subirse al repositorio. Antes de iniciar la máquina, deberán sustituirse sus valores de ejemplo por credenciales locales.
+```bash
+cp infrastructure/.env.example infrastructure/.env              # Linux o macOS
+```
 
-Crear y aprovisionar la VM:
+El archivo `infrastructure/.env` no debe subirse al repositorio. Antes de iniciar la máquina, deberán sustituirse sus valores de ejemplo por credenciales locales. Si no existe, el aprovisionamiento lo crea a partir de `.env.example`.
 
-```powershell
+Crear y aprovisionar la VM con el proveedor elegido:
+
+```bash
 vagrant validate
-vagrant up --provider=virtualbox
+vagrant up --provider=virtualbox   # o bien: vagrant up --provider=libvirt
 vagrant ssh
 ```
+
+Después del primer `vagrant up`, Vagrant recuerda el proveedor y basta con `vagrant up`. Para cambiar de proveedor hay que destruir antes la VM existente con `vagrant destroy -f` (se pierden los volúmenes de Docker de la VM). No conviene tener VMs de VirtualBox y de KVM encendidas al mismo tiempo.
+
+> **VirtualBox 6.1.28 o posterior en Linux o macOS:** solo permite redes privadas en `192.168.56.0/21`. Si `vagrant up` responde «The IP address configured for the host-only network is not within the allowed ranges», autoriza también la red de la VM:
+>
+> ```bash
+> sudo mkdir -p /etc/vbox
+> printf '* 192.168.56.0/21\n* 192.168.33.0/24\n' | sudo tee /etc/vbox/networks.conf
+> ```
 
 PostgreSQL, Redis y Mailpit se inician durante el aprovisionamiento. Para revisar su estado dentro de la VM:
 

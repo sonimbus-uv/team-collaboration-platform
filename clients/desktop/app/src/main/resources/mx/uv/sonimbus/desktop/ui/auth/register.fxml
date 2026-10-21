@@ -38,14 +38,23 @@
                 <Label text="Todos los campos son obligatorios" styleClass="subtitle"/>
             </VBox>
 
-            <!-- Error general (p. ej. correo ya registrado), oculto por defecto -->
-            <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="CENTER_LEFT"
+            <!-- Aviso general (validación, correo ya registrado, sin conexión o Google no
+                 disponible), oculto por defecto. El controlador cambia entre alert-error y
+                 alert-info con AlertBox. -->
+            <HBox fx:id="errorBox" styleClass="alert-error" spacing="10" alignment="TOP_LEFT"
                   visible="false" managed="false">
                 <padding>
                     <Insets top="12" right="14" bottom="12" left="14"/>
                 </padding>
-                <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
-                <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+                <Label fx:id="errorIconLabel" text="!" styleClass="alert-icon" accessibleText="Error"/>
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <Label fx:id="errorLabel" styleClass="alert-text" wrapText="true"/>
+                    <!-- Solo con 409: lleva a verificar/reenviar con el correo escrito -->
+                    <Hyperlink fx:id="resendVerificationLink"
+                               text="¿No recibiste el correo de verificación?"
+                               visible="false" managed="false"
+                               onAction="#onResendVerification"/>
+                </VBox>
             </HBox>
 
             <!-- Formulario: campos antes que sus Label para que labelFor resuelva -->
@@ -55,9 +64,12 @@
                 </columnConstraints>
 
                 <!-- Nombre -->
+                <!-- Oculto hasta resolver #14 (Auth no recibe el nombre) -->
                 <TextField fx:id="nameField" accessibleText="Nombre completo"
+                           visible="false" managed="false"
                            GridPane.rowIndex="1"/>
                 <Label text="Nombre completo" labelFor="$nameField" styleClass="field-label"
+                       visible="false" managed="false"
                        GridPane.rowIndex="0"/>
 
                 <!-- Correo -->
@@ -75,7 +87,7 @@
                 <HBox spacing="8" GridPane.rowIndex="5">
                     <StackPane HBox.hgrow="ALWAYS">
                         <PasswordField fx:id="passwordField" accessibleText="Contraseña"
-                                       accessibleHelp="Mínimo 8 caracteres, con al menos una letra y un número."/>
+                                       accessibleHelp="De 8 a 128 caracteres, con al menos una mayúscula, una minúscula, un número y un símbolo."/>
                         <TextField fx:id="passwordVisibleField" accessibleText="Contraseña visible"
                                    visible="false" managed="false"/>
                     </StackPane>
@@ -91,7 +103,7 @@
                     </GridPane.margin>
                 </Label>
                 <Label fx:id="passwordHintLabel"
-                       text="Mínimo 8 caracteres, con al menos una letra y un número."
+                       text="De 8 a 128 caracteres, con al menos una mayúscula, una minúscula, un número y un símbolo."
                        styleClass="hint-text" wrapText="true"
                        GridPane.rowIndex="6"/>
 

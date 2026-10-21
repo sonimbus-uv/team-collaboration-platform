@@ -176,6 +176,8 @@ docker compose -f infrastructure/compose.yaml ps
 
 ## Ejecutar el Servicio
 
+La VM de Vagrant ya trae Rust estable (con `rustfmt` y `clippy`): `scripts/provision.sh` lo instala con `rustup` para el usuario `vagrant`. En una VM creada antes de este cambio, ejecuta `vagrant provision` desde el equipo anfitrión y vuelve a entrar con `vagrant ssh`.
+
 Desde la raíz del proyecto:
 
 ```bash
