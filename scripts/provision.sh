@@ -29,6 +29,7 @@ fi
 log "Actualizando paquetes e instalando herramientas base"
 apt-get update -y
 apt-get install -y --no-install-recommends \
+  build-essential \
   ca-certificates \
   curl \
   git \
@@ -36,6 +37,7 @@ apt-get install -y --no-install-recommends \
   jq \
   make \
   net-tools \
+  pkg-config \
   unzip
 
 if ! command -v docker >/dev/null 2>&1 || \
@@ -95,6 +97,23 @@ fi
 docker --version
 docker compose version
 
+if id "${VM_USER}" >/dev/null 2>&1; then
+  readonly RUSTUP_BIN="/home/${VM_USER}/.cargo/bin/rustup"
+
+  if [[ ! -x "${RUSTUP_BIN}" ]]; then
+    log "Instalando Rust estable con rustup para el usuario ${VM_USER}"
+    sudo -u "${VM_USER}" -H bash -c \
+      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs |
+         sh -s -- -y --profile minimal --default-toolchain stable \
+           --component rustfmt --component clippy'
+  else
+    log "Rust ya está instalado; se conserva la instalación actual"
+  fi
+
+  sudo -u "${VM_USER}" -H "${RUSTUP_BIN}" --version
+  sudo -u "${VM_USER}" -H "/home/${VM_USER}/.cargo/bin/cargo" --version
+fi
+
 [[ -f "${COMPOSE_FILE}" ]] || fail "No se encontró ${COMPOSE_FILE}."
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -131,3 +150,4 @@ printf 'Ejecuta primero: cd /vagrant/infrastructure\n'
 printf 'Cassandra: docker compose --profile messaging up -d\n'
 printf 'MinIO:     docker compose --profile storage up -d\n'
 printf 'Todos:     docker compose --profile messaging --profile storage up -d\n'
+printf 'Rust:      cargo está disponible para el usuario %s (abre una nueva sesión con vagrant ssh)\n' "${VM_USER}"
