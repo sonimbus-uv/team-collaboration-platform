@@ -1,7 +1,7 @@
+use crate::rate_limit::{BucketPolicy, RateLimitDecision};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use std::time::Duration;
 use tokio::time::timeout;
-use crate::rate_limit::{BucketPolicy, RateLimitDecision};
 
 #[derive(Clone)]
 pub struct RedisConnection {
@@ -25,22 +25,7 @@ impl RedisConnection {
         connect_timeout: Duration,
         operation_timeout: Duration,
     ) -> Result<Self, RedisConnectionError> {
-        let client =
-            redis::Client::open(url).map_err(|_| RedisConnectionError::InvalidUrl)?;
-
-        #[cfg(test)]
-        {
-            let info = client.get_connection_info();
-
-            eprintln!(
-                "Redis configuration: password_present={}; password_nonempty={}",
-                info.redis.password.is_some(),
-                info.redis
-                    .password
-                    .as_ref()
-                    .is_some_and(|password| !password.is_empty())
-            );
-        }
+        let client = redis::Client::open(url).map_err(|_| RedisConnectionError::InvalidUrl)?;
 
         let manager_config = ConnectionManagerConfig::new()
             .set_connection_timeout(connect_timeout)
@@ -61,7 +46,7 @@ impl RedisConnection {
         })
     }
 
-        pub async fn consume(
+    pub async fn consume(
         &self,
         key: &str,
         policy: BucketPolicy,
@@ -72,10 +57,7 @@ impl RedisConnection {
         let refill_ms = u64::from(policy.refill_period_secs()) * 1000;
 
         let mut invocation = script.prepare_invoke();
-        invocation
-            .key(key)
-            .arg(policy.capacity())
-            .arg(refill_ms);
+        invocation.key(key).arg(policy.capacity()).arg(refill_ms);
 
         let (allowed, retry_ms): (i64, i64) = timeout(
             self.operation_timeout,
@@ -120,15 +102,6 @@ impl RedisConnection {
                 "Redis operation failed"
             );
 
-            #[cfg(test)]
-            eprintln!(
-                "Redis error category: {:?}; code: {:?}; timeout: {}; I/O: {}",
-                error.kind(),
-                error.code(),
-                error.is_timeout(),
-                error.is_io_error()
-            );
-
             RedisConnectionError::OperationFailed
         })?;
 
@@ -149,8 +122,8 @@ mod tests {
     async fn configured_redis_responds_to_ping() {
         dotenvy::dotenv().expect("This manual test requires a valid local .env");
 
-        let config = crate::config::Config::from_env()
-            .expect("The local Auth configuration must be valid");
+        let config =
+            crate::config::Config::from_env().expect("The local Auth configuration must be valid");
 
         let connection = RedisConnection::connect(
             &config.redis_url,
@@ -167,10 +140,7 @@ mod tests {
 
         let policy = BucketPolicy::new(2, 60).unwrap();
 
-        let key = format!(
-            "auth:rl:test:{}",
-            rand::random::<u128>()
-        );
+        let key = format!("auth:rl:test:{}", rand::random::<u128>());
 
         assert_eq!(
             connection.consume(&key, policy).await.unwrap(),
@@ -202,29 +172,20 @@ mod tests {
     async fn redis_bucket_refills_expires_and_shares_concurrent_budget() {
         dotenvy::dotenv().expect("This manual test requires a valid local .env");
 
-        let config = crate::config::Config::from_env()
-            .expect("The local Auth configuration must be valid");
+        let config =
+            crate::config::Config::from_env().expect("The local Auth configuration must be valid");
 
-        let connect_timeout =
-            Duration::from_millis(u64::from(config.redis_connect_timeout_ms));
-        let operation_timeout =
-            Duration::from_millis(u64::from(config.redis_operation_timeout_ms));
+        let connect_timeout = Duration::from_millis(u64::from(config.redis_connect_timeout_ms));
+        let operation_timeout = Duration::from_millis(u64::from(config.redis_operation_timeout_ms));
 
-        let first = RedisConnection::connect(
-            &config.redis_url,
-            connect_timeout,
-            operation_timeout,
-        )
-        .await
-        .expect("First Redis connection failed");
+        let first = RedisConnection::connect(&config.redis_url, connect_timeout, operation_timeout)
+            .await
+            .expect("First Redis connection failed");
 
-        let second = RedisConnection::connect(
-            &config.redis_url,
-            connect_timeout,
-            operation_timeout,
-        )
-        .await
-        .expect("Second Redis connection failed");
+        let second =
+            RedisConnection::connect(&config.redis_url, connect_timeout, operation_timeout)
+                .await
+                .expect("Second Redis connection failed");
 
         let refill_key = format!("auth:rl:test:refill:{}", rand::random::<u128>());
         let refill_policy = BucketPolicy::new(2, 4).unwrap();
@@ -286,8 +247,7 @@ mod tests {
             RateLimitDecision::Allowed
         );
 
-        let concurrent_key =
-            format!("auth:rl:test:concurrent:{}", rand::random::<u128>());
+        let concurrent_key = format!("auth:rl:test:concurrent:{}", rand::random::<u128>());
         let concurrent_policy = BucketPolicy::new(5, 60).unwrap();
 
         let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(33));

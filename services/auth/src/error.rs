@@ -34,9 +34,7 @@ impl From<sqlx::Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let retry_after_secs = match &self {
-            Self::RateLimited { retry_after_secs } => {
-                Some((*retry_after_secs).max(1))
-            }
+            Self::RateLimited { retry_after_secs } => Some((*retry_after_secs).max(1)),
             Self::Busy => Some(60),
             _ => None,
         };
@@ -111,8 +109,7 @@ impl IntoResponse for ApiError {
                         problem_type: "about:blank",
                         title: "Too many requests",
                         status: status.as_u16(),
-                        detail: "The request budget is exhausted. Please retry later."
-                            .into(),
+                        detail: "The request budget is exhausted. Please retry later.".into(),
                     },
                 )
             }
@@ -125,8 +122,7 @@ impl IntoResponse for ApiError {
                         problem_type: "about:blank",
                         title: "Service unavailable",
                         status: status.as_u16(),
-                        detail: "Request protection is temporarily unavailable."
-                            .into(),
+                        detail: "Request protection is temporarily unavailable.".into(),
                     },
                 )
             }

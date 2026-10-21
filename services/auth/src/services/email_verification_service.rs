@@ -1,3 +1,4 @@
+use crate::ports::email_verification::RecipientBudget;
 use crate::{
     ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
     repositories::{
@@ -20,7 +21,6 @@ pub fn new_token() -> (String, Vec<u8>) {
 pub enum VerificationError {
     InvalidToken,
     Database(sqlx::Error),
-    Delivery(EmailDeliveryError),
 }
 
 #[cfg(test)]
@@ -63,17 +63,41 @@ impl EmailVerificationService {
             .map_err(VerificationError::Database)?
             .ok_or(VerificationError::InvalidToken)
     }
-    pub async fn resend(&self, email: &str) -> Result<(), VerificationError> {
-        let (token, hash) = new_token();
-        if self
+
+    pub async fn resend(
+        &self,
+        email: &str,
+        budget: &dyn RecipientBudget,
+    ) -> Result<(), VerificationError> {
+        let locked = self
             .repository
-            .reissue(email, &hash)
+            .lock_for_reissue(email)
             .await
-            .map_err(VerificationError::Database)?
-        {
-            self.send(email, &token)
-                .await
-                .map_err(VerificationError::Delivery)?;
+            .map_err(VerificationError::Database)?;
+
+        let Some((tx, account_id)) = locked else {
+            return Ok(());
+        };
+
+        match budget.consume(email).await {
+            Ok(true) => {}
+            Ok(false) | Err(()) => {
+                tx.rollback().await.map_err(VerificationError::Database)?;
+                return Ok(());
+            }
+        }
+
+        let (token, hash) = new_token();
+
+        OneTimeTokensRepository::complete_reissue(tx, account_id, email, &hash)
+            .await
+            .map_err(VerificationError::Database)?;
+
+        if let Err(error) = self.send(email, &token).await {
+            tracing::error!(
+                error = %error,
+                "Verification email delivery failed"
+            );
         }
         Ok(())
     }

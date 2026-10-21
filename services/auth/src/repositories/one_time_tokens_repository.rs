@@ -1,5 +1,5 @@
 use super::accounts_repository::Account;
-use sqlx::{types::Uuid, PgPool};
+use sqlx::{types::Uuid, PgPool, Postgres, Transaction};
 
 #[derive(Clone)]
 pub struct OneTimeTokensRepository {
@@ -11,7 +11,10 @@ impl OneTimeTokensRepository {
         Self { pool }
     }
 
-    pub async fn reissue(&self, email: &str, hash: &[u8]) -> Result<bool, sqlx::Error> {
+    pub async fn lock_for_reissue(
+        &self,
+        email: &str,
+    ) -> Result<Option<(Transaction<'static, Postgres>, Uuid)>, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         let account_id = sqlx::query_scalar::<_, Uuid>(
@@ -29,7 +32,8 @@ impl OneTimeTokensRepository {
         .await?;
 
         let Some(id) = account_id else {
-            return Ok(false);
+            tx.rollback().await?;
+            return Ok(None);
         };
 
         let recent = sqlx::query_scalar::<_, bool>(
@@ -39,7 +43,7 @@ impl OneTimeTokensRepository {
                 FROM auth.one_time_tokens
                 WHERE account_id = $1
                   AND purpose = 'email_verification'
-                  AND created_at > now() - interval '60 seconds'
+                  AND created_at > clock_timestamp() - interval '60 seconds'
             )
             "#,
         )
@@ -48,23 +52,19 @@ impl OneTimeTokensRepository {
         .await?;
 
         if recent {
-            return Ok(false);
+            tx.rollback().await?;
+            return Ok(None);
         }
 
-        sqlx::query(
-            r#"
-            UPDATE auth.one_time_tokens
-            SET invalidated_at = now()
-            WHERE account_id = $1
-              AND purpose = 'email_verification'
-              AND used_at IS NULL
-              AND invalidated_at IS NULL
-            "#,
-        )
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+        Ok(Some((tx, id)))
+    }
 
+    pub async fn complete_reissue(
+        mut tx: Transaction<'static, Postgres>,
+        id: Uuid,
+        email: &str,
+        hash: &[u8],
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             INSERT INTO auth.one_time_tokens (
@@ -79,7 +79,7 @@ impl OneTimeTokensRepository {
                 'email_verification',
                 $2,
                 $3,
-                now() + interval '24 hours'
+                clock_timestamp() + interval '24 hours'
             )
             "#,
         )
@@ -89,9 +89,7 @@ impl OneTimeTokensRepository {
         .execute(&mut *tx)
         .await?;
 
-        tx.commit().await?;
-
-        Ok(true)
+        tx.commit().await
     }
 
     pub async fn confirm(&self, hash: &[u8]) -> Result<Option<Account>, sqlx::Error> {
@@ -163,6 +161,20 @@ impl OneTimeTokensRepository {
         )
         .bind(id)
         .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            UPDATE auth.one_time_tokens
+            SET invalidated_at = clock_timestamp()
+            WHERE account_id = $1
+              AND purpose = 'email_verification'
+              AND used_at IS NULL
+              AND invalidated_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;

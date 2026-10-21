@@ -5,8 +5,7 @@ use sqlx::PgPool;
 use crate::{
     auth_rate_limiter::AuthRateLimiter,
     services::{
-        account_service::AuthService,
-        email_verification_service::EmailVerificationService,
+        account_service::AuthService, email_verification_service::EmailVerificationService,
     },
 };
 

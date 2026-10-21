@@ -27,17 +27,12 @@ impl AuthRateLimiter {
         redis::Client::open(config.redis_url.as_str())
             .map_err(|_| anyhow::anyhow!("Invalid Redis URL configuration"))?;
 
-        let recipient_key =
-            RecipientKey::new(config.recipient_hmac_secret.as_bytes())?;
+        let recipient_key = RecipientKey::new(config.recipient_hmac_secret.as_bytes())?;
 
         Ok(Self {
             redis_url: config.redis_url.clone(),
-            connect_timeout: Duration::from_millis(u64::from(
-                config.redis_connect_timeout_ms,
-            )),
-            operation_timeout: Duration::from_millis(u64::from(
-                config.redis_operation_timeout_ms,
-            )),
+            connect_timeout: Duration::from_millis(u64::from(config.redis_connect_timeout_ms)),
+            operation_timeout: Duration::from_millis(u64::from(config.redis_operation_timeout_ms)),
             connection: OnceCell::new(),
             trusted_proxy_ips: config.trusted_proxy_ips.clone(),
             register_policy: config.register_ip_policy,
@@ -50,8 +45,7 @@ impl AuthRateLimiter {
 
     #[cfg(test)]
     pub(crate) fn for_tests(redis_url: String) -> Self {
-        let policy = BucketPolicy::new(10_000, 60)
-            .expect("The fixed test policy must be valid");
+        let policy = BucketPolicy::new(10_000, 60).expect("The fixed test policy must be valid");
 
         Self {
             redis_url,
@@ -69,16 +63,26 @@ impl AuthRateLimiter {
     }
 
     #[cfg(test)]
-    pub(crate) fn with_recipient_policy_for_tests(
-        mut self,
-        policy: BucketPolicy,
-    ) -> Self {
+    pub(crate) fn with_recipient_policy_for_tests(mut self, policy: BucketPolicy) -> Self {
         self.recipient_policy = policy;
         self
     }
 
     pub fn trusted_proxy_ips(&self) -> &[IpAddr] {
         &self.trusted_proxy_ips
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_ip_policy_for_tests(
+        mut self,
+        trusted_proxy_ips: Vec<IpAddr>,
+        policy: BucketPolicy,
+    ) -> Self {
+        self.trusted_proxy_ips = trusted_proxy_ips;
+        self.register_policy = policy;
+        self.resend_policy = policy;
+        self.verify_policy = policy;
+        self
     }
 
     pub async fn check_ip(
@@ -127,11 +131,48 @@ impl AuthRateLimiter {
         .map_err(|_| RedisConnectionError::OperationTimeout)?
     }
 
+    pub async fn health_check(&self) -> Result<(), RedisConnectionError> {
+        let request_timeout = self.connect_timeout + self.operation_timeout;
+        timeout(request_timeout, async {
+            let connection = self
+                .connection
+                .get_or_try_init(|| async {
+                    RedisConnection::connect(
+                        &self.redis_url,
+                        self.connect_timeout,
+                        self.operation_timeout,
+                    )
+                    .await
+                })
+                .await?;
+            connection.ping().await
+        })
+        .await
+        .map_err(|_| RedisConnectionError::OperationTimeout)?
+    }
+
     fn policy_for(&self, operation: AuthOperation) -> BucketPolicy {
         match operation {
             AuthOperation::Register => self.register_policy,
             AuthOperation::Resend => self.resend_policy,
             AuthOperation::Verify => self.verify_policy,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::ports::email_verification::RecipientBudget for AuthRateLimiter {
+    async fn consume(&self, email: &str) -> Result<bool, ()> {
+        match self.check_recipient(email).await {
+            Ok(RateLimitDecision::Allowed) => Ok(true),
+            Ok(RateLimitDecision::Limited { .. }) => Ok(false),
+            Err(error) => {
+                tracing::warn!(
+                    error_kind = ?error,
+                    "Recipient budget check unavailable"
+                );
+                Err(())
+            }
         }
     }
 }

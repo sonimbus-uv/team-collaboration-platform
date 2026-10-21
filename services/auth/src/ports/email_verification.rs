@@ -19,3 +19,11 @@ impl std::fmt::Display for EmailDeliveryError {
 pub trait VerificationEmailSender: Send + Sync {
     async fn send(&self, email: &str, token: &str, locale: &str) -> Result<(), EmailDeliveryError>;
 }
+
+#[async_trait::async_trait]
+pub trait RecipientBudget: Send + Sync {
+    // true: permitido;
+    // false: presupuesto agotado.
+    // Err: no se pudo comprobar.
+    async fn consume(&self, email: &str) -> Result<bool, ()>;
+}
