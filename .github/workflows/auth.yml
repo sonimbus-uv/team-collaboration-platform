@@ -42,10 +42,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Prepare test configuration
         run: cp .env.example .env
       - name: Check formatting
         run: cargo fmt --check
+      - name: Check all targets
+        run: cargo check --all-targets --locked
+      - name: Clippy
+        run: |
+          cargo clippy --lib --locked -- -D warnings
+          cargo clippy --all-targets --locked
       - name: Run all tests including Redis tests
         run: cargo test --locked -- --include-ignored
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nginx for isolated gateway test
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nginx
+      - name: Check public JWKS routing and existing budgets
+        run: python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
