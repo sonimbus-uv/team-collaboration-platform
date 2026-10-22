@@ -8,12 +8,12 @@ Una instancia y una base de datos compartidas, con un esquema y un usuario por s
 
 | Esquema | Usuario | Servicio | Migraciones | Estado |
 |---|---|---|---|---|
-| `auth` | `auth_service` | Auth | `services/auth/migrations/` (SQLx) | Migración inicial lista; hoy se conecta con el superusuario (T-04) |
+| `auth` | `auth_service` | Auth | `services/auth/migrations/` (SQLx) | Migración inicial lista; falta cambiar su conexión a `auth_service` |
 | `core` | `core_service` | Core | `services/core/priv/repo/migrations/` (Ecto) | Pendiente |
 | `files` | `files_service` | File Service | Dentro del servicio | Pendiente |
 | `reports` | `reports_service` | Report Service | Dentro del servicio | Pendiente |
 
-Los nombres de usuario son una propuesta; los define el script de inicialización de [`database/postgres/`](../../database/postgres/) (tarea T-04).
+Los esquemas y usuarios los crea el script de inicialización de [`database/postgres/`](../../database/postgres/) (T-04). Cada usuario tiene `search_path = <esquema>, public`, así que la tabla de migraciones de cada servicio queda en su propio esquema.
 
 ### Esquema `auth`
 
