@@ -69,7 +69,7 @@ El catálogo de eventos vive en [`contracts/events/`](../../contracts/events/).
 
 - Motivo: el entorno tiene recursos limitados (RES-07) y la máquina de desarrollo tiene 6 GB. ScyllaDB corre con un núcleo y una memoria acotada (`--smp 1 --memory <N> --overprovisioned 1`), en lugar del *heap* de 1 GB o más de Cassandra.
 - Compatibilidad: ScyllaDB usa el mismo CQL y funciona con el mismo driver (Xandra en Elixir), así que el diseño de tablas no cambia.
-- Pendiente: `infrastructure/compose.yaml` todavía levanta `cassandra:5.0.9`; el cambio está registrado como tarea T-01 en [`docs/PLAN.md`](../PLAN.md).
+- Aplicado en `infrastructure/compose.yaml` (T-01): servicio `scylladb` en el perfil `messaging`, con `--smp 1 --memory 750M --overprovisioned 1`.
 
 El diseño de las tablas está en [`docs/database/`](../database/).
 

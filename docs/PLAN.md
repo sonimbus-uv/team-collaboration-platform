@@ -33,8 +33,8 @@ Cada módulo tiene un responsable principal, indicado también en su `README.md`
 | Esquemas CQL de ScyllaDB | `database/scylla/` | @Maple-M136279841 |
 | Auth Service | `services/auth/` | @tuzc0 |
 | API Gateway | `gateway/nginx/` | @tuzc0 |
-| Infraestructura, VM y LiveKit | `infrastructure/`, `Vagrantfile`, `scripts/` | @tuzc0 |
-| Inicialización de PostgreSQL | `database/postgres/` | @tuzc0 |
+| Infraestructura, VM y LiveKit | `infrastructure/`, `Vagrantfile`, `scripts/` | @Maple-M136279841 (desde el 2026-10-21) |
+| Inicialización de PostgreSQL | `database/postgres/` | @Maple-M136279841 (desde el 2026-10-21) |
 | Cliente móvil | `clients/mobile/` | @roluva |
 | Report Service | `services/reports/` | @roluva |
 | Contratos | `contracts/` | El dueño de cada servicio escribe el suyo |
@@ -46,7 +46,7 @@ Cada módulo tiene un responsable principal, indicado también en su `README.md`
 
 ## Fases
 
-Estado al 2026-10-07. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
+Estado al 2026-10-21. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 
 ### Fase 1. Repositorio y organización — 🟡
 
@@ -62,20 +62,20 @@ Estado al 2026-10-07. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 
 - ⬜ VM de Vagrant funcionando para los tres integrantes (D-14).
 - ⬜ Java 21 como predeterminado (no compilar con JDK 24).
-- ⬜ Rust, Erlang/Elixir (versiones fijadas en `.tool-versions`) y Flutter instalados según el módulo de cada quien.
+- 🟡 Rust ✅ y Erlang/Elixir ✅ (versiones fijadas en `.tool-versions`, instalados con `mise`) en el aprovisionamiento de la VM; Flutter según el módulo de cada quien.
 - ⬜ Herramientas: `mkcert`, `grpcurl`, `cqlsh`, `psql` y Postman o Bruno.
 
-### Fase 3. Infraestructura en Docker Compose — 🟡 (@tuzc0)
+### Fase 3. Infraestructura en Docker Compose — 🟡 (@Maple-M136279841 desde el 2026-10-21)
 
 - ✅ PostgreSQL, Redis, Mailpit y MinIO con volúmenes con nombre.
-- 🟡 Base de mensajes: hoy es Cassandra; cambiar a ScyllaDB (T-01).
-- ⬜ Esquema y usuario por servicio en PostgreSQL (T-04).
+- ✅ Base de mensajes: ScyllaDB con memoria acotada (T-01).
+- ✅ Esquema y usuario por servicio en PostgreSQL (T-04).
 - ⬜ *Keyspace* de ScyllaDB creado por script de inicio.
 - ⬜ RabbitMQ con plugin de administración y archivo de definiciones (T-03).
-- ⬜ *Bucket* de MinIO creado al iniciar.
+- ✅ *Bucket* de MinIO creado al iniciar.
 - ⬜ LiveKit con los puertos validados en la PoC.
 - ⬜ Nginx: TLS con `mkcert`, rutas REST, `upgrade` de WebSocket, `limit_req` y `client_max_body_size`.
-- 🟡 `healthcheck` en cada contenedor (faltan Mailpit y MinIO).
+- ✅ `healthcheck` en cada contenedor de larga duración.
 - ⬜ **Hito:** `docker compose up` deja todo en estado *healthy*.
 
 ### Fase 4. Contratos — ⬜
@@ -136,15 +136,15 @@ Detectadas en la revisión del repositorio del 2026-10-07. Cada una debe convert
 
 | ID | Tarea | Módulo | Responsable |
 |---|---|---|---|
-| T-01 | Reemplazar `cassandra:5.0.9` por ScyllaDB en `compose.yaml`, con memoria acotada (`--smp 1 --memory ... --overprovisioned 1`); conservar el perfil `messaging` y renombrar el volumen | `infrastructure` | @tuzc0 |
-| T-02 | Alinear valores entre `infrastructure/.env.example` (`team_platform` / `team_platform_user`), los valores por defecto de `compose.yaml` y `services/auth/.env.example` (`team_collaboration` / `team_user`); agregar las variables que faltan (`POSTGRES_PORT`, `REDIS_PORT`, memoria de ScyllaDB) | `infrastructure`, `auth` | @tuzc0 |
-| T-03 | Agregar RabbitMQ a `compose.yaml` con archivo de definiciones (*exchange*, colas y cola de mensajes fallidos) | `infrastructure` | @tuzc0 |
-| T-04 | Script de inicialización de PostgreSQL: esquemas `auth`, `core`, `files` y `reports` con un usuario por servicio (D-13); Auth deja de conectarse con el superusuario | `database`, `auth` | @tuzc0 |
-| T-05 | `healthcheck` de Mailpit y MinIO; creación del *bucket* al iniciar | `infrastructure` | @tuzc0 |
+| T-01 | ✅ Reemplazar `cassandra:5.0.9` por ScyllaDB en `compose.yaml`, con memoria acotada (`--smp 1 --memory ... --overprovisioned 1`); conservar el perfil `messaging` y renombrar el volumen | `infrastructure` | @Maple-M136279841 |
+| T-02 | Alinear valores entre `infrastructure/.env.example` (`team_platform` / `team_platform_user`), los valores por defecto de `compose.yaml` y `services/auth/.env.example` (`team_collaboration` / `team_user`); agregar las variables que faltan (`POSTGRES_PORT`, `REDIS_PORT`, memoria de ScyllaDB). 🟡 Infraestructura alineada a `team_collaboration` / `team_user`; falta `services/auth/.env.example` (usuario `auth_service`) | `infrastructure` ✅, `auth` ⬜ | @Maple-M136279841, @tuzc0 (Auth) |
+| T-03 | Agregar RabbitMQ a `compose.yaml` con archivo de definiciones (*exchange*, colas y cola de mensajes fallidos) | `infrastructure` | @Maple-M136279841 |
+| T-04 | 🟡 Script de inicialización de PostgreSQL: esquemas `auth`, `core`, `files` y `reports` con un usuario por servicio (D-13) ✅; falta que Auth deje de conectarse con el superusuario y quite `CREATE SCHEMA` de su migración | `database` ✅, `auth` ⬜ | @Maple-M136279841, @tuzc0 (Auth) |
+| T-05 | ✅ `healthcheck` de Mailpit y MinIO; creación del *bucket* al iniciar | `infrastructure` | @Maple-M136279841 |
 | T-06 | Auth: eliminar los archivos vacíos `src/routes/health.rs` y `src/handlers/` o moverles el código de salud; actualizar la estructura del README | `auth` | @tuzc0 |
 | T-07 | CI con GitHub Actions: compilar, formatear y probar cada módulo en cada PR, empezando por Auth | `.github` | Por asignar |
-| T-08 | Configurar la identidad de git dentro de la VM (el commit `d20dfd9` quedó firmado, not codeowner como `vagrant <vagrant@Nimbus-Box>`) y documentarlo en el README | `infrastructure` | @tuzc0 |
-| T-09 | Verificar que el stack completo (3–4.5 GB estimados más los servicios) cabe en la VM de 6 GB; si no, ajustar perfiles o memoria | `infrastructure` | @tuzc0 |
+| T-08 | Configurar la identidad de git dentro de la VM (el commit `d20dfd9` quedó firmado, not codeowner como `vagrant <vagrant@Nimbus-Box>`) y documentarlo en el README | `infrastructure` | @Maple-M136279841 |
+| T-09 | Verificar que el stack completo (3–4.5 GB estimados más los servicios) cabe en la VM de 6 GB; si no, ajustar perfiles o memoria | `infrastructure` | @Maple-M136279841 |
 | T-10 | Inicializar `services/reports/` cuando se decida su lenguaje | `reports` | @roluva |
 | T-11 | Crear el tablero de GitHub Projects con un *issue* por caso de uso del MVP | — | Por asignar |
 | T-12 | Actualizar el documento de diseño (4+1) con D-01, D-04, D-05 y D-13, que cambian respecto a la AR02 | `docs` | Por asignar |

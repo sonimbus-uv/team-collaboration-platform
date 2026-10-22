@@ -114,7 +114,7 @@ Equipo anfitrión
             │   ├── redis
             │   └── mailpit
             ├── Perfil messaging
-            │   └── cassandra (se reemplaza por scylladb, T-01)
+            │   └── scylladb
             ├── Perfil storage
             │   └── minio
             └── Pendientes
@@ -756,7 +756,7 @@ Servicios opcionales mediante perfiles:
 
 ```text
 messaging:
-  scylladb   (hoy cassandra; cambio pendiente T-01)
+  scylladb
 
 storage:
   minio
