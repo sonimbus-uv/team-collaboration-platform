@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub token_issuer: Arc<auth_service::tokens::issuer::AccessTokenIssuer>,
     pub pool: PgPool,
     pub auth_service: AuthService,
     pub email_verification_service: EmailVerificationService,

@@ -3,7 +3,7 @@
   "info": {
     "title": "Sonimbus Auth: sesiones y JWKS",
     "version": "0.1.0",
-    "description": "Diseño Refs #35; no implementado. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo y pendientes en #14. Rutas de sesión propuestas; ver ../auth-session-flows.md y ../token-profile.md. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
+    "description": "Refs #35: JWKS implementado; login, refresh y logout permanecen como diseño. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo y pendientes en #14. Rutas de sesión propuestas; ver ../auth-session-flows.md y ../token-profile.md. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
   },
   "servers": [
     {
@@ -679,6 +679,26 @@
                   "const": "no-store"
                 },
                 "description": "no-store"
+              }
+            }
+          }
+        },
+        "description": "Snapshot público inmutable validado al arrancar. No consume presupuestos de registro, verificación, reenvío o destinatario. Sin ETag/Last-Modified/304 acordados; devuelve representación completa."
+      },
+      "head": {
+        "operationId": "jwksHead",
+        "security": [],
+        "description": "Mismos encabezados de GET, sin cuerpo.",
+        "responses": {
+          "200": {
+            "description": "Metadatos de JWKS sin cuerpo",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "public, max-age=300, must-revalidate"
+                },
+                "description": "public, max-age=300, must-revalidate"
               }
             }
           }

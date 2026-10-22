@@ -18,6 +18,8 @@ mod routes;
 mod security;
 mod services;
 mod state;
+#[cfg(test)]
+mod token_test_support;
 mod validators;
 
 use std::sync::Arc;
@@ -42,6 +44,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
+    // Fail before opening databases or serving requests; never generate a fallback key.
+    let token_issuer = Arc::new(auth_service::tokens::issuer::AccessTokenIssuer::load(
+        config.tokens.clone(),
+    )?);
     let auth_rate_limiter = Arc::new(
         auth_rate_limiter::AuthRateLimiter::from_config(&config)
             .map_err(|_| anyhow::anyhow!("Invalid Auth rate limiter configuration"))?,
@@ -83,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let state = AppState {
+        token_issuer,
         pool,
         auth_service,
         email_verification_service,

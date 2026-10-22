@@ -1,5 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
+mod jwks;
+
 use axum::{
     extract::{ConnectInfo, Request, State},
     http::{header::RETRY_AFTER, Method, StatusCode},
@@ -26,6 +28,7 @@ struct HealthResponse {
 }
 
 pub fn router(state: AppState) -> Router {
+    let public_keys = jwks::router(state.token_issuer.clone());
     let limiter = state.auth_rate_limiter.clone();
 
     let auth_routes = Router::new()
@@ -46,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health/db", get(health_db))
         .route("/health/redis", get(health_redis))
         .merge(auth_routes)
+        .merge(public_keys)
         .with_state(state)
 }
 
