@@ -25,6 +25,7 @@ Una decisión que cambia la arquitectura, que tiene alternativas serias o que es
 | D-13 | PostgreSQL: una base de datos con un esquema y un usuario por servicio | Aceptada | 2026-10-07 | — |
 | D-14 | Desarrollo en VM Vagrant; expo en Ubuntu nativo | Aceptada | 2026-10-07 | [ADR-006](ADR-006-vagrant-docker-compose.md) |
 | D-15 | VoiceService (en Core) emite los tokens de LiveKit | Aceptada | 2026-10 | — |
+| D-16 | Sesiones absolutas de 20 días, refresh rotativo y comprobación privada de sesión | Confirmada por solicitante; revisión del equipo pendiente | 2026-10-22 | [ADR-007](ADR-007-auth-sessions.md) |
 
 ## Detalle
 
@@ -127,7 +128,7 @@ Se resuelven mediante issue o PoC y se agregan a la tabla anterior al cerrarse.
 |---|---|---|
 | Transferencia de archivos | gRPC con streaming frente a REST con subida por partes y `Range`. PoC: 50 MB por bloques, de JavaFX a Elixir pasando por Nginx | @Maple-M136279841 |
 | Lenguaje de Report Service | Propuesta: Elixir | @roluva |
-| Tokens | Vigencia del token de acceso y del de renovación; rotación del de renovación en cada uso; almacenamiento seguro en JavaFX y Flutter | @tuzc0 |
+| Sesiones: pendientes de D-16 | Llavero no disponible; parámetros operativos propuestos; compromiso de claves; integración Files y PoC Rust–Elixir. Vigencias, rotación y persistencia ya definidas en ADR-007 | @tuzc0 y responsables consumidores |
 | Google OAuth en escritorio | Propuesta: redirección a *loopback* con PKCE; credenciales en Google Cloud Console | @tuzc0 |
 | Catálogo de eventos de RabbitMQ | Nombre, productor, consumidores y contenido de cada evento | Cada productor |
 | Valores concretos | Longitud máxima de mensaje; tamaño y tipos de archivo; caducidad de códigos; política de contraseñas; intentos fallidos antes de bloquear; tamaño de página del historial; rango máximo de reportes; valores por defecto de invitaciones | Dueño de cada servicio |
