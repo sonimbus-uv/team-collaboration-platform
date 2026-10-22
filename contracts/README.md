@@ -10,6 +10,11 @@ Acuerdos entre los servicios y los clientes. Es el lugar donde se coordinan los 
 
 ## Reglas
 
+Entrega de diseño #35: [perfil de tokens/JWKS](token-profile.md),
+[flujos públicos](auth-session-flows.md), [comprobación interna](session-checks.md)
+y [session.revoked](events/session.revoked.md). Contratos por revisar, no capacidades
+ya desplegadas. La API privada Auth se especifica aparte de la pública.
+
 - Un cambio de contrato va en su propio PR, antes de implementarlo en el servicio o en los clientes.
 - Todo cambio incompatible incrementa la versión del contrato o del evento.
 - El PR debe indicar qué clientes y servicios se ven afectados.

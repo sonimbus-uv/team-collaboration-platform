@@ -20,6 +20,7 @@ Formato de nombre: `<recurso>.<evento>` (por ejemplo, `message.created`). Cada e
 
 | Evento | Productor | Consumidores | Estado |
 |---|---|---|---|
+| [`session.revoked` v1](session.revoked.md) | Auth | Core, Files | Diseño #35; implementación e integración pendientes |
 | `user.updated` | Auth | Core, Files, Reports | Por definir |
 | `message.created` | Core | Reports | Por definir |
 | `task.updated` | Core | Reports | Por definir |
