@@ -17,4 +17,21 @@ Punto único de entrada para los clientes: enruta las peticiones REST y las cone
 
 ## Estado
 
-Sin configuración. El primer PR agrega `nginx.conf` y el servicio en Compose.
+La configuración actual enruta registro, verificación, reenvío y health de Auth,
+con presupuestos públicos por IP y registros sin credenciales ni query sensible.
+
+La segunda entrega de #35 agrega la ruta exacta `/.well-known/jwks.json` para
+GET/HEAD público. Conserva el `Cache-Control` de Auth (300 segundos), sin consumir
+presupuestos de registro/verificación/reenvío. No se modifica firewall ni acceso
+directo a Auth. La configuración actual escucha HTTP de desarrollo; no configura
+certificados HTTPS de producción.
+
+Prueba aislada de configuración y enrutamiento, con Nginx instalado:
+
+```sh
+python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
+```
+
+Ejecutar desde la raíz. Usa configuración temporal, backend stub y loopback;
+comprueba GET/HEAD, caché, límites existentes y 404. No demuestra integración
+con un Auth conectado a PostgreSQL/Redis. Ver [operación de claves](../../services/auth/TOKENS.md).

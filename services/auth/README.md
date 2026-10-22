@@ -52,10 +52,16 @@ Actualmente cuenta con:
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
 - Rate limiting distribuido con Redis por operación, IP y destinatario.
 - Protección del gateway con Nginx, firewall persistente y registros seguros.
+- Componente de emisión JWT Ed25519 con contexto de sesión validado y claves cargadas desde archivos.
+- Endpoint público `GET/HEAD /.well-known/jwks.json`, con caché de cinco minutos y claves retenidas para rotación.
 
 Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.
 
 Ver [rate limiting, configuración y diagnóstico](RATE_LIMITING.md).
+
+Ver [firma JWT, configuración obligatoria de claves, JWKS y rotación](TOKENS.md).
+Auth requiere archivos de claves aprovisionados explícitamente para arrancar;
+copiar `.env.example` por sí solo no es suficiente. No hay generación automática.
 
 Pendiente:
 
@@ -63,8 +69,8 @@ Pendiente:
 - Refresh tokens.
 - Logout.
 - Recuperación de contraseña.
-- Integración de Redis con la gestión de sesiones.
-- Emisión de tokens firmados y *endpoint* de la clave pública.
+- Gestión de sesiones autoritativa en PostgreSQL y comprobación privada según D-16.
+- Integración del emisor con login/refresh y PoC de verificación Rust–Elixir.
 - Inicio de sesión con Google.
 - Perfil (nombre visible y foto predefinida) y evento `user.updated`.
 - Límite de intentos fallidos.

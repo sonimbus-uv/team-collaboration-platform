@@ -1,8 +1,14 @@
 # Plan de implementación y pruebas de sesiones
 
 Primera entrega documental, 2026-10-22. Refs #35.
+Actualización de la segunda entrega: componente de firma y endpoint JWKS con
+gateway implementados; configuración, rotación y validaciones se documentan en
+[TOKENS.md](../services/auth/TOKENS.md). La inspección y secuencia siguientes
+conservan el contexto de la primera entrega. #17 continúa siendo previo a login;
+CA-03 e integración Rust–Elixir permanecen pendientes.
 [ADR-007](decisions/ADR-007-auth-sessions.md), [contratos](../contracts/README.md).
-No habilita endpoints ni modifica migraciones, servicios, clientes o gateway.
+La primera entrega fue documental. La segunda implementa únicamente firma/JWKS
+y su exposición en gateway, sin sesiones ni cambios de esquema.
 
 ## Estado contrastado
 
