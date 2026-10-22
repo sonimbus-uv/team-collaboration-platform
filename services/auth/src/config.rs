@@ -8,6 +8,7 @@ pub enum EmailProvider {
 }
 
 pub struct Config {
+    pub tokens: auth_service::tokens::config::TokenConfig,
     pub server_addr: String,
     pub database_url: String,
     pub database_max_connections: u32,
@@ -80,6 +81,7 @@ impl Config {
             .context("DATABASE_MAX_CONNECTIONS must be a valid u32")?;
 
         Ok(Self {
+            tokens: auth_service::tokens::config::TokenConfig::from_env()?,
             server_addr,
             trusted_proxy_ips,
             recipient_hmac_secret,
