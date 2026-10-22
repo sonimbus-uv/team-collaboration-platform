@@ -1,6 +1,6 @@
 # Infraestructura
 
-**Responsable principal:** `@tuzc0`
+**Responsable principal:** `@Maple-M136279841` (desde el 2026-10-21; antes `@tuzc0`)
 
 ## Responsabilidad
 
@@ -13,7 +13,32 @@ Entorno de desarrollo reproducible y despliegue de los servicios de apoyo:
 
 ## Estado
 
-`compose.yaml` levanta hoy PostgreSQL, Redis, Mailpit, Cassandra (perfil `messaging`) y MinIO (perfil `storage`). Lo pendiente está en [`docs/PLAN.md`](../docs/PLAN.md#tareas-abiertas): cambiar Cassandra por ScyllaDB (T-01), alinear los `.env.example` (T-02), agregar RabbitMQ (T-03), esquemas por servicio (T-04), *health checks* (T-05), Nginx y LiveKit.
+`compose.yaml` levanta hoy:
+
+| Servicio | Inicio | Notas |
+|---|---|---|
+| `postgres` | Predeterminado | PostgreSQL 17 |
+| `postgres-init` | Predeterminado | Se ejecuta y termina: esquemas y usuarios por servicio ([`database/postgres/`](../database/postgres/), T-04) |
+| `redis` | Predeterminado | Con contraseña y AOF |
+| `mailpit` | Predeterminado | Con *health check* |
+| `nginx` | Predeterminado | Gateway de Auth (`@tuzc0`) |
+| `scylladb` | Perfil `messaging` | 1 *shard*, `SCYLLA_MEMORY` (750 MB por defecto), modo desarrollo (T-01) |
+| `minio` | Perfil `storage` | Con *health check* |
+| `minio-init` | Perfil `storage` | Se ejecuta y termina: crea `MINIO_BUCKET` (T-05) |
+
+La VM además fija `fs.aio-max-nr` para ScyllaDB e instala Erlang/OTP y Elixir con `mise` según [`.tool-versions`](../.tool-versions).
+
+`vagrant provision` agrega al `.env` existente las variables nuevas de `.env.example` sin cambiar las que ya tiene; revisa los valores `change_this_*` que agregue.
+
+### Al pasar de Cassandra a ScyllaDB
+
+El volumen anterior ya no se usa. Para liberar el espacio dentro de la VM:
+
+```bash
+docker volume rm team-collaboration-platform_cassandra_data
+```
+
+Pendiente ([`docs/PLAN.md`](../docs/PLAN.md#tareas-abiertas)): RabbitMQ (T-03), *keyspace* de ScyllaDB creado al iniciar, medición de memoria (T-09), Nginx completo y LiveKit.
 
 ## Fuera de alcance
 

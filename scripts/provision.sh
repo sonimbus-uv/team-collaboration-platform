@@ -10,6 +10,7 @@ readonly COMPOSE_FILE="${INFRA_DIR}/compose.yaml"
 readonly ENV_FILE="${INFRA_DIR}/.env"
 readonly ENV_EXAMPLE_FILE="${INFRA_DIR}/.env.example"
 readonly VM_USER="vagrant"
+readonly TOOL_VERSIONS_FILE="${PROJECT_DIR}/.tool-versions"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$1"
@@ -39,7 +40,14 @@ apt-get install -y --no-install-recommends \
   net-tools \
   pkg-config \
   nftables \
-  unzip
+  unzip \
+  inotify-tools \
+  postgresql-client
+
+# ScyllaDB usa Linux AIO; el límite por defecto (65536) se agota con facilidad.
+log "Ajustando fs.aio-max-nr para ScyllaDB"
+printf 'fs.aio-max-nr = 1048576\n' > /etc/sysctl.d/60-scylladb.conf
+sysctl --load /etc/sysctl.d/60-scylladb.conf
 
 if ! command -v docker >/dev/null 2>&1 || \
    ! docker compose version >/dev/null 2>&1; then
@@ -135,6 +143,40 @@ if id "${VM_USER}" >/dev/null 2>&1; then
   sudo -u "${VM_USER}" -H "/home/${VM_USER}/.cargo/bin/cargo" --version
 fi
 
+if id "${VM_USER}" >/dev/null 2>&1; then
+  # Erlang/OTP y Elixir con las versiones fijadas en .tool-versions (Core y
+  # Files). mise usa binarios precompilados de Erlang para Ubuntu 24.04.
+  if ! command -v mise >/dev/null 2>&1; then
+    log "Instalando mise"
+    apt-get install -y --no-install-recommends extrepo
+    extrepo enable mise
+    apt-get update -y
+    apt-get install -y mise
+  else
+    log "mise ya está instalado; se conserva la instalación actual"
+  fi
+
+  [[ -f "${TOOL_VERSIONS_FILE}" ]] || fail "No se encontró ${TOOL_VERSIONS_FILE}."
+
+  log "Instalando Erlang/OTP y Elixir según .tool-versions"
+  sudo -u "${VM_USER}" -H bash -c "
+    set -Eeuo pipefail
+    cd '${PROJECT_DIR}'
+    mise trust '${TOOL_VERSIONS_FILE}'
+    mise install --yes
+    mise exec -- mix local.hex --force --if-missing
+    mise exec -- mix local.rebar --force --if-missing
+    mise exec -- elixir --version
+  "
+
+  readonly BASHRC="/home/${VM_USER}/.bashrc"
+  if ! grep -q 'mise activate bash' "${BASHRC}" 2>/dev/null; then
+    printf '\n# Versiones de .tool-versions (Erlang, Elixir)\neval "$(mise activate bash)"\n' \
+      >> "${BASHRC}"
+    chown "${VM_USER}:${VM_USER}" "${BASHRC}"
+  fi
+fi
+
 [[ -f "${COMPOSE_FILE}" ]] || fail "No se encontró ${COMPOSE_FILE}."
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -147,6 +189,19 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   chown "${VM_USER}:${VM_USER}" "${ENV_FILE}"
 else
   log "Se conservará el archivo infrastructure/.env existente"
+
+  # Agrega las variables nuevas de .env.example sin tocar las existentes.
+  added=0
+  while IFS= read -r line; do
+    [[ "${line}" =~ ^([A-Z][A-Z0-9_]*)= ]] || continue
+    key="${BASH_REMATCH[1]}"
+    if ! grep -q "^${key}=" "${ENV_FILE}"; then
+      [[ "${added}" -eq 0 ]] && printf '\n# Agregadas por provision.sh desde .env.example\n' >> "${ENV_FILE}"
+      printf '%s\n' "${line}" >> "${ENV_FILE}"
+      log "Variable agregada a infrastructure/.env: ${key} (revisa su valor)"
+      added=$((added + 1))
+    fi
+  done < "${ENV_EXAMPLE_FILE}"
 fi
 
 log "Validando Docker Compose"
@@ -155,11 +210,20 @@ docker compose \
   -f "${COMPOSE_FILE}" \
   config --quiet
 
-log "Iniciando PostgreSQL, Redis y Mailpit"
+log "Iniciando PostgreSQL (con esquemas por servicio), Redis, Mailpit y el gateway"
 docker compose \
   --env-file "${ENV_FILE}" \
   -f "${COMPOSE_FILE}" \
   up -d
+
+log "Comprobando los esquemas por servicio de PostgreSQL"
+init_exit="$(
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" wait postgres-init
+)"
+[[ "${init_exit}" == "0" ]] || {
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs postgres-init >&2
+  fail "postgres-init terminó con código ${init_exit}."
+}
 
 log "Comprobando la IP del gateway"
 nginx_id="$(
@@ -183,6 +247,6 @@ docker compose \
 printf '\nProvisionamiento completado.\n'
 printf 'Servicios base: PostgreSQL, Redis y Mailpit.\n'
 printf 'Ejecuta primero: cd /vagrant/infrastructure\n'
-printf 'Cassandra: docker compose --profile messaging up -d\n'
+printf 'ScyllaDB:  docker compose --profile messaging up -d\n'
 printf 'MinIO:     docker compose --profile storage up -d\n'
 printf 'Todos:     docker compose --profile messaging --profile storage up -d\n'
