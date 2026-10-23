@@ -17,6 +17,11 @@ Punto único de entrada para los clientes: enruta las peticiones REST y las cone
 
 ## Estado
 
+La tercera entrega agrega POST `/api/v1/auth/login`, `/api/v1/auth/refresh` y
+`/api/v1/auth/logout`, con presupuestos edge separados y Problem Details estable.
+El login permanece deshabilitado por defecto en Auth mientras #17 siga abierto.
+Ver [configuración y límites propuestos](../../services/auth/SESSIONS.md).
+
 La configuración actual enruta registro, verificación, reenvío y health de Auth,
 con presupuestos públicos por IP y registros sin credenciales ni query sensible.
 

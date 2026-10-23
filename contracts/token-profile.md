@@ -1,8 +1,8 @@
 # Perfil de tokens y JWKS v1
 
 Diseño de [D-16 / ADR-007](../docs/decisions/ADR-007-auth-sessions.md), Refs #35.
-Estado de la segunda entrega: emisor Rust y JWKS implementados en Auth; login,
-refresh, sesiones e integración de consumidores siguen pendientes. Ver
+Estado de la tercera entrega: emisor/JWKS y sesiones públicas implementados;
+login deshabilitado por defecto por #17. Integración de consumidores pendiente. Ver
 [operación y validación](../services/auth/TOKENS.md). Afecta Auth, Core, Files
 y ambos clientes. Los identificadores y tiempos de ejemplo son ficticios;
 no hay firmas ni secretos utilizables.

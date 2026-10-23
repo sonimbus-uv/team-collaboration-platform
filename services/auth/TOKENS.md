@@ -1,6 +1,8 @@
 # Firma de access tokens y JWKS
 
-Segunda entrega de #35. Sigue [ADR-007 / D-16](../../docs/decisions/ADR-007-auth-sessions.md)
+Segunda entrega de #35; su estado histórico se describe debajo. La tercera entrega
+integra el emisor con [sesiones públicas](SESSIONS.md), con login deshabilitado
+por #17. Sigue [ADR-007 / D-16](../../docs/decisions/ADR-007-auth-sessions.md)
 y el [perfil](../../contracts/token-profile.md). Implementa carga de claves,
 emisión como componente Rust y publicación pública. No hay login, refresh,
 logout, consulta de sesiones, outbox o RabbitMQ. La PoC Rust–Elixir sigue pendiente.

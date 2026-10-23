@@ -1,8 +1,9 @@
 # Login, refresh y logout
 
 Refs #35. [OpenAPI público](openapi/auth.yaml), [perfil](token-profile.md) y
-[ADR](../docs/decisions/ADR-007-auth-sessions.md). Contrato de diseño, no rutas
-actualmente disponibles. Propuesta de rutas nuevas bajo `/api/v1/auth`; no
+[ADR](../docs/decisions/ADR-007-auth-sessions.md). Implementado en la tercera entrega,
+con login deshabilitado por defecto mientras #17 siga abierto; ver
+[operación y limitaciones](../services/auth/SESSIONS.md). Rutas bajo `/api/v1/auth`; no
 renombra `/auth/register`, `/auth/verify-email` ni `/auth/resend-verification`.
 La convergencia del prefijo y contrato de registro/verificación queda en #14.
 

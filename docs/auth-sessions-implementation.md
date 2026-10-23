@@ -1,5 +1,10 @@
 # Plan de implementación y pruebas de sesiones
 
+Tercera entrega: sesiones transaccionales y rutas públicas implementadas, con
+login deshabilitado por defecto mientras #17 siga sin mitigación aprobada.
+Incluye intención de outbox; publicación, API interna e integración siguen
+pendientes. Ver [SESSIONS.md](../services/auth/SESSIONS.md) para estado y validación.
+
 Primera entrega documental, 2026-10-22. Refs #35.
 Actualización de la segunda entrega: componente de firma y endpoint JWKS con
 gateway implementados; configuración, rotación y validaciones se documentan en

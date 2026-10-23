@@ -54,6 +54,8 @@ Actualmente cuenta con:
 - Protección del gateway con Nginx, firewall persistente y registros seguros.
 - Componente de emisión JWT Ed25519 con contexto de sesión validado y claves cargadas desde archivos.
 - Endpoint público `GET/HEAD /.well-known/jwks.json`, con caché de cinco minutos y claves retenidas para rotación.
+- Sesiones transaccionales, rotación estricta de refresh y logout con intención de revocación en outbox.
+- Rutas `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`; login deshabilitado por defecto por #17.
 
 Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.
 
@@ -63,17 +65,17 @@ Ver [firma JWT, configuración obligatoria de claves, JWKS y rotación](TOKENS.m
 Auth requiere archivos de claves aprovisionados explícitamente para arrancar;
 copiar `.env.example` por sí solo no es suficiente. No hay generación automática.
 
+Ver [sesiones, bloqueo de habilitación por #17, transacciones y pruebas](SESSIONS.md).
+
 Pendiente:
 
-- Login.
-- Refresh tokens.
-- Logout.
+- Resolver #17 y aprobar su mitigación antes de habilitar login fuera de pruebas.
 - Recuperación de contraseña.
-- Gestión de sesiones autoritativa en PostgreSQL y comprobación privada según D-16.
-- Integración del emisor con login/refresh y PoC de verificación Rust–Elixir.
+- Comprobación privada de sesiones según D-16 y PoC de verificación Rust–Elixir.
+- Publicación/consumo de outbox, microcaché e integración con consumidores.
 - Inicio de sesión con Google.
 - Perfil (nombre visible y foto predefinida) y evento `user.updated`.
-- Límite de intentos fallidos.
+- Acordar parámetros definitivos de intentos fallidos; existen presupuestos iniciales por IP y cuenta.
 - Usuario de base de datos propio con permisos solo sobre el esquema `auth` (D-13, tarea T-04 en [`docs/PLAN.md`](../../docs/PLAN.md)).
 - Limpiar los archivos vacíos `src/routes/health.rs` y `src/handlers/` (T-06).
 

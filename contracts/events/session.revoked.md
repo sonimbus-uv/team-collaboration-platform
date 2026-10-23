@@ -1,6 +1,7 @@
 # session.revoked v1
 
-Refs #35. Productor Auth; consumidores Core y Files. Diseño por implementar.
+Refs #35. Productor Auth; consumidores Core y Files. Intención transaccional
+implementada en fase 3; publicación y consumo todavía pendientes.
 [JSON Schema](session.revoked.v1.schema.json), [ADR](../../docs/decisions/ADR-007-auth-sessions.md).
 Envelope versionado según el catálogo, exchange topic `sonimbus.events`, routing
 key `session.revoked`. `event_id` UUID estable para todos los reintentos;
@@ -27,14 +28,16 @@ Motivos exactamente compatibles con `sessions_revoke_reason_chk`: `logout`,
 `superseded`, `expired`, `refresh_reuse`, `password_changed`, `admin`. Bloqueo,
 suspensión o baja revocan sesiones como `admin`; no introducir nuevos motivos sin
 evolucionar esquema/contrato. Expiración se rechaza por reloj aunque el job que
-la marque y publique `expired` no haya corrido. No datos personales, tokens ni hashes.
+la marque y publique `expired` no haya corrido. No correo, contraseña, tokens ni hashes;
+los UUID de cuenta/sesión son los identificadores mínimos del contrato.
 
 ## Producción y recuperación
 
 Cada transición a revocada y su evento pendiente se guardan en una transacción
 PostgreSQL. Debe abarcar logout, replay, reemplazo en `auth.open_session`, cambios
-de contraseña, administración y limpieza. La outbox aún no existe: migración y
-adaptación de la función SQL son dependencias futuras. No publicar antes de commit.
+de contraseña, administración y limpieza. La persistencia mínima de outbox y la
+adaptación de la función SQL están implementadas mediante migraciones nuevas en
+fase 3. No publicar antes de commit.
 
 Worker publica mensajes persistentes con publisher confirms y detección de
 mensajes no enrutados; marca enviado solo tras confirmación y enrutamiento.
