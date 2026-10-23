@@ -53,11 +53,17 @@ impl AccessTokenIssuer {
     }
 
     pub fn issue(&self, session: &SessionContext) -> anyhow::Result<String> {
+        self.issue_with_lifetime(session).map(|(token, _)| token)
+    }
+
+    /// Return the lifetime from the same issuance clock; callers need not decode a JWT.
+    pub fn issue_with_lifetime(&self, session: &SessionContext) -> anyhow::Result<(String, u64)> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| anyhow::anyhow!("System clock is before Unix epoch"))?
             .as_secs();
-        self.issue_at(session, now)
+        let exp = session.access_expiration(now)?;
+        Ok((self.issue_at(session, now)?, exp - now))
     }
 
     fn issue_at(&self, session: &SessionContext, now: u64) -> anyhow::Result<String> {

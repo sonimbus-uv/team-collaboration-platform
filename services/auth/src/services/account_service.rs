@@ -25,7 +25,37 @@ pub enum RegisterError {
     Worker(tokio::task::JoinError),
 }
 
+#[derive(Debug)]
+pub enum PasswordCheckError {
+    Busy,
+    Failed,
+}
+
 impl AuthService {
+    pub async fn check_password(
+        &self,
+        password: String,
+        expected: Option<String>,
+    ) -> Result<bool, PasswordCheckError> {
+        let permit = self
+            .hash_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| PasswordCheckError::Busy)?;
+        let hasher = self.password_hasher.clone();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            let password = zeroize::Zeroizing::new(password);
+            match expected {
+                Some(hash) => hasher.verify_password(&password, &hash),
+                // Spend one Argon2 operation for a missing account as well.
+                None => hasher.hash_password(&password).map(|_| false),
+            }
+        })
+        .await
+        .map_err(|_| PasswordCheckError::Failed)?
+        .map_err(|_| PasswordCheckError::Failed)
+    }
     pub fn new(
         accounts_repository: AccountsRepository,
         password_hasher: Arc<dyn PasswordHasher>,
