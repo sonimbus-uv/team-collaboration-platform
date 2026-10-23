@@ -126,3 +126,28 @@ yarn-error.log*
 nbproject/
 nbactions.xml
 nb-configuration.xml
+
+# ==================================================
+# Client movile
+# ==================================================
+
+
+*.pyc
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.pub-cache/
+.pub/
+app.*.symbols
+app.*.map.json
+.widget_preview/
+
+/android/app/debug
+/android/app/profile
+/android/app/release
