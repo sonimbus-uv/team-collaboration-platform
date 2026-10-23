@@ -31,6 +31,22 @@ pub fn router(state: AppState) -> Router {
     let public_keys = jwks::router(state.token_issuer.clone());
     let limiter = state.auth_rate_limiter.clone();
 
+    let session_routes = Router::new()
+        .route("/api/v1/auth/login", post(crate::handlers::sessions::login))
+        .route(
+            "/api/v1/auth/refresh",
+            post(crate::handlers::sessions::refresh),
+        )
+        .route(
+            "/api/v1/auth/logout",
+            post(crate::handlers::sessions::logout),
+        )
+        .layer(axum::extract::DefaultBodyLimit::max(4096))
+        .route_layer(middleware::from_fn_with_state(
+            limiter.clone(),
+            limit_auth_requests,
+        ));
+
     let auth_routes = Router::new()
         .route("/auth/register", post(auth::register))
         .route(
@@ -49,6 +65,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health/db", get(health_db))
         .route("/health/redis", get(health_redis))
         .merge(auth_routes)
+        .merge(session_routes)
         .merge(public_keys)
         .with_state(state)
 }
@@ -63,6 +80,14 @@ async fn limit_auth_requests(
         return next.run(request).await;
     };
 
+    let respond = |browser, error| {
+        if operation.is_session() {
+            crate::handlers::sessions::protection(error)
+        } else {
+            protection_error_response(browser, error)
+        }
+    };
+
     let browser_verification =
         request.method() == Method::GET && operation == AuthOperation::Verify;
 
@@ -73,13 +98,13 @@ async fn limit_auth_requests(
     else {
         tracing::error!("Connection information missing for protected Auth request");
 
-        return protection_error_response(browser_verification, ApiError::RateLimitUnavailable);
+        return respond(browser_verification, ApiError::RateLimitUnavailable);
     };
 
     let client_ip = match resolve_client_ip(peer, request.headers(), limiter.trusted_proxy_ips()) {
         Ok(ip) => ip,
         Err(_) => {
-            return protection_error_response(
+            return respond(
                 browser_verification,
                 ApiError::InternalServerError(
                     "Missing or invalid client address from trusted proxy".into(),
@@ -90,7 +115,7 @@ async fn limit_auth_requests(
 
     match limiter.check_ip(operation, client_ip).await {
         Ok(RateLimitDecision::Allowed) => next.run(request).await,
-        Ok(RateLimitDecision::Limited { retry_after_secs }) => protection_error_response(
+        Ok(RateLimitDecision::Limited { retry_after_secs }) => respond(
             browser_verification,
             ApiError::RateLimited { retry_after_secs },
         ),
@@ -107,7 +132,7 @@ async fn limit_auth_requests(
                 "Auth rate limit check unavailable"
             );
 
-            protection_error_response(browser_verification, ApiError::RateLimitUnavailable)
+            respond(browser_verification, ApiError::RateLimitUnavailable)
         }
     }
 }

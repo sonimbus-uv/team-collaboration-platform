@@ -17,6 +17,8 @@ mod repositories;
 mod routes;
 mod security;
 mod services;
+#[cfg(test)]
+mod session_tests;
 mod state;
 #[cfg(test)]
 mod token_test_support;
@@ -89,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let state = AppState {
+        login_enabled: config.login_enabled,
         token_issuer,
         pool,
         auth_service,

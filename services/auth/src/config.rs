@@ -8,6 +8,11 @@ pub enum EmailProvider {
 }
 
 pub struct Config {
+    pub login_enabled: bool,
+    pub login_ip_policy: BucketPolicy,
+    pub refresh_ip_policy: BucketPolicy,
+    pub logout_ip_policy: BucketPolicy,
+    pub login_account_policy: BucketPolicy,
     pub tokens: auth_service::tokens::config::TokenConfig,
     pub server_addr: String,
     pub database_url: String,
@@ -81,6 +86,15 @@ impl Config {
             .context("DATABASE_MAX_CONNECTIONS must be a valid u32")?;
 
         Ok(Self {
+            login_enabled: match env::var("AUTH_LOGIN_ENABLED").as_deref() {
+                Ok("true") => true,
+                Ok("false") | Err(env::VarError::NotPresent) => false,
+                _ => anyhow::bail!("AUTH_LOGIN_ENABLED must be true or false"),
+            },
+            login_ip_policy: bucket_policy_from_env("AUTH_LOGIN_IP", 6, 60)?,
+            refresh_ip_policy: bucket_policy_from_env("AUTH_REFRESH_IP", 30, 60)?,
+            logout_ip_policy: bucket_policy_from_env("AUTH_LOGOUT_IP", 30, 60)?,
+            login_account_policy: bucket_policy_from_env("AUTH_LOGIN_ACCOUNT", 10, 900)?,
             tokens: auth_service::tokens::config::TokenConfig::from_env()?,
             server_addr,
             trusted_proxy_ips,

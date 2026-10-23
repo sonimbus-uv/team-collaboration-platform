@@ -190,6 +190,7 @@ async fn redis_outage_keeps_real_verification_available(pool: PgPool) {
     let verification =
         EmailVerificationService::new(OneTimeTokensRepository::new(pool.clone()), sender);
     let app = crate::routes::router(AppState {
+        login_enabled: false,
         token_issuer: crate::token_test_support::issuer(),
         pool: pool.clone(),
         auth_service: AuthService::new(
@@ -263,6 +264,7 @@ async fn jwks_route_is_public_even_when_redis_and_database_are_unavailable() {
         Arc::new(FakeSender::default()),
     );
     let app = crate::routes::router(AppState {
+        login_enabled: false,
         token_issuer: crate::token_test_support::issuer(),
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
@@ -303,6 +305,7 @@ fn state(pool: PgPool, sender: Arc<FakeSender>) -> AppState {
     let redis_url = std::env::var("REDIS_URL").expect("Router integration tests require REDIS_URL");
 
     AppState {
+        login_enabled: false,
         token_issuer: crate::token_test_support::issuer(),
         auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
             redis_url,

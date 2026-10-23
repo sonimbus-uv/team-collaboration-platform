@@ -6,11 +6,17 @@ pub enum AuthOperation {
     Register,
     Resend,
     Verify,
+    Login,
+    Refresh,
+    Logout,
 }
 
 impl AuthOperation {
     pub fn from_request(method: &Method, path: &str) -> Option<Self> {
         match (method.as_str(), path) {
+            ("POST", "/api/v1/auth/login") => Some(Self::Login),
+            ("POST", "/api/v1/auth/refresh") => Some(Self::Refresh),
+            ("POST", "/api/v1/auth/logout") => Some(Self::Logout),
             ("POST", "/auth/register") => Some(Self::Register),
             ("POST", "/auth/resend-verification") => Some(Self::Resend),
             ("GET" | "POST", "/auth/verify-email") => Some(Self::Verify),
@@ -20,12 +26,19 @@ impl AuthOperation {
 
     pub fn ip_key(self, ip: IpAddr) -> String {
         let operation = match self {
+            Self::Login => "login",
+            Self::Refresh => "refresh",
+            Self::Logout => "logout",
             Self::Register => "register",
             Self::Resend => "resend",
             Self::Verify => "verify",
         };
 
         format!("auth:rl:v1:{operation}:ip:{ip}")
+    }
+
+    pub fn is_session(self) -> bool {
+        matches!(self, Self::Login | Self::Refresh | Self::Logout)
     }
 }
 

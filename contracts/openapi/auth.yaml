@@ -3,7 +3,7 @@
   "info": {
     "title": "Sonimbus Auth: sesiones y JWKS",
     "version": "0.1.0",
-    "description": "Refs #35: JWKS implementado; login, refresh y logout permanecen como diseño. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo y pendientes en #14. Rutas de sesión propuestas; ver ../auth-session-flows.md y ../token-profile.md. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
+    "description": "Refs #35: JWKS y sesiones públicas implementados; login deshabilitado por defecto por #17. API interna e integración pendientes. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo y pendientes en #14. Rutas de sesión propuestas; ver ../auth-session-flows.md y ../token-profile.md. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
   },
   "servers": [
     {
@@ -228,7 +228,7 @@
             }
           }
         },
-        "description": "Semántica normativa: ../auth-session-flows.md"
+        "description": "Login de contraseña. AUTH_LOGIN_ENABLED=false por defecto mientras #17 siga abierto: 503 auth-unavailable. Cuenta no habilitada y credenciales incorrectas: 401 genérico. Ver ../auth-session-flows.md y ../../services/auth/SESSIONS.md."
       }
     },
     "/api/v1/auth/refresh": {
@@ -448,7 +448,7 @@
             }
           }
         },
-        "description": "Semántica normativa: ../auth-session-flows.md"
+        "description": "Rotación estricta: reutilización revoca familia y confirma outbox antes de responder 401. Fallo COMMIT ambiguo: 500, requiere login, sin reintentos del refresh anterior."
       }
     },
     "/api/v1/auth/logout": {
@@ -621,7 +621,7 @@
             }
           }
         },
-        "description": "Semántica normativa: ../auth-session-flows.md"
+        "description": "Revoca familia identificada por refresh actual o consumido. 204 idempotente para desconocido o ya revocado. No afecta al otro tipo de cliente."
       }
     },
     "/.well-known/jwks.json": {
@@ -807,7 +807,8 @@
           },
           "password": {
             "type": "string",
-            "writeOnly": true
+            "writeOnly": true,
+            "maxLength": 128
           },
           "client_type": {
             "type": "string",

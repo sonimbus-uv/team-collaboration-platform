@@ -8,6 +8,14 @@ pub struct RecipientKey {
 }
 
 impl RecipientKey {
+    pub fn login_key(&self, email: &str) -> String {
+        let mut mac = self.template.clone();
+        mac.update(b"auth:login-account:v1\0");
+        mac.update(email.trim().to_lowercase().as_bytes());
+        let digest = mac.finalize().into_bytes();
+        let id: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("auth:rl:v1:login:account:{id}")
+    }
     pub fn new(secret: &[u8]) -> anyhow::Result<Self> {
         anyhow::ensure!(
             secret.len() >= 32,
@@ -47,6 +55,17 @@ mod tests {
             key.redis_key(" PERSON@Example.COM "),
             key.redis_key("person@example.com")
         );
+        assert_eq!(
+            key.login_key(" PERSON@Example.COM "),
+            key.login_key("person@example.com")
+        );
+        assert_ne!(
+            key.login_key("person@example.com"),
+            key.redis_key("person@example.com")
+        );
+        assert!(!key
+            .login_key("person@example.com")
+            .contains("person@example.com"));
     }
 
     #[test]
