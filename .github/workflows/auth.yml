@@ -50,9 +50,7 @@ jobs:
       - name: Check all targets
         run: cargo check --all-targets --locked
       - name: Clippy
-        run: |
-          cargo clippy --lib --locked -- -D warnings
-          cargo clippy --all-targets --locked
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Run all tests including Redis tests
         run: cargo test --locked -- --include-ignored
   gateway:

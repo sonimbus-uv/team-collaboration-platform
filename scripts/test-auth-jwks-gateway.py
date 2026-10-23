@@ -117,6 +117,16 @@ def main():
                 statuses = [request(port, "/auth/register", "POST")[0] for _ in range(16)]
                 assert 429 in statuses, "existing registration edge budget must remain enabled"
                 assert request(port, "/.well-known/jwks.json")[0] == 200
+                for operation in ["login", "refresh", "logout"]:
+                    path = f"/api/v1/auth/{operation}"
+                    # Stub 201 proves forwarding, not authentication semantics.
+                    assert request(port, path, "POST")[0] == 201
+                    outcomes = [request(port, path, "POST") for _ in range(24)]
+                    limited = [result for result in outcomes if result[0] == 429]
+                    assert limited, f"missing edge budget for {operation}"
+                    assert json.loads(limited[0][2])["type"] == "/problems/too-many-requests"
+                    assert limited[0][1]["Cache-Control"] == "no-store"
+                assert request(port, "/.well-known/jwks.json")[0] == 200
                 assert request(port, "/not-a-route")[0] == 404
                 print("PASS: nginx -t, public JWKS GET/HEAD, cache headers, isolated budgets and default 404")
             finally:
