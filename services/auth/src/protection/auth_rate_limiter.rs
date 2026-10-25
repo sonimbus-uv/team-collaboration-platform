@@ -4,9 +4,9 @@ use tokio::{sync::OnceCell, time::timeout};
 
 use crate::{
     config::Config,
-    rate_limit::{AuthOperation, BucketPolicy, RateLimitDecision},
-    recipient_key::RecipientKey,
-    redis_connection::{RedisConnection, RedisConnectionError},
+    infrastructure::redis_connection::{RedisConnection, RedisConnectionError},
+    protection::rate_limit::{AuthOperation, BucketPolicy, RateLimitDecision},
+    protection::recipient_key::RecipientKey,
 };
 
 pub struct AuthRateLimiter {

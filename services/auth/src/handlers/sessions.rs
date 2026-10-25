@@ -1,7 +1,7 @@
 use crate::{
     dto::sessions::{LoginRequest, RefreshRequest},
     error::ApiError,
-    rate_limit::RateLimitDecision,
+    protection::rate_limit::RateLimitDecision,
     services::session_service::SessionError,
     state::AppState,
 };

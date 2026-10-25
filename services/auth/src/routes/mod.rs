@@ -2,6 +2,15 @@ use std::{net::SocketAddr, sync::Arc};
 
 mod jwks;
 
+use crate::{
+    email::verification_page::{verification_page_response, verification_unavailable_page},
+    error::ApiError,
+    handlers::auth,
+    protection::auth_rate_limiter::AuthRateLimiter,
+    protection::client_ip::resolve_client_ip,
+    protection::rate_limit::{AuthOperation, RateLimitDecision},
+    state::AppState,
+};
 use axum::{
     extract::{ConnectInfo, Request, State},
     http::{header::RETRY_AFTER, Method, StatusCode},
@@ -11,16 +20,6 @@ use axum::{
     Json, Router,
 };
 use serde::Serialize;
-
-use crate::{
-    auth_rate_limiter::AuthRateLimiter,
-    client_ip::resolve_client_ip,
-    email::verification_page::{verification_page_response, verification_unavailable_page},
-    error::ApiError,
-    handlers::auth,
-    rate_limit::{AuthOperation, RateLimitDecision},
-    state::AppState,
-};
 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
@@ -246,7 +245,7 @@ mod tests {
         let app = protected_app(
             AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()).with_ip_policy_for_tests(
                 vec![peer.ip()],
-                crate::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
+                crate::protection::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
             ),
         );
         let response = app
@@ -288,7 +287,7 @@ mod tests {
             let app = protected_app(
                 AuthRateLimiter::for_tests(redis_url.clone()).with_ip_policy_for_tests(
                     if trusted { vec![peer.ip()] } else { vec![] },
-                    crate::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
+                    crate::protection::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
                 ),
             );
             for (client, expected) in [

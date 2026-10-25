@@ -6,7 +6,7 @@
 
 El Auth Service administra la identidad y el acceso de los usuarios del sistema.
 
-Incluye:
+El alcance funcional previsto incluye (no todo está implementado; ver Estado Actual):
 
 - Registro de cuentas (CU-01).
 - Verificación de correo (CU-02).
@@ -31,7 +31,7 @@ Ver la trazabilidad completa en [`docs/requirements/`](../../docs/requirements/R
 - PostgreSQL, esquema `auth` (D-13).
 - Argon2id para contraseñas.
 - EdDSA para tokens firmados.
-- Redis para sesiones, caché o rate limiting cuando corresponda.
+- Redis para rate limiting; las sesiones y los refresh se persisten en PostgreSQL.
 
 ## Estado Actual
 
@@ -45,13 +45,16 @@ Actualmente cuenta con:
 - Migración inicial del schema `auth`.
 - Endpoint `GET /health`.
 - Endpoint `GET /health/db` para verificar conexión con PostgreSQL.
+- Endpoint `GET /health/redis` para comprobar Redis con PING.
 - Manejo básico de errores HTTP con formato Problem Details.
 - Registro de cuentas con contraseña Argon2id y token de verificación atómicos.
 - Envío de verificación mediante Resend o Mailpit, confirmación y reenvío con cooldown.
 - Verificación desde el enlace del correo mediante GET con respuesta HTML, conservando POST con JSON para clientes móviles y de escritorio.
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
 - Rate limiting distribuido con Redis por operación, IP y destinatario.
-- Protección del gateway con Nginx, firewall persistente y registros seguros.
+- Configuración de Nginx y firewall persistente para proteger la entrada; los
+  registros del gateway omiten credenciales y query. Ver limitaciones de logs de
+  Auth en [RATE_LIMITING.md](RATE_LIMITING.md).
 - Componente de emisión JWT Ed25519 con contexto de sesión validado y claves cargadas desde archivos.
 - Endpoint público `GET/HEAD /.well-known/jwks.json`, con caché de cinco minutos y claves retenidas para rotación.
 - Sesiones transaccionales, rotación estricta de refresh y logout con intención de revocación en outbox.
@@ -67,6 +70,8 @@ copiar `.env.example` por sí solo no es suficiente. No hay generación automát
 
 Ver [sesiones, bloqueo de habilitación por #17, transacciones y pruebas](SESSIONS.md).
 
+Ver [revisión documental y evidencia de validación](VALIDATION.md).
+
 Pendiente:
 
 - Resolver #17 y aprobar su mitigación antes de habilitar login fuera de pruebas.
@@ -77,7 +82,6 @@ Pendiente:
 - Perfil (nombre visible y foto predefinida) y evento `user.updated`.
 - Acordar parámetros definitivos de intentos fallidos; existen presupuestos iniciales por IP y cuenta.
 - Usuario de base de datos propio con permisos solo sobre el esquema `auth` (D-13, tarea T-04 en [`docs/PLAN.md`](../../docs/PLAN.md)).
-- Limpiar los archivos vacíos `src/routes/health.rs` y `src/handlers/` (T-06).
 
 ## Estructura
 
@@ -87,16 +91,45 @@ services/auth/
 ├── Cargo.lock
 ├── .env.example
 ├── migrations/
-│   └── 0001_initial_auth_schema.sql
+│   └── ...
+├── tests/                # Integración externa: restricciones y outbox
 └── src/
     ├── main.rs
+    ├── lib.rs
     ├── config.rs
     ├── db.rs
     ├── error.rs
     ├── state.rs
-    └── routes/
-        └── mod.rs
+    ├── protection/       # IP del cliente, políticas y limitadores
+    │   ├── mod.rs
+    │   ├── auth_rate_limiter.rs
+    │   ├── client_ip.rs
+    │   ├── rate_limit.rs
+    │   ├── rate_limit.lua
+    │   └── recipient_key.rs
+    ├── infrastructure/
+    │   ├── mod.rs
+    │   └── redis_connection.rs
+    ├── tests/            # Pruebas internas del binario
+    │   ├── mod.rs
+    │   ├── registration.rs
+    │   ├── sessions.rs
+    │   └── token_support.rs
+    ├── dto/
+    ├── email/
+    ├── handlers/
+    ├── ports/
+    ├── providers/
+    ├── repositories/
+    ├── routes/
+    ├── security/
+    ├── services/
+    └── validators/
 ```
+
+Las pruebas unitarias pequeñas permanecen junto al código que verifican.
+`src/tests/` se compila solo con `cfg(test)` y conserva acceso a los módulos
+internos; `tests/`, fuera de `src`, contiene las pruebas de integración externas.
 
 ## Variables de Entorno
 
@@ -151,7 +184,7 @@ Inicia Mailpit desde la raíz del proyecto:
 docker compose -f infrastructure/compose.yaml up -d mailpit
 ```
 
-El código envía los correos al puerto SMTP **1025**, sin autenticación ni TLS.
+Con estos valores el código envía al puerto SMTP **1025**, sin autenticación ni TLS.
 Abre **http://localhost:8025** en el navegador para consultar los correos capturados.
 Si auth corre dentro de la red de Compose, utiliza `MAILPIT_SMTP_HOST=mailpit`.
 Reinicia auth después de cambiar el proveedor.
@@ -175,6 +208,12 @@ Para levantar PostgreSQL desde el archivo Compose del proyecto:
 ```bash
 docker compose -f infrastructure/compose.yaml up -d postgres
 ```
+
+Registro/reenvío requieren además Redis accesible al consumir presupuesto y el
+proveedor de correo configurado. Para desarrollo con Mailpit se pueden iniciar
+las dependencias juntas con `docker compose -f infrastructure/compose.yaml up -d
+postgres redis mailpit nginx`. Auth se ejecuta como proceso en el host de esa
+red de desarrollo; Compose actualmente no define un contenedor para Auth.
 
 Para verificar el estado del contenedor:
 
@@ -252,9 +291,9 @@ Ejemplo:
 ```json
 {
   "type": "about:blank",
-  "title": "Database unavailable",
+  "title": "Database error",
   "status": 503,
-  "detail": "The service cannot connect to the database."
+  "detail": "The service cannot complete the database operation."
 }
 ```
 
@@ -290,13 +329,19 @@ CARGO_TARGET_DIR=~/.cargo-target/auth-service cargo run
 
 ## Contratos
 
-Expone:
+Contrato parcial de sesiones y JWKS:
 
 ```text
 contracts/openapi/auth.yaml
 ```
 
-Los demás servicios validarán los tokens usando la clave pública correspondiente. No deben llamar a Auth para validar cada petición.
+Este OpenAPI todavía no describe registro/verificación/reenvío. Sus rutas actuales
+`/auth/...` se documentan en [REGISTRATION.md](REGISTRATION.md); completar el contrato
+es un pendiente, no una garantía de cobertura de toda la API.
+
+El diseño prevé que los demás servicios validen la firma JWT localmente con JWKS.
+La futura comprobación privada del estado de sesión es adicional y tendrá su
+propio presupuesto de caché; todavía no está implementada. Ver [SESSIONS.md](SESSIONS.md).
 
 ## Fuera de Alcance
 

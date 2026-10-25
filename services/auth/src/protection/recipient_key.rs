@@ -10,10 +10,13 @@ pub struct RecipientKey {
 impl RecipientKey {
     pub fn login_key(&self, email: &str) -> String {
         let mut mac = self.template.clone();
+
         mac.update(b"auth:login-account:v1\0");
         mac.update(email.trim().to_lowercase().as_bytes());
+
         let digest = mac.finalize().into_bytes();
         let id: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+
         format!("auth:rl:v1:login:account:{id}")
     }
     pub fn new(secret: &[u8]) -> anyhow::Result<Self> {
@@ -30,13 +33,12 @@ impl RecipientKey {
 
     pub fn redis_key(&self, email: &str) -> String {
         let normalized_email = email.trim().to_lowercase();
-
         let mut mac = self.template.clone();
+
         mac.update(b"auth:email-verification:recipient:v1\0");
         mac.update(normalized_email.as_bytes());
 
         let digest = mac.finalize().into_bytes();
-
         let identifier: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
 
         format!("auth:rl:v1:email-send:recipient:{identifier}")

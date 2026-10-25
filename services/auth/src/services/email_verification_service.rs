@@ -50,9 +50,11 @@ impl EmailVerificationService {
     ) -> Self {
         Self { repository, sender }
     }
+
     pub async fn send(&self, email: &str, token: &str) -> Result<(), EmailDeliveryError> {
         self.sender.send(email, token, "es-MX").await
     }
+
     pub async fn confirm(&self, token: &str) -> Result<Account, VerificationError> {
         if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(VerificationError::InvalidToken);

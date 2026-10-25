@@ -55,7 +55,7 @@ fn service(pool: &PgPool) -> SessionService {
     SessionService::new(
         SessionsRepository::new(pool.clone()),
         auth(pool, Arc::new(TestHasher)),
-        crate::token_test_support::issuer(),
+        crate::tests::token_support::issuer(),
     )
 }
 async fn account(pool: &PgPool) -> Uuid {
@@ -349,7 +349,7 @@ async fn credential_and_account_changes_after_verification_are_rechecked(pool: P
         let service = SessionService::new(
             SessionsRepository::new(pool.clone()),
             passwords,
-            crate::token_test_support::issuer(),
+            crate::tests::token_support::issuer(),
         );
         let pending =
             tokio::spawn(async move { service.login(request(ClientType::Desktop)).await });
@@ -519,17 +519,19 @@ fn app(pool: &PgPool, enabled: bool) -> axum::Router {
             OneTimeTokensRepository::new(pool.clone()),
             Arc::new(NoEmail),
         ),
-        token_issuer: crate::token_test_support::issuer(),
+        token_issuer: crate::tests::token_support::issuer(),
         auth_rate_limiter: Arc::new(
-            crate::auth_rate_limiter::AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into())
-                .without_redis_for_tests(),
+            crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(
+                "redis://127.0.0.1:1/0".into(),
+            )
+            .without_redis_for_tests(),
         ),
     })
 }
 
 fn protected_app(
     pool: &PgPool,
-    limiter: crate::auth_rate_limiter::AuthRateLimiter,
+    limiter: crate::protection::auth_rate_limiter::AuthRateLimiter,
 ) -> axum::Router {
     crate::routes::router(AppState {
         login_enabled: true,
@@ -539,7 +541,7 @@ fn protected_app(
             OneTimeTokensRepository::new(pool.clone()),
             Arc::new(NoEmail),
         ),
-        token_issuer: crate::token_test_support::issuer(),
+        token_issuer: crate::tests::token_support::issuer(),
         auth_rate_limiter: Arc::new(limiter),
     })
 }
@@ -551,7 +553,9 @@ async fn redis_outage_rejects_session_http_without_consuming_refresh(pool: PgPoo
     let tokens = service.login(request(ClientType::Desktop)).await.unwrap();
     let router = protected_app(
         &pool,
-        crate::auth_rate_limiter::AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()),
+        crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(
+            "redis://127.0.0.1:1/0".into(),
+        ),
     );
     let (status, headers, body) = http(
         router,
@@ -580,9 +584,9 @@ async fn redis_login_account_budget_and_refresh_ip_budget_are_independent(pool: 
     let redis = std::env::var("REDIS_URL").expect("Redis test requires REDIS_URL");
     let router = protected_app(
         &pool,
-        crate::auth_rate_limiter::AuthRateLimiter::for_tests(redis.clone())
+        crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(redis.clone())
             .with_login_account_policy_for_tests(
-                crate::rate_limit::BucketPolicy::new(1, 60).unwrap(),
+                crate::protection::rate_limit::BucketPolicy::new(1, 60).unwrap(),
             ),
     );
     let body = serde_json::json!({"email":email,"password":"TestPass123!","client_type":"desktop"});
@@ -594,8 +598,11 @@ async fn redis_login_account_budget_and_refresh_ip_budget_are_independent(pool: 
     assert_eq!(problem["type"], "/problems/too-many-requests");
     let router = protected_app(
         &pool,
-        crate::auth_rate_limiter::AuthRateLimiter::for_tests(redis)
-            .with_ip_policy_for_tests(vec![], crate::rate_limit::BucketPolicy::new(1, 60).unwrap()),
+        crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(redis)
+            .with_ip_policy_for_tests(
+                vec![],
+                crate::protection::rate_limit::BucketPolicy::new(1, 60).unwrap(),
+            ),
     );
     let body = serde_json::json!({"refresh_token":tokens["refresh_token"]});
     let (status, _, next) = http(router.clone(), "/api/v1/auth/refresh", body.clone()).await;

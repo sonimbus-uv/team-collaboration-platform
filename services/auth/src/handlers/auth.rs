@@ -51,33 +51,6 @@ pub async fn verify_email(
     Ok(Json(RegisterResponse::from(account)))
 }
 
-pub async fn resend_verification(
-    State(state): State<AppState>,
-    Json(request): Json<ResendVerificationRequest>,
-) -> Result<StatusCode, ApiError> {
-    let email = request.email.trim().to_lowercase();
-
-    if !crate::validators::auth_validator::is_valid_email_format(&email) {
-        return Err(ApiError::Validation("Invalid email format".into()));
-    }
-
-    state
-        .email_verification_service
-        .resend(&email, state.auth_rate_limiter.as_ref())
-        .await
-        .map_err(map_verification_error)?;
-    Ok(StatusCode::ACCEPTED)
-}
-
-fn map_verification_error(error: VerificationError) -> ApiError {
-    match error {
-        VerificationError::InvalidToken => {
-            ApiError::Validation("Invalid or expired verification token".into())
-        }
-        VerificationError::Database(error) => ApiError::Database(error),
-    }
-}
-
 pub async fn verify_email_page(
     State(state): State<AppState>,
     query: Result<Query<VerifyEmailQuery>, QueryRejection>,
@@ -105,17 +78,22 @@ pub async fn verify_email_page(
     }
 }
 
-fn map_register_error(error: RegisterError) -> ApiError {
-    match error {
-        RegisterError::InvalidInput(error) => map_register_validation_error(error),
-        RegisterError::PasswordHashing(error) => map_password_hashing_error(error),
-        RegisterError::CreateAccount(error) => map_create_account_error(error),
-        RegisterError::Busy => ApiError::Busy,
-        RegisterError::Worker(error) => {
-            tracing::error!(?error, "password worker failed");
-            ApiError::InternalServerError("Password worker failed".into())
-        }
+pub async fn resend_verification(
+    State(state): State<AppState>,
+    Json(request): Json<ResendVerificationRequest>,
+) -> Result<StatusCode, ApiError> {
+    let email = request.email.trim().to_lowercase();
+
+    if !crate::validators::auth_validator::is_valid_email_format(&email) {
+        return Err(ApiError::Validation("Invalid email format".into()));
     }
+
+    state
+        .email_verification_service
+        .resend(&email, state.auth_rate_limiter.as_ref())
+        .await
+        .map_err(map_verification_error)?;
+    Ok(StatusCode::ACCEPTED)
 }
 
 fn map_register_validation_error(error: RegisterInputValidationError) -> ApiError {
@@ -132,6 +110,28 @@ fn map_register_validation_error(error: RegisterInputValidationError) -> ApiErro
         RegisterInputValidationError::InvalidPasswordFormat => {
             ApiError::Validation("Invalid password format".to_string())
         }
+    }
+}
+
+fn map_register_error(error: RegisterError) -> ApiError {
+    match error {
+        RegisterError::InvalidInput(error) => map_register_validation_error(error),
+        RegisterError::PasswordHashing(error) => map_password_hashing_error(error),
+        RegisterError::CreateAccount(error) => map_create_account_error(error),
+        RegisterError::Busy => ApiError::Busy,
+        RegisterError::Worker(error) => {
+            tracing::error!(?error, "password worker failed");
+            ApiError::InternalServerError("Password worker failed".into())
+        }
+    }
+}
+
+fn map_verification_error(error: VerificationError) -> ApiError {
+    match error {
+        VerificationError::InvalidToken => {
+            ApiError::Validation("Invalid or expired verification token".into())
+        }
+        VerificationError::Database(error) => ApiError::Database(error),
     }
 }
 

@@ -4,8 +4,9 @@ Segunda entrega de #35; su estado histórico se describe debajo. La tercera entr
 integra el emisor con [sesiones públicas](SESSIONS.md), con login deshabilitado
 por #17. Sigue [ADR-007 / D-16](../../docs/decisions/ADR-007-auth-sessions.md)
 y el [perfil](../../contracts/token-profile.md). Implementa carga de claves,
-emisión como componente Rust y publicación pública. No hay login, refresh,
-logout, consulta de sesiones, outbox o RabbitMQ. La PoC Rust–Elixir sigue pendiente.
+emisión como componente Rust y publicación pública. Actualmente también existen
+login, refresh, logout y persistencia de outbox, descritos en SESSIONS.md. No hay
+consulta privada de sesiones, publicación RabbitMQ ni PoC Rust–Elixir completada.
 
 ## Dependencias y separación
 
@@ -71,7 +72,7 @@ ACL Windows. No desplegar con ACL heredada de acceso general.
 ## Emisión como componente
 
 `AccessTokenIssuer::issue(&SessionContext)` recibe UUID de cuenta/sesión,
-login_at y expires_at como segundos Unix. Su llamador futuro debe haber
+login_at y expires_at como segundos Unix. Su llamador debe haber
 autenticado la cuenta y comprobado pertenencia, actividad y no revocación de
 sesión. El componente no consulta ni inventa sesiones y no prueba esas condiciones.
 
@@ -81,7 +82,7 @@ servidor; `exp = min(iat + 900, expires_at)`. Los timestamps de sesión que
 provengan de precisión subsegundo deben truncarse hacia abajo por el llamador.
 No hay gracia que prolongue exp. JWT incluye `iss`, aud array, `sub`, `sid`,
 `iat`, `exp`, `jti`; encabezado EdDSA, at+jwt y kid. Issuer/audiencias solo vienen
-de configuración confiable. El String retornado es sensible: el futuro llamador
+de configuración confiable. El String retornado es sensible: el llamador
 debe evitar logs, Debug de respuestas y persistencia innecesaria.
 
 ## Endpoint y gateway
@@ -140,16 +141,15 @@ la caché pública impide prometer retirada instantánea.
 ```sh
 cargo fmt --check
 cargo check --all-targets --locked
-cargo clippy --lib --locked -- -D warnings
-cargo clippy --all-targets --locked
-cargo test --locked -- --skip integration_tests
+cargo clippy --all-targets --locked -- -D warnings
+# Sin PostgreSQL ni Redis, comprobar solo la biblioteca:
+cargo test --lib --locked
 cargo test --locked jwks_route_is_public
 # Solo con PostgreSQL de pruebas y Redis configurados:
 cargo test --locked -- --include-ignored
 ```
 
-El Clippy estricto se aplica a la nueva biblioteca; el binario conserva advertencias
-previas de PasswordHasher que no se corrigen en este alcance. Las pruebas crean
+El Clippy estricto se aplica a todos los targets. Las pruebas crean
 material fijo desechable solo en temporales y borran únicamente sus propios archivos.
 En CI Ubuntu se ejecutan además las comprobaciones Unix de permisos y symlinks.
 La prueba de router completo con DB/Redis inaccesibles no realiza consultas a ellos.
@@ -166,7 +166,13 @@ No demuestra integración de Auth con PostgreSQL/Redis ni interoperabilidad Elix
 El CI existente mantiene sus pruebas completas con servicios de prueba y añade
 este chequeo de gateway. No se declara CI remoto exitoso antes de ejecutarlo.
 
-Resultado local de esta entrega: formato y `cargo check --all-targets --locked`
+## Registro histórico de la segunda entrega
+
+Los resultados y referencias de este apartado corresponden a esa entrega,
+no al inventario actual ni al estado remoto de sus PR. La validación vigente
+se ejecuta con los comandos anteriores y se registra en [VALIDATION.md](VALIDATION.md).
+
+Resultado local de esa entrega: formato y `cargo check --all-targets --locked`
 correctos; Clippy estricto de biblioteca y Clippy de todos los targets correctos
 (con las dos advertencias previas del binario). Ocho pruebas de biblioteca,
 42 pruebas del binario y la prueba adicional de router completo pasan: 51 en

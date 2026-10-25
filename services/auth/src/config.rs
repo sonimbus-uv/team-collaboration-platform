@@ -1,4 +1,4 @@
-use crate::rate_limit::BucketPolicy;
+use crate::protection::rate_limit::BucketPolicy;
 use anyhow::Context;
 use std::{env, net::IpAddr};
 

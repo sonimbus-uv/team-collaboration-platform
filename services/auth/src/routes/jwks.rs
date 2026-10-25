@@ -35,7 +35,7 @@ mod tests {
 
     #[tokio::test]
     async fn public_get_and_head_work_without_auth_peer_database_or_redis() {
-        let issuer = crate::token_test_support::issuer();
+        let issuer = crate::tests::token_support::issuer();
         let app: Router = router(issuer.clone());
         for method in ["GET", "HEAD"] {
             let response = app

@@ -22,8 +22,8 @@ pub trait VerificationEmailSender: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait RecipientBudget: Send + Sync {
-    // true: permitido;
-    // false: presupuesto agotado.
-    // Err: no se pudo comprobar.
+    // true: allowed;
+    // false: budget exhausted.
+    // Err: could not be checked.
     async fn consume(&self, email: &str) -> Result<bool, ()>;
 }

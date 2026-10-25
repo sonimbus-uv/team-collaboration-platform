@@ -191,7 +191,7 @@ async fn redis_outage_keeps_real_verification_available(pool: PgPool) {
         EmailVerificationService::new(OneTimeTokensRepository::new(pool.clone()), sender);
     let app = crate::routes::router(AppState {
         login_enabled: false,
-        token_issuer: crate::token_test_support::issuer(),
+        token_issuer: crate::tests::token_support::issuer(),
         pool: pool.clone(),
         auth_service: AuthService::new(
             AccountsRepository::new(pool),
@@ -200,9 +200,11 @@ async fn redis_outage_keeps_real_verification_available(pool: PgPool) {
             4,
         ),
         email_verification_service: verification,
-        auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
-            "redis://127.0.0.1:1/0".into(),
-        )),
+        auth_rate_limiter: Arc::new(
+            crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(
+                "redis://127.0.0.1:1/0".into(),
+            ),
+        ),
     });
     for path in [
         "/auth/register",
@@ -265,7 +267,7 @@ async fn jwks_route_is_public_even_when_redis_and_database_are_unavailable() {
     );
     let app = crate::routes::router(AppState {
         login_enabled: false,
-        token_issuer: crate::token_test_support::issuer(),
+        token_issuer: crate::tests::token_support::issuer(),
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
             Arc::new(FakeHasher),
@@ -274,9 +276,11 @@ async fn jwks_route_is_public_even_when_redis_and_database_are_unavailable() {
         ),
         email_verification_service: verification,
         pool,
-        auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
-            "redis://127.0.0.1:1/0".into(),
-        )),
+        auth_rate_limiter: Arc::new(
+            crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(
+                "redis://127.0.0.1:1/0".into(),
+            ),
+        ),
     });
     for _ in 0..25 {
         // No Authorization or ConnectInfo: the full router must bypass Auth budgets.
@@ -306,10 +310,10 @@ fn state(pool: PgPool, sender: Arc<FakeSender>) -> AppState {
 
     AppState {
         login_enabled: false,
-        token_issuer: crate::token_test_support::issuer(),
-        auth_rate_limiter: Arc::new(crate::auth_rate_limiter::AuthRateLimiter::for_tests(
-            redis_url,
-        )),
+        token_issuer: crate::tests::token_support::issuer(),
+        auth_rate_limiter: Arc::new(
+            crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(redis_url),
+        ),
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
             Arc::new(FakeHasher),
@@ -441,10 +445,10 @@ async fn exhausted_recipient_budget_preserves_existing_verification_link(pool: P
 
     let redis_url = std::env::var("REDIS_URL").expect("Router integration tests require REDIS_URL");
 
-    let recipient_policy = crate::rate_limit::BucketPolicy::new(1, 3600).unwrap();
+    let recipient_policy = crate::protection::rate_limit::BucketPolicy::new(1, 3600).unwrap();
 
     app_state.auth_rate_limiter = Arc::new(
-        crate::auth_rate_limiter::AuthRateLimiter::for_tests(redis_url)
+        crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(redis_url)
             .with_recipient_policy_for_tests(recipient_policy),
     );
 
@@ -488,7 +492,7 @@ async fn exhausted_recipient_budget_preserves_existing_verification_link(pool: P
 
     assert_eq!(
         limiter.check_recipient(&email).await.unwrap(),
-        crate::rate_limit::RateLimitDecision::Allowed
+        crate::protection::rate_limit::RateLimitDecision::Allowed
     );
 
     let aged = sqlx::query(

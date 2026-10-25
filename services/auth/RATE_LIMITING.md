@@ -7,6 +7,8 @@ La protección cubre:
 - `POST /auth/register`.
 - `POST /auth/resend-verification`.
 - `GET` y `POST /auth/verify-email`.
+- `POST /api/v1/auth/login`, `/api/v1/auth/refresh` y `/api/v1/auth/logout`.
+  Sus presupuestos y contratos se detallan en [SESSIONS.md](SESSIONS.md).
 
 `GET /health`, `GET /health/db`, `GET /health/redis` y `HEAD /auth/verify-email` no consumen
 presupuesto del limitador de Auth.
@@ -29,6 +31,9 @@ La configuración actual es:
 | Registro | 60 solicitudes/minuto | 12 |
 | Reenvío | 30 solicitudes/minuto | 6 |
 | Verificación | 120 solicitudes/minuto | 30 |
+| Login | 60 solicitudes/minuto | 12 |
+| Refresh | 120 solicitudes/minuto | 20 |
+| Logout | 120 solicitudes/minuto | 20 |
 
 Se utiliza `nodelay`: las solicitudes admitidas dentro del burst
 continúan sin una espera deliberada.
@@ -55,6 +60,10 @@ Valores predeterminados:
 | Reenvío por IP | 3 | 60 segundos |
 | Verificación por IP | 20 | 60 segundos |
 | Envío por destinatario | 3 | 3600 segundos |
+| Login por IP | 6 | 60 segundos |
+| Refresh por IP | 30 | 60 segundos |
+| Logout por IP | 30 | 60 segundos |
+| Login por correo identificado mediante HMAC | 10 | 900 segundos |
 
 GET y POST de verificación comparten el mismo bucket por IP.
 
@@ -109,6 +118,15 @@ Cambiar este secreto genera claves nuevas y deja de consultar los
 presupuestos anteriores.
 
 Las claves por IP sí contienen la dirección IP.
+Las claves de login por correo usan `auth:rl:v1:login:account:{hmac}` y un
+dominio HMAC distinto del usado por reenvío. Ambos normalizan trim/lowercase.
+HMAC es un identificador con secreto, no cifrado ni anonimización garantizada.
+
+`AuthRateLimiter` conserva las políticas en memoria. Inicializa su conexión
+gestionada de Redis de forma diferida mediante `OnceCell` en el primer consumo
+o health check y reutiliza la inicialización exitosa. Un fallo al inicializar no
+queda guardado como conexión válida. Los timeouts de conexión/operación son
+configurables; el presupuesto restante vive en Redis, no en AppState.
 
 ## Ejecución del bucket
 
@@ -218,6 +236,13 @@ duraciones y resultado de `limit_req`.
 El formato no incluye URL completa, parámetros, cuerpos ni cabeceras.
 `error_log` permanece desactivado para evitar registrar URLs con tokens.
 
+Esto describe los registros de Nginx. En Auth, el manejo genérico de
+`ApiError::Database` registra el error SQLx con Debug; los detalles de PostgreSQL
+pueden incluir valores de campos, como un correo duplicado. Las rutas de sesión
+usan un mapeo distinto que no registra ese detalle. No se acredita redacción
+completa de errores SQL para registro/reenvío; debe revisarse antes de tratar
+todos los logs del servicio como libres de datos personales.
+
 Interpretación:
 
 - `REJECTED`: rechazo del limitador de Nginx.
@@ -236,7 +261,7 @@ export CARGO_TARGET_DIR="$HOME/.cargo-target/auth-service"
 
 cargo test --locked
 
-cargo test --locked redis_connection::tests:: -- --ignored
+cargo test --locked infrastructure::redis_connection::tests:: -- --ignored
 ```
 
 Se necesitan PostgreSQL y Redis de desarrollo disponibles y las variables

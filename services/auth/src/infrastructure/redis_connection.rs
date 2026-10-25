@@ -1,4 +1,4 @@
-use crate::rate_limit::{BucketPolicy, RateLimitDecision};
+use crate::protection::rate_limit::{BucketPolicy, RateLimitDecision};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -52,7 +52,7 @@ impl RedisConnection {
         policy: BucketPolicy,
     ) -> Result<RateLimitDecision, RedisConnectionError> {
         let mut connection = self.manager.clone();
-        let script = redis::Script::new(include_str!("rate_limit.lua"));
+        let script = redis::Script::new(include_str!("../protection/rate_limit.lua"));
 
         let refill_ms = u64::from(policy.refill_period_secs()) * 1000;
 

@@ -1,6 +1,7 @@
 # Sesiones, login, refresh y logout: tercera entrega
 
-Refs #35 y #17. Base `b5451ef`, rama de trabajo `feature/auth-sessions`.
+Refs #35 y #17. Contexto histórico de la tercera entrega: base `b5451ef`,
+rama de trabajo original `feature/auth-sessions`.
 La referencia `feature/auth-jwt-jwks` se conserva en `b5451ef`.
 No se cambia de rama ni se integra/reorganiza el historial de los PR anteriores.
 El PR #44 seguía abierto al inspeccionarlo; la API GitHub no devolvió un PR de
@@ -14,7 +15,9 @@ de [fase 2](TOKENS.md), incluyendo una salida de duración calculada con el mism
 reloj de emisión. No se reconstruye firma, JWKS o gestión de claves.
 
 **Login permanece deshabilitado por defecto**: `AUTH_LOGIN_ENABLED=false`.
-Responde 503 `/problems/auth-unavailable`. Solo las pruebas o un entorno de
+Si la solicitud alcanza el handler, responde 503 `/problems/auth-unavailable`;
+el middleware de protección se ejecuta antes y puede devolver otros errores.
+Solo las pruebas o un entorno de
 desarrollo aislado deben habilitarlo explícitamente mientras #17 siga abierto.
 Refresh y logout mantienen su protección y disponibilidad independientes de esa
 bandera. La implementación no constituye autorización para habilitar login en producción.
@@ -36,7 +39,7 @@ No se modifica `0001`. Las nuevas migraciones son:
   Un evento estable por sid; sin FK para no perder la intención al limpiar sesiones.
 - `0003_session_lifetime_and_locking.sql`: reemplaza `auth.open_session`, valida
   TTL positivo de hasta 20 días, bloquea cuenta primero y usa reloj real tras
-  esperar bloqueos. Fija tiempos a segundos UTC para no redondear tokens hacia
+  esperar bloqueos. Trunca tiempos a segundos para no redondear tokens hacia
   arriba. Protege identidad, expiración absoluta y revocación frente a reactivación.
 - `0004_session_elapsed_duration.sql`: expresa el límite como 1 728 000 segundos
   transcurridos, evitando que días de calendario agreguen una hora al cruzar DST.
@@ -156,7 +159,8 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked -- --include-ignored
 ```
 
-Sin Redis, ejecutar con DATABASE_URL del servidor PostgreSQL de pruebas:
+Sin Redis, ejecutar con DATABASE_URL del servidor PostgreSQL de pruebas
+(los tests marcados ignore no se ejecutan por defecto):
 
 ```sh
 cargo test --locked -- \
@@ -164,10 +168,11 @@ cargo test --locked -- \
   --skip exhausted_recipient_budget_preserves_existing_verification_link
 ```
 
-Los cuatro tests Redis marcados ignore se reservan para CI con `--include-ignored`.
+Los cuatro tests Redis marcados ignore se ejecutan con `--include-ignored`,
+tanto en CI como localmente con Redis disponible.
 Las pruebas HTTP de sesión usan bypass de presupuesto exclusivamente `cfg(test)`;
 no existe ese bypass en builds de producción. El nuevo test Redis real verifica
-presupuesto por cuenta y por IP en CI; no se presenta como ejecutado localmente.
+presupuesto por cuenta y por IP. Para resultados actuales, ver [VALIDATION.md](VALIDATION.md).
 
 Desde la raíz, Nginx real y backend desechable:
 
@@ -178,7 +183,11 @@ python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
 La prueba comprueba rutas, límites y encabezados, no autenticación del backend stub.
 No se inicia Core/Files ni se acredita interoperabilidad Rust–Elixir.
 
-## Estado inicial y resultado final
+## Registro histórico de validación de la tercera entrega
+
+Los resultados siguientes pertenecen a esa entrega. No describen la ejecución
+actual ni prueban el estado remoto de CI/PR. Ver [VALIDATION.md](VALIDATION.md)
+para las comprobaciones de la reorganización y revisión documental.
 
 Antes de editar: formato, compilación y 51 pruebas locales de fase 2 correctos;
 dos advertencias heredadas de PasswordHasher, tres pruebas Redis ignoradas y
@@ -200,8 +209,8 @@ Nginx real 1.30.6 valida las rutas nuevas, presupuestos y JWKS. Referencias y
 enlaces documentales comprobados; `git diff --check` correcto. No se detectaron
 regresiones en las comprobaciones ejecutadas. No se declara CI remoto exitoso.
 
-Pendientes: #17 y su contrato de recuperación/enumeración; límites operativos
-definitivos; pruebas Redis completas y Linux; limpieza/retención; publicación
+Pendientes al cerrar aquella entrega: #17 y su contrato de recuperación/enumeración;
+límites operativos definitivos; pruebas Redis completas y Linux; limpieza/retención; publicación
 RabbitMQ, API interna, consumidores e interoperabilidad. Siguiente entrega:
 resolver #17 con contrato y pruebas antes de habilitar login, sin ampliar esta
 entrega a recuperación completa ni integración con los compañeros.

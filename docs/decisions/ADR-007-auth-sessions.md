@@ -3,7 +3,11 @@
 ## Estado
 
 Decisiones confirmadas por el solicitante para la primera entrega de #35;
-pendiente de revisión del equipo y aprobación del ADR. Diseño, sin implementación.
+pendiente de revisión del equipo y aprobación del ADR. Este ADR registra el diseño
+original; su contexto de inspección es histórico. Actualmente existen firma/JWKS,
+sesiones transaccionales, login deshabilitado por defecto, refresh, logout y outbox
+persistida. API privada, publicación y consumidores siguen pendientes. Ver el
+[estado implementado](../../services/auth/SESSIONS.md).
 Registro D-16; desarrolla D-02, D-04, D-07, D-12 y D-13.
 
 ## Fecha

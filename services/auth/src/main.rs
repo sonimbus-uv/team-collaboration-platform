@@ -1,27 +1,20 @@
-mod auth_rate_limiter;
-mod client_ip;
 mod config;
 mod db;
 mod dto;
 mod email;
 mod error;
 mod handlers;
-#[cfg(test)]
-mod integration_tests;
+mod infrastructure;
 mod ports;
+mod protection;
 mod providers;
-mod rate_limit;
-mod recipient_key;
-mod redis_connection;
 mod repositories;
 mod routes;
 mod security;
 mod services;
-#[cfg(test)]
-mod session_tests;
 mod state;
 #[cfg(test)]
-mod token_test_support;
+mod tests;
 mod validators;
 
 use std::sync::Arc;
@@ -38,6 +31,7 @@ async fn main() -> anyhow::Result<()> {
         Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(anyhow::anyhow!("Failed to load .env: {error}")),
     }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -46,16 +40,15 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
-    // Fail before opening databases or serving requests; never generate a fallback key.
     let token_issuer = Arc::new(auth_service::tokens::issuer::AccessTokenIssuer::load(
         config.tokens.clone(),
     )?);
     let auth_rate_limiter = Arc::new(
-        auth_rate_limiter::AuthRateLimiter::from_config(&config)
+        protection::auth_rate_limiter::AuthRateLimiter::from_config(&config)
             .map_err(|_| anyhow::anyhow!("Invalid Auth rate limiter configuration"))?,
     );
-    let pool = db::connect(&config.database_url, config.database_max_connections).await?;
 
+    let pool = db::connect(&config.database_url, config.database_max_connections).await?;
     db::run_migrations(&pool).await?;
 
     let accounts_repository = AccountsRepository::new(pool.clone());
@@ -78,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
                 )?)
             }
         };
+
     let email_verification_service =
         services::email_verification_service::EmailVerificationService::new(
             repositories::one_time_tokens_repository::OneTimeTokensRepository::new(pool.clone()),
@@ -100,7 +94,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = routes::router(state);
-
     let listener = tokio::net::TcpListener::bind(config.server_addr).await?;
     axum::serve(
         listener,

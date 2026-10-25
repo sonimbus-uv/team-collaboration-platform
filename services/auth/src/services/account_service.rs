@@ -43,12 +43,12 @@ impl AuthService {
             .try_acquire_owned()
             .map_err(|_| PasswordCheckError::Busy)?;
         let hasher = self.password_hasher.clone();
+
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
             let password = zeroize::Zeroizing::new(password);
             match expected {
                 Some(hash) => hasher.verify_password(&password, &hash),
-                // Spend one Argon2 operation for a missing account as well.
                 None => hasher.hash_password(&password).map(|_| false),
             }
         })
@@ -56,6 +56,7 @@ impl AuthService {
         .map_err(|_| PasswordCheckError::Failed)?
         .map_err(|_| PasswordCheckError::Failed)
     }
+
     pub fn new(
         accounts_repository: AccountsRepository,
         password_hasher: Arc<dyn PasswordHasher>,
@@ -84,6 +85,7 @@ impl AuthService {
             .try_acquire_owned()
             .map_err(|_| RegisterError::Busy)?;
         let hasher = self.password_hasher.clone();
+
         let password_hash = tokio::task::spawn_blocking(move || {
             let _permit = permit;
             hasher.hash_password(&valid_input.password)
@@ -102,7 +104,10 @@ impl AuthService {
         let sent = match self.verification.send(&account.email, &token).await {
             Ok(()) => true,
             Err(error) => {
-                tracing::error!(error = %error, account_id = %account.id, "verification email delivery failed");
+                tracing::error!(
+                    error = %error,
+                    account_id = %account.id,
+                    "verification email delivery failed");
                 false
             }
         };
