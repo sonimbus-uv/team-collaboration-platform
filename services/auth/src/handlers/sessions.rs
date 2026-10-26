@@ -17,11 +17,15 @@ pub async fn login(
     request: Result<Json<LoginRequest>, JsonRejection>,
 ) -> Response {
     if !state.login_enabled {
-        return problem(StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable");
+        return problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "auth-unavailable");
     }
+
     let Ok(Json(request)) = request else {
         return from_error(SessionError::Malformed);
     };
+
     match state
         .auth_rate_limiter
         .check_login_account(&request.email)
@@ -31,8 +35,11 @@ pub async fn login(
         Ok(RateLimitDecision::Limited { retry_after_secs }) => {
             return protection(ApiError::RateLimited { retry_after_secs })
         }
-        Err(_) => return problem(StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
+        Err(_) => return problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "auth-unavailable"),
     }
+
     match state.sessions().login(request).await {
         Ok(tokens) => protected(Json(tokens).into_response()),
         Err(error) => from_error(error),
@@ -47,6 +54,7 @@ pub async fn refresh(
         Ok(r) => r,
         Err(error) => return from_error(error),
     };
+
     match state.sessions().refresh(&request.refresh_token).await {
         Ok(tokens) => protected(Json(tokens).into_response()),
         Err(error) => from_error(error),
@@ -61,6 +69,7 @@ pub async fn logout(
         Ok(r) => r,
         Err(error) => return from_error(error),
     };
+
     match state.sessions().logout(&request.refresh_token).await {
         Ok(()) => protected(StatusCode::NO_CONTENT.into_response()),
         Err(error) => from_error(error),
@@ -80,13 +89,27 @@ fn token_request(
 
 pub fn from_error(error: SessionError) -> Response {
     let (status, kind) = match error {
-        SessionError::Malformed => (StatusCode::BAD_REQUEST, "malformed-request"),
-        SessionError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid-credentials"),
-        SessionError::InvalidRefresh => (StatusCode::UNAUTHORIZED, "invalid-refresh-token"),
+        SessionError::Malformed => (
+            StatusCode::BAD_REQUEST,
+            "malformed-request"
+        ),
+        SessionError::InvalidCredentials => (
+            StatusCode::UNAUTHORIZED,
+            "invalid-credentials"
+        ),
+        SessionError::InvalidRefresh => (
+            StatusCode::UNAUTHORIZED,
+            "invalid-refresh-token"
+        ),
         SessionError::Busy => return protection(ApiError::Busy),
-        // A commit transport failure is ambiguous: never label it a safe-to-retry 503.
-        SessionError::CommitUncertain => (StatusCode::INTERNAL_SERVER_ERROR, "internal-error"),
-        SessionError::Signing => (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
+        SessionError::CommitUncertain => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal-error"
+        ),
+        SessionError::Signing => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "auth-unavailable"
+        ),
         SessionError::Database(error) => {
             if matches!(
                 error,
@@ -95,9 +118,13 @@ pub fn from_error(error: SessionError) -> Response {
                     | sqlx::Error::Io(_)
                     | sqlx::Error::Tls(_)
             ) {
-                (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable")
+                (StatusCode::SERVICE_UNAVAILABLE,
+                    "auth-unavailable"
+                )
             } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal-error")
+                (StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal-error"
+                )
             }
         }
     };
@@ -113,42 +140,60 @@ pub fn protection(error: ApiError) -> Response {
         StatusCode::SERVICE_UNAVAILABLE => "auth-unavailable",
         _ => "internal-error",
     };
+
     let mut response = problem(status, kind);
+
     if let Some(value) = original.headers().get(header::RETRY_AFTER) {
         response
             .headers_mut()
             .insert(header::RETRY_AFTER, value.clone());
     }
+
     response
 }
 
 fn problem(status: StatusCode, kind: &str) -> Response {
-    let body = serde_json::json!({"type":format!("/problems/{kind}"),"title":status.canonical_reason().unwrap_or("Error"),"status":status.as_u16(),"detail":"The authentication operation could not be completed."});
+    let body = serde_json::json!(
+        {
+            "type":format!("/problems/{kind}"),
+            "title":status.canonical_reason().unwrap_or("Error"),
+            "status":status.as_u16(),
+            "detail":"The authentication operation could not be completed."
+        }
+    );
+
     let mut response = protected((status, Json(body)).into_response());
+
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static("application/problem+json"),
     );
+
     if status == StatusCode::UNAUTHORIZED {
         response.headers_mut().insert(
             header::WWW_AUTHENTICATE,
             header::HeaderValue::from_static("Bearer"),
         );
     }
+
     response
 }
+
 fn protected(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         header::HeaderValue::from_static("no-store"),
     );
+
     response
         .headers_mut()
         .insert(header::PRAGMA, header::HeaderValue::from_static("no-cache"));
+
     response.headers_mut().insert(
         header::X_CONTENT_TYPE_OPTIONS,
         header::HeaderValue::from_static("nosniff"),
     );
+
     response
 }
 
@@ -172,18 +217,23 @@ mod tests {
             ),
         ] {
             let response = protection(error);
+
             assert_eq!(response.status(), status);
             assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+
             if status == StatusCode::TOO_MANY_REQUESTS {
                 assert_eq!(response.headers()[header::RETRY_AFTER], "7");
             }
+
             let body = axum::body::to_bytes(response.into_body(), 4096)
                 .await
                 .unwrap();
             let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
             assert_eq!(value["type"], format!("/problems/{kind}"));
         }
     }
+
     #[test]
     fn ambiguous_commit_is_never_a_safe_503() {
         assert_eq!(

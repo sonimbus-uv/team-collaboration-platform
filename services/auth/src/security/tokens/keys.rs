@@ -41,6 +41,7 @@ impl KeySet {
             .map_err(|_| anyhow::anyhow!("Signing key must be unencrypted Ed25519 PKCS#8 PEM"))?;
         let public: Jwks = serde_json::from_slice(&read_file(jwks_path, false)?)
             .map_err(|_| anyhow::anyhow!("Invalid public JWKS document"))?;
+
         Self::new(signing, active_kid, public)
     }
 
@@ -54,8 +55,10 @@ impl KeySet {
             (1..=16).contains(&public.keys.len()),
             "JWKS must contain 1 to 16 keys"
         );
+
         let mut kids = HashSet::new();
         let mut active_matches = false;
+
         for key in &public.keys {
             ensure!(
                 valid_kid(&key.kid) && kids.insert(&key.kid),
@@ -68,6 +71,7 @@ impl KeySet {
                     && key.alg == "EdDSA",
                 "JWKS keys must be Ed25519 signature keys"
             );
+
             let decoded = URL_SAFE_NO_PAD
                 .decode(&key.x)
                 .map_err(|_| anyhow::anyhow!("Invalid JWK public key encoding"))?;
@@ -78,19 +82,24 @@ impl KeySet {
                 URL_SAFE_NO_PAD.encode(bytes) == key.x,
                 "Noncanonical JWK public key"
             );
+
             let verifying = VerifyingKey::from_bytes(&bytes)
                 .map_err(|_| anyhow::anyhow!("Invalid Ed25519 public key"))?;
             ensure!(!verifying.is_weak(), "Weak Ed25519 public key");
+
             if key.kid == active_kid {
                 ensure!(
                     verifying == signing.verifying_key(),
                     "Active private key and public JWK differ"
                 );
+
                 active_matches = true;
             }
         }
+
         ensure!(active_matches, "Active signing kid is missing from JWKS");
         public.keys.sort_by(|a, b| a.kid.cmp(&b.kid));
+
         Ok(Self {
             signing,
             active_kid: active_kid.into(),
@@ -135,16 +144,21 @@ fn read_file(path: &Path, private: bool) -> anyhow::Result<Vec<u8>> {
             .is_symlink(),
         "Key file must not be a symlink"
     );
+
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
+
     let file: File = options.open(path).context("Cannot open key file")?;
     let metadata = file.metadata().context("Cannot inspect open key file")?;
+
     ensure!(metadata.is_file(), "Key path must be a regular file");
+
     #[cfg(unix)]
     if private {
         use std::os::unix::fs::MetadataExt;
@@ -154,13 +168,16 @@ fn read_file(path: &Path, private: bool) -> anyhow::Result<Vec<u8>> {
             "Private key must be owned by Auth's user and inaccessible to group/others"
         );
     }
+
     #[cfg(not(unix))]
     let _ = private; // Windows deployments must enforce the documented ACL externally.
     let mut bytes = Vec::new();
+
     file.take(65_537)
         .read_to_end(&mut bytes)
         .context("Cannot read key file")?;
     ensure!(bytes.len() <= 65_536, "Key file exceeds 64 KiB");
+
     Ok(bytes)
 }
 

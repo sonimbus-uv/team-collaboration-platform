@@ -24,6 +24,7 @@ pub enum SessionError {
     Database(sqlx::Error),
     CommitUncertain,
 }
+
 impl From<sqlx::Error> for SessionError {
     fn from(e: sqlx::Error) -> Self {
         Self::Database(e)
@@ -33,6 +34,7 @@ impl From<sqlx::Error> for SessionError {
 pub trait AccessSigner: Send + Sync {
     fn sign(&self, context: &SessionContext) -> Result<(String, u64), SessionError>;
 }
+
 impl AccessSigner for AccessTokenIssuer {
     fn sign(&self, context: &SessionContext) -> Result<(String, u64), SessionError> {
         self.issue_with_lifetime(context)
@@ -62,6 +64,7 @@ impl SessionService {
 
     pub async fn login(&self, request: LoginRequest) -> Result<TokenResponse, SessionError> {
         let email = request.email.trim().to_lowercase();
+
         if !is_valid_email_format(&email)
             || request.password.chars().count() > 128
             || request
@@ -71,6 +74,7 @@ impl SessionService {
         {
             return Err(SessionError::Malformed);
         }
+
         // Do not trim/normalize passwords or apply new registration complexity policy to login.
         let snapshot = self.repo.password(&email).await?;
         let valid = self
@@ -87,12 +91,15 @@ impl SessionService {
         let snapshot = snapshot
             .filter(|_| valid)
             .ok_or(SessionError::InvalidCredentials)?;
+
         let mut tx = self.repo.pool.begin().await?;
+
         if SessionsRepository::lock_account(&mut tx, snapshot.account_id).await? != Some(true)
             || !SessionsRepository::password_unchanged(&mut tx, &snapshot).await?
         {
             return Err(SessionError::InvalidCredentials);
         }
+
         let session = SessionsRepository::open(
             &mut tx,
             snapshot.account_id,
@@ -100,9 +107,13 @@ impl SessionService {
             request.device_name.as_deref(),
         )
         .await?;
+
         let (secret, hash) = new_refresh()?;
+
         Refresh::insert(&mut tx, &session, &hash).await?;
+
         let response = self.response(&session, secret)?;
+
         tx.commit()
             .await
             .map_err(|_| SessionError::CommitUncertain)?;
@@ -114,30 +125,42 @@ impl SessionService {
         let (account, sid) = Refresh::identity(&self.repo.pool, &hash)
             .await?
             .ok_or(SessionError::InvalidRefresh)?;
+
         let mut tx = self.repo.pool.begin().await?;
+
         if SessionsRepository::lock_account(&mut tx, account).await? != Some(true) {
             return Err(SessionError::InvalidRefresh);
         }
+
         let session = SessionsRepository::lock(&mut tx, sid).await?;
+
         if !session.usable {
             return Err(SessionError::InvalidRefresh);
         }
+
         let token = Refresh::lock(&mut tx, &hash, sid).await?;
+
         if token.consumed {
             SessionsRepository::revoke(&mut tx, sid, "refresh_reuse").await?;
             // Deliberately commit the revocation before returning the HTTP-domain error.
             tx.commit()
                 .await
                 .map_err(|_| SessionError::CommitUncertain)?;
+
             return Err(SessionError::InvalidRefresh);
         }
+
         if !token.usable {
             return Err(SessionError::InvalidRefresh);
         }
+
         let (secret, next_hash) = new_refresh()?;
         let next = Refresh::insert(&mut tx, &session, &next_hash).await?;
+
         Refresh::consume(&mut tx, token.id, next).await?;
+
         let response = self.response(&session, secret)?;
+
         tx.commit()
             .await
             .map_err(|_| SessionError::CommitUncertain)?;
@@ -151,7 +174,9 @@ impl SessionService {
         let Some((account, sid)) = Refresh::identity(&self.repo.pool, &hash).await? else {
             return Ok(());
         };
+
         let mut tx = self.repo.pool.begin().await?;
+
         if SessionsRepository::lock_account(&mut tx, account)
             .await?
             .is_some()
@@ -159,6 +184,7 @@ impl SessionService {
             SessionsRepository::lock(&mut tx, sid).await?;
             SessionsRepository::revoke(&mut tx, sid, "logout").await?;
         }
+
         tx.commit()
             .await
             .map_err(|_| SessionError::CommitUncertain)?;
@@ -182,6 +208,7 @@ impl SessionService {
                 .try_into()
                 .map_err(|_| SessionError::Signing)?,
         })?;
+
         Ok(TokenResponse {
             access_token,
             refresh_token,
@@ -196,9 +223,11 @@ impl SessionService {
 
 fn new_refresh() -> Result<(String, [u8; 32]), SessionError> {
     let mut bytes = zeroize::Zeroizing::new([0u8; 32]);
+
     OsRng
         .try_fill_bytes(bytes.as_mut())
         .map_err(|_| SessionError::Signing)?;
+
     Ok((
         URL_SAFE_NO_PAD.encode(*bytes),
         Sha256::digest(*bytes).into(),
@@ -206,9 +235,11 @@ fn new_refresh() -> Result<(String, [u8; 32]), SessionError> {
 }
 pub(crate) fn refresh_hash(secret: &str) -> Option<[u8; 32]> {
     let bytes = zeroize::Zeroizing::new(URL_SAFE_NO_PAD.decode(secret).ok()?);
+
     if bytes.len() != 32 || URL_SAFE_NO_PAD.encode(&bytes) != secret {
         return None;
     }
+
     Some(Sha256::digest(&*bytes).into())
 }
 

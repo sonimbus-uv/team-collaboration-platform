@@ -56,4 +56,5 @@ macro_rules! redacted_debug {
         }
     })+};
 }
+
 redacted_debug!(LoginRequest, RefreshRequest, TokenResponse);

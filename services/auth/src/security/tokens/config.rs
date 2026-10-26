@@ -25,13 +25,16 @@ impl TokenConfig {
             private_key_path: required("AUTH_JWT_PRIVATE_KEY_PATH")?.into(),
             jwks_path: required("AUTH_JWT_JWKS_PATH")?.into(),
         };
+
         config.validate()?;
+
         Ok(config)
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
         let issuer = reqwest::Url::parse(&self.issuer)
             .map_err(|_| anyhow::anyhow!("AUTH_JWT_ISSUER must be an absolute HTTPS URL"))?;
+
         ensure!(
             issuer.scheme() == "https"
                 && issuer.host_str().is_some()
@@ -41,7 +44,9 @@ impl TokenConfig {
                 && issuer.fragment().is_none(),
             "AUTH_JWT_ISSUER must be HTTPS without credentials, query or fragment"
         );
+
         let mut seen = HashSet::new();
+
         ensure!(
             (1..=16).contains(&self.audiences.len())
                 && self.audiences.iter().all(|aud| !aud.is_empty()
@@ -58,6 +63,7 @@ impl TokenConfig {
             !self.active_kid.is_empty(),
             "AUTH_JWT_ACTIVE_KID must not be empty"
         );
+
         Ok(())
     }
 }
@@ -75,7 +81,9 @@ mod tests {
             private_key_path: "test-only.pem".into(),
             jwks_path: "public.json".into(),
         };
+
         assert!(config.validate().is_ok());
+
         for issuer in [
             "",
             "http://auth.example.invalid",
@@ -87,6 +95,7 @@ mod tests {
             assert!(config.validate().is_err());
         }
         config.issuer = "https://auth.example.invalid".into();
+
         for audiences in [vec![], vec![""], vec!["core", "core"], vec![" core"]] {
             config.audiences = audiences.into_iter().map(str::to_owned).collect();
             assert!(config.validate().is_err());

@@ -122,17 +122,21 @@ mod tests {
         ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
         repositories::one_time_tokens_repository::OneTimeTokensRepository,
     };
+
     struct NoopSender;
+
     #[async_trait::async_trait]
     impl VerificationEmailSender for NoopSender {
         async fn send(&self, _: &str, _: &str, _: &str) -> Result<(), EmailDeliveryError> {
             Ok(())
         }
     }
+
     struct BlockingHasher {
         started: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<std::thread::ThreadId>>>,
         release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
     }
+
     impl PasswordHasher for BlockingHasher {
         fn hash_password(&self, _: &str) -> Result<String, PasswordHashingError> {
             self.started
@@ -149,10 +153,12 @@ mod tests {
                 .recv_timeout(std::time::Duration::from_secs(5));
             Err(PasswordHashingError::HashFailed)
         }
+
         fn verify_password(&self, _: &str, _: &str) -> Result<bool, PasswordHashingError> {
             Ok(false)
         }
     }
+
     #[tokio::test]
     async fn hashing_runs_off_runtime_and_rejects_excess_concurrency() {
         let pool = sqlx::postgres::PgPoolOptions::new()
@@ -162,8 +168,10 @@ mod tests {
             OneTimeTokensRepository::new(pool.clone()),
             Arc::new(NoopSender),
         );
+
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
+
         let service = AuthService::new(
             AccountsRepository::new(pool),
             Arc::new(BlockingHasher {
@@ -173,6 +181,7 @@ mod tests {
             verification,
             1,
         );
+
         let copy = service.clone();
         let first = tokio::spawn(async move {
             copy.register("a@b.com".into(), "ValidPass123!".into())
@@ -182,6 +191,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
         assert_ne!(worker_thread, std::thread::current().id());
         assert!(matches!(
             service

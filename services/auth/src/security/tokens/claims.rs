@@ -35,18 +35,22 @@ impl SessionContext {
             self.login_at > 0 && self.login_at <= now,
             "Invalid session login timestamp"
         );
+
         let max_session = self
             .login_at
             .checked_add(MAX_SESSION_SECONDS)
             .ok_or_else(|| anyhow::anyhow!("Session timestamp overflow"))?;
+
         ensure!(
             self.expires_at > self.login_at && self.expires_at <= max_session,
             "Session exceeds absolute lifetime"
         );
         ensure!(self.expires_at > now, "Session has expired");
+
         let max_access = now
             .checked_add(MAX_ACCESS_SECONDS)
             .ok_or_else(|| anyhow::anyhow!("Access timestamp overflow"))?;
+
         Ok(max_access.min(self.expires_at))
     }
 }
