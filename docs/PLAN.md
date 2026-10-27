@@ -148,3 +148,4 @@ Detectadas en la revisión del repositorio del 2026-10-07. Cada una debe convert
 | T-10 | Inicializar `services/reports/` cuando se decida su lenguaje | `reports` | @roluva |
 | T-11 | Crear el tablero de GitHub Projects con un *issue* por caso de uso del MVP | — | Por asignar |
 | T-12 | Actualizar el documento de diseño (4+1) con D-01, D-04, D-05 y D-13, que cambian respecto a la AR02 | `docs` | Por asignar |
+| T-13 | Redis: no pasar la contraseña con `--requirepass` en `command` de `compose.yaml` (visible con `ps` y `docker inspect`); leerla desde un archivo de configuración | `infrastructure` | @Maple-M136279841 |
