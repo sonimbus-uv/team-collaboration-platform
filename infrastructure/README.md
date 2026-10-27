@@ -22,7 +22,7 @@ Entorno de desarrollo reproducible y despliegue de los servicios de apoyo:
 | `redis` | Predeterminado | Con contraseña y AOF |
 | `mailpit` | Predeterminado | Con *health check* |
 | `nginx` | Predeterminado | Gateway de Auth (`@tuzc0`) |
-| `scylladb` | Perfil `messaging` | 1 *shard*, `SCYLLA_MEMORY` (750 MB por defecto), modo desarrollo (T-01) |
+| `scylladb` | Perfil `messaging` | 1 *shard*, `SCYLLA_MEMORY` (750 MB por defecto) y `SCYLLA_RESERVE_MEMORY` (250 MB) dentro de `SCYLLA_MEM_LIMIT` (1200 MB), modo desarrollo (T-01) |
 | `minio` | Perfil `storage` | Con *health check* |
 | `minio-init` | Perfil `storage` | Se ejecuta y termina: crea `MINIO_BUCKET` (T-05) |
 

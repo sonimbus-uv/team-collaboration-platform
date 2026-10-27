@@ -134,6 +134,11 @@ services:
       - "${SCYLLA_SMP:-1}"
       - --memory
       - "${SCYLLA_MEMORY:-750M}"
+      # Sin esto, Seastar aparta 1.5 GiB para el sistema y deja solo 500 MB,
+      # menos que SCYLLA_MEMORY. Además descuenta unos 120 MB del límite del
+      # contenedor; por eso SCYLLA_MEM_LIMIT es 1200m y no 1g.
+      - --reserve-memory
+      - "${SCYLLA_RESERVE_MEMORY:-250M}"
       - --overprovisioned
       - "1"
       - --developer-mode
@@ -148,7 +153,7 @@ services:
       timeout: 10s
       retries: 20
       start_period: 60s
-    mem_limit: ${SCYLLA_MEM_LIMIT:-1g}
+    mem_limit: ${SCYLLA_MEM_LIMIT:-1200m}
     networks:
       - backend
 
