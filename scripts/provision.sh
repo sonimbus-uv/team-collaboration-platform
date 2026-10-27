@@ -43,6 +43,8 @@ apt-get install -y --no-install-recommends \
   unzip \
   inotify-tools \
   postgresql-client
+# inotify-tools: recarga automática de Phoenix en desarrollo (Core y Files).
+# postgresql-client: psql para revisar los esquemas por servicio (T-04).
 
 # ScyllaDB usa Linux AIO; el límite por defecto (65536) se agota con facilidad.
 log "Ajustando fs.aio-max-nr para ScyllaDB"
@@ -217,13 +219,17 @@ docker compose \
   up -d
 
 log "Comprobando los esquemas por servicio de PostgreSQL"
-init_exit="$(
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" wait postgres-init
+# `docker wait` imprime solo el código de salida y también funciona si el
+# contenedor ya terminó (postgres-init tarda menos de un segundo).
+init_id="$(
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps -aq postgres-init
 )"
-[[ "${init_exit}" == "0" ]] || {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs postgres-init >&2
+[[ -n "${init_id}" ]] || fail "No se encontró el contenedor postgres-init."
+init_exit="$(docker wait "${init_id}")" || init_exit="desconocido"
+if [[ "${init_exit}" != "0" ]]; then
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs postgres-init >&2 || true
   fail "postgres-init terminó con código ${init_exit}."
-}
+fi
 
 log "Comprobando la IP del gateway"
 nginx_id="$(
