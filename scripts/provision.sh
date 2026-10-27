@@ -172,11 +172,29 @@ if id "${VM_USER}" >/dev/null 2>&1; then
   "
 
   readonly BASHRC="/home/${VM_USER}/.bashrc"
-  if ! grep -q 'mise activate bash' "${BASHRC}" 2>/dev/null; then
+  touch "${BASHRC}"
+
+  # Shims al inicio de .bashrc: el .bashrc de Ubuntu termina antes en shells no
+  # interactivas, así que una línea al final no aplicaría a `vagrant ssh -c`.
+  # Con el archivo vacío `sed 1i` no inserta nada; en ese caso se escribe.
+  if ! grep -q 'mise/shims' "${BASHRC}"; then
+    if [[ -s "${BASHRC}" ]]; then
+      sed -i '1i # Shims de mise (.tool-versions) también en shells no interactivas\nexport PATH="$HOME/.local/share/mise/shims:$PATH"' \
+        "${BASHRC}"
+    else
+      printf '%s\n' \
+        '# Shims de mise (.tool-versions) también en shells no interactivas' \
+        'export PATH="$HOME/.local/share/mise/shims:$PATH"' \
+        > "${BASHRC}"
+    fi
+  fi
+
+  # Activación completa solo en shells interactivas.
+  if ! grep -q 'mise activate bash' "${BASHRC}"; then
     printf '\n# Versiones de .tool-versions (Erlang, Elixir)\neval "$(mise activate bash)"\n' \
       >> "${BASHRC}"
-    chown "${VM_USER}:${VM_USER}" "${BASHRC}"
   fi
+  chown "${VM_USER}:${VM_USER}" "${BASHRC}"
 fi
 
 [[ -f "${COMPOSE_FILE}" ]] || fail "No se encontró ${COMPOSE_FILE}."
