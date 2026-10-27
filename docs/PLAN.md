@@ -68,14 +68,14 @@ Estado al 2026-10-21. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 ### Fase 3. Infraestructura en Docker Compose — 🟡 (@Maple-M136279841 desde el 2026-10-21)
 
 - ✅ PostgreSQL, Redis, Mailpit y MinIO con volúmenes con nombre.
-- ✅ Base de mensajes: ScyllaDB con memoria acotada (T-01).
-- ✅ Esquema y usuario por servicio en PostgreSQL (T-04).
+- 🟡 Base de mensajes: ScyllaDB con memoria acotada (T-01); implementado, falta verificarlo en la VM.
+- 🟡 Esquema y usuario por servicio en PostgreSQL (T-04); implementado, falta verificarlo en la VM.
 - ⬜ *Keyspace* de ScyllaDB creado por script de inicio.
 - ⬜ RabbitMQ con plugin de administración y archivo de definiciones (T-03).
-- ✅ *Bucket* de MinIO creado al iniciar.
+- 🟡 *Bucket* de MinIO creado al iniciar; implementado, falta verificarlo en la VM.
 - ⬜ LiveKit con los puertos validados en la PoC.
 - ⬜ Nginx: TLS con `mkcert`, rutas REST, `upgrade` de WebSocket, `limit_req` y `client_max_body_size`.
-- ✅ `healthcheck` en cada contenedor de larga duración.
+- 🟡 `healthcheck` en PostgreSQL, Redis, Mailpit, ScyllaDB y MinIO; falta Nginx.
 - ⬜ **Hito:** `docker compose up` deja todo en estado *healthy*.
 
 ### Fase 4. Contratos — ⬜
@@ -136,11 +136,11 @@ Detectadas en la revisión del repositorio del 2026-10-07. Cada una debe convert
 
 | ID | Tarea | Módulo | Responsable |
 |---|---|---|---|
-| T-01 | ✅ Reemplazar `cassandra:5.0.9` por ScyllaDB en `compose.yaml`, con memoria acotada (`--smp 1 --memory ... --overprovisioned 1`); conservar el perfil `messaging` y renombrar el volumen | `infrastructure` | @Maple-M136279841 |
+| T-01 | 🟡 Reemplazar `cassandra:5.0.9` por ScyllaDB en `compose.yaml`, con memoria acotada (`--smp 1 --memory ... --overprovisioned 1`); conservar el perfil `messaging` y renombrar el volumen | `infrastructure` | @Maple-M136279841 |
 | T-02 | Alinear valores entre `infrastructure/.env.example` (`team_platform` / `team_platform_user`), los valores por defecto de `compose.yaml` y `services/auth/.env.example` (`team_collaboration` / `team_user`); agregar las variables que faltan (`POSTGRES_PORT`, `REDIS_PORT`, memoria de ScyllaDB). 🟡 Infraestructura alineada a `team_collaboration` / `team_user`; falta `services/auth/.env.example` (usuario `auth_service`) | `infrastructure` ✅, `auth` ⬜ | @Maple-M136279841, @tuzc0 (Auth) |
 | T-03 | Agregar RabbitMQ a `compose.yaml` con archivo de definiciones (*exchange*, colas y cola de mensajes fallidos) | `infrastructure` | @Maple-M136279841 |
 | T-04 | 🟡 Script de inicialización de PostgreSQL: esquemas `auth`, `core`, `files` y `reports` con un usuario por servicio (D-13) ✅; falta que Auth deje de conectarse con el superusuario y quite `CREATE SCHEMA` de su migración | `database` ✅, `auth` ⬜ | @Maple-M136279841, @tuzc0 (Auth) |
-| T-05 | ✅ `healthcheck` de Mailpit y MinIO; creación del *bucket* al iniciar | `infrastructure` | @Maple-M136279841 |
+| T-05 | 🟡 `healthcheck` de Mailpit y MinIO; creación del *bucket* al iniciar | `infrastructure` | @Maple-M136279841 |
 | T-06 | Auth: eliminar los archivos vacíos `src/routes/health.rs` y `src/handlers/` o moverles el código de salud; actualizar la estructura del README | `auth` | @tuzc0 |
 | T-07 | CI con GitHub Actions: compilar, formatear y probar cada módulo en cada PR, empezando por Auth | `.github` | Por asignar |
 | T-08 | Configurar la identidad de git dentro de la VM (el commit `d20dfd9` quedó firmado, not codeowner como `vagrant <vagrant@Nimbus-Box>`) y documentarlo en el README | `infrastructure` | @Maple-M136279841 |
