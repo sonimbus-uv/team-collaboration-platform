@@ -23,11 +23,9 @@ done
 
 for file in "${script_dir}"/init/*.sql; do
   echo "Aplicando $(basename "${file}")"
+  # Las contraseñas no van en la línea de comandos (visibles con ps): el script
+  # SQL las lee del entorno con \getenv (psql 15 o posterior).
   PGOPTIONS="-c client_min_messages=warning" psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
-    -v auth_password="${AUTH_DB_PASSWORD}" \
-    -v core_password="${CORE_DB_PASSWORD}" \
-    -v files_password="${FILES_DB_PASSWORD}" \
-    -v reports_password="${REPORTS_DB_PASSWORD}" \
     -f "${file}"
 done
 

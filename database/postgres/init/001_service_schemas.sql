@@ -4,15 +4,26 @@
 -- Una base de datos compartida; cada servicio tiene su propio esquema y su
 -- propio usuario, con permisos solo sobre ese esquema.
 --
--- Idempotente: se ejecuta en cada `docker compose up` (servicio postgres-init)
--- y puede repetirse sin efectos. Las contraseñas llegan como variables de psql
--- y se resincronizan en cada ejecución con las del archivo .env.
+-- Idempotente: puede ejecutarse varias veces sin efectos (init.sh lo aplica
+-- en cada `docker compose up`). Las contraseñas se leen del entorno y se
+-- resincronizan en cada ejecución con las del archivo .env.
 --
--- Variables requeridas (psql -v):
---   auth_password, core_password, files_password, reports_password
+-- Variables de entorno requeridas (psql 15 o posterior, \getenv):
+--   AUTH_DB_PASSWORD, CORE_DB_PASSWORD, FILES_DB_PASSWORD, REPORTS_DB_PASSWORD
 -- =====================================================================
 
 \set ON_ERROR_STOP on
+
+\getenv auth_password AUTH_DB_PASSWORD
+\getenv core_password CORE_DB_PASSWORD
+\getenv files_password FILES_DB_PASSWORD
+\getenv reports_password REPORTS_DB_PASSWORD
+
+-- Si una sentencia falla, PostgreSQL registra su texto en el log del servidor;
+-- en esta sesión se desactiva para que un ALTER ROLE ... PASSWORD fallido no
+-- deje la contraseña en el log. Requiere superusuario, como el resto del script.
+SET log_min_error_statement = panic;
+SET log_statement = 'none';
 
 -- ---------------------------------------------------------------------
 -- Base de datos: nadie se conecta salvo los usuarios autorizados abajo
@@ -63,8 +74,10 @@ FROM (VALUES
 -- services/auth/migrations/0001_initial_auth_schema.sql ejecuta
 -- `CREATE SCHEMA IF NOT EXISTS auth`, y PostgreSQL exige CREATE sobre la base
 -- de datos antes de comprobar que el esquema ya existe. Sin este permiso la
--- migración falla con auth_service. Se retira cuando Auth quite esa sentencia
--- de su migración (el esquema ya lo crea este script).
+-- migración falla con auth_service. Se aparta de D-13 y es temporal.
+-- Condición de retiro: que Auth (@tuzc0) quite esa sentencia de su migración
+-- (el esquema ya lo crea este script); en ese PR se borra este bloque y se
+-- ejecuta REVOKE CREATE ON DATABASE ... FROM auth_service.
 -- Efecto: auth_service puede crear esquemas nuevos, pero sigue sin poder leer
 -- los de otros servicios.
 -- ---------------------------------------------------------------------
