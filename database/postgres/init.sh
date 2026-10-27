@@ -24,7 +24,8 @@ done
 for file in "${script_dir}"/init/*.sql; do
   echo "Aplicando $(basename "${file}")"
   # Las contraseñas no van en la línea de comandos (visibles con ps): el script
-  # SQL las lee del entorno con \getenv (psql 15 o posterior).
+  # SQL las lee del entorno con \getenv (psql 15 o posterior). Siguen en el
+  # entorno del contenedor, visibles con `docker inspect`.
   PGOPTIONS="-c client_min_messages=warning" psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
     -f "${file}"
 done
