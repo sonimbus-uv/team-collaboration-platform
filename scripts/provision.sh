@@ -183,6 +183,6 @@ docker compose \
 printf '\nProvisionamiento completado.\n'
 printf 'Servicios base: PostgreSQL, Redis y Mailpit.\n'
 printf 'Ejecuta primero: cd /vagrant/infrastructure\n'
-printf 'Cassandra: docker compose --profile messaging up -d\n'
+printf 'ScyllaDB: docker compose --profile messaging up -d\n'
 printf 'MinIO:     docker compose --profile storage up -d\n'
 printf 'Todos:     docker compose --profile messaging --profile storage up -d\n'

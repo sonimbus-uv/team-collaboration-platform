@@ -68,7 +68,7 @@ Estado al 2026-10-07. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 ### Fase 3. Infraestructura en Docker Compose — 🟡 (@tuzc0)
 
 - ✅ PostgreSQL, Redis, Mailpit y MinIO con volúmenes con nombre.
-- 🟡 Base de mensajes: hoy es Cassandra; cambiar a ScyllaDB (T-01).
+- ✅ Base de mensajes: ScyllaDB con perfil `messaging` y memoria acotada (T-01).
 - ⬜ Esquema y usuario por servicio en PostgreSQL (T-04).
 - ⬜ *Keyspace* de ScyllaDB creado por script de inicio.
 - ⬜ RabbitMQ con plugin de administración y archivo de definiciones (T-03).
@@ -136,7 +136,6 @@ Detectadas en la revisión del repositorio del 2026-10-07. Cada una debe convert
 
 | ID | Tarea | Módulo | Responsable |
 |---|---|---|---|
-| T-01 | Reemplazar `cassandra:5.0.9` por ScyllaDB en `compose.yaml`, con memoria acotada (`--smp 1 --memory ... --overprovisioned 1`); conservar el perfil `messaging` y renombrar el volumen | `infrastructure` | @tuzc0 |
 | T-02 | Alinear valores entre `infrastructure/.env.example` (`team_platform` / `team_platform_user`), los valores por defecto de `compose.yaml` y `services/auth/.env.example` (`team_collaboration` / `team_user`); agregar las variables que faltan (`POSTGRES_PORT`, `REDIS_PORT`, memoria de ScyllaDB) | `infrastructure`, `auth` | @tuzc0 |
 | T-03 | Agregar RabbitMQ a `compose.yaml` con archivo de definiciones (*exchange*, colas y cola de mensajes fallidos) | `infrastructure` | @tuzc0 |
 | T-04 | Script de inicialización de PostgreSQL: esquemas `auth`, `core`, `files` y `reports` con un usuario por servicio (D-13); Auth deja de conectarse con el superusuario | `database`, `auth` | @tuzc0 |
