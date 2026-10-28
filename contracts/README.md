@@ -2,6 +2,10 @@
 
 Acuerdos entre los servicios y los clientes. Es el lugar donde se coordinan los integrantes: un cliente se programa contra el contrato, no contra el código del servicio.
 
+Para iniciar el desarrollo de autenticación en móvil y escritorio, consultar
+[la guía de contratos públicos y pendientes](auth-clients.md). Su estado es
+candidato para mocks, pendiente de revisión técnica.
+
 | Carpeta | Contenido |
 |---|---|
 | [`openapi/`](openapi/) | Un archivo OpenAPI por servicio: `auth.yaml`, `core.yaml`, `files.yaml`, `reports.yaml`. Rutas bajo `/api/v1`. |

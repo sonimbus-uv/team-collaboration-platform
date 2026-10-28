@@ -1,5 +1,10 @@
 # Login, refresh y logout
 
+**Estado: contrato candidato para desarrollo con mocks, pendiente de revisión
+técnica.** Guía de entrada y pendientes para móvil/escritorio:
+[auth-clients.md](auth-clients.md). No autoriza habilitar login ni acredita un
+despliegue disponible.
+
 Refs #35. [OpenAPI público](openapi/auth.yaml), [perfil](token-profile.md) y
 [ADR](../docs/decisions/ADR-007-auth-sessions.md). Implementado en la tercera entrega,
 con login deshabilitado por defecto mientras #17 siga abierto; ver
@@ -19,8 +24,9 @@ usa ese error genérico; política definitiva de enumeración se coordina aparte
 Serializar por cuenta/tipo; reemplazar sesión anterior, registrar revocación
 `superseded` (o `expired`) y outbox, crear sesión con límite absoluto de 20 días,
 refresh hash y emisión coherente. Fallo transaccional no deja reemplazo parcial.
-No responder éxito antes del commit. La función SQL actual requiere evolución
-para capturar revocaciones/outbox; no está resuelto por existir `open_session`.
+No responder éxito antes del commit. Las migraciones de sesiones implementan
+el reemplazo y el registro transaccional de intención de revocación en outbox.
+La publicación y el consumo de esa intención siguen pendientes.
 
 ## Refresh
 

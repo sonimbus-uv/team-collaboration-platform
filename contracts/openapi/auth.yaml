@@ -3,7 +3,7 @@
   "info": {
     "title": "Sonimbus Auth: sesiones y JWKS",
     "version": "0.1.0",
-    "description": "Refs #35: JWKS y sesiones públicas implementados; login deshabilitado por defecto por #17. API interna e integración pendientes. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo y pendientes en #14. Rutas de sesión propuestas; ver ../auth-session-flows.md y ../token-profile.md. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
+    "description": "Contrato candidato para desarrollo con mocks, pendiente de revisión técnica. Refs #35: JWKS y sesiones públicas implementados; login deshabilitado por defecto por #17. La integración con consumidores sigue pendiente. La API interna se documenta por separado y no es accesible desde móvil/escritorio. Alcance parcial: registro/verificación existentes /auth/... permanecen fuera de este archivo; consultar ../../services/auth/REGISTRATION.md. Su convergencia queda pendiente en #14. Forgot/reset password no están definidos ni implementados. Ver ../auth-clients.md, ../auth-session-flows.md y ../token-profile.md. Los parámetros identificados como propuestas siguen pendientes de aprobación."
   },
   "servers": [
     {
