@@ -34,10 +34,18 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mailpit:
+        image: axllent/mailpit:v1.29.7
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       DATABASE_URL: postgres://test:test@127.0.0.1:5432/auth_test
       REDIS_URL: redis://127.0.0.1:6379/0
       AUTH_RECIPIENT_HMAC_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+      AUTH_REGISTRATION_CODE_HMAC_SECRET: ci-only-registration-code-key-not-for-deployment
+      AUTH_TEST_MAILPIT_SMTP_PORT: "1025"
+      AUTH_TEST_MAILPIT_API_URL: http://127.0.0.1:8025
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
