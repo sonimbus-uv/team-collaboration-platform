@@ -45,7 +45,9 @@ Además publica en el mensaje la referencia a los archivos que guarda el File Se
 
 ## Estado
 
-Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Expone `GET /health` y, bajo `/api/v1`, el recorrido mínimo de [`core.yaml`](../../contracts/openapi/core.yaml): grupos, invitaciones, unión, canales y nombre visible (D-29).
+Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Expone `GET /health` y, bajo `/api/v1`, el recorrido mínimo de [`core.yaml`](../../contracts/openapi/core.yaml): grupos, invitaciones, unión, canales, historial de mensajes y nombre visible (D-29).
+
+Mensajes: WebSocket de Phoenix en `/socket`, tema `channel:<channel_id>` ([contrato](../../contracts/events/message.created.md)). Se guardan en ScyllaDB con Xandra, con idempotencia por `client_message_id` (`INSERT ... IF NOT EXISTS`) y `message_id` timeuuid generado por Core (D-08).
 
 Autenticación: toda ruta bajo `/api/v1` exige el access JWT de Auth ([perfil](../../contracts/token-profile.md)). Core verifica la firma Ed25519 con `:crypto` y descarga el JWKS con `:httpc`, sin dependencias nuevas; la caché dura como máximo 5 minutos. Si el JWKS no está disponible responde 503. La sesión (`sid`) todavía no se consulta en Auth: desviación temporal D-30 ([borrador de decisiones](../../docs/database/core-decisions-draft.md)).
 
@@ -66,4 +68,5 @@ Las variables están en [`.env.example`](.env.example); Phoenix no lee archivos 
 
 - Core se conecta como `core_service` a `team_collaboration`, con `search_path = core, public`: las tablas y `schema_migrations` quedan en el esquema `core`.
 - Las pruebas usan la misma base y el mismo esquema, dentro del *sandbox* de Ecto, porque `core_service` no puede crear bases de datos. Por eso no hay alias `ecto.create`, `ecto.drop` ni `ecto.reset`: borrar la base afectaría a todos los servicios.
+- Las pruebas con la etiqueta `scylla` usan el keyspace real `sonimbus_core` (ScyllaDB no tiene *sandbox*); sin ScyllaDB en marcha: `mix test --exclude scylla`.
 - Antes de un commit: `mix format`, `mix compile --warnings-as-errors` y `mix test`.

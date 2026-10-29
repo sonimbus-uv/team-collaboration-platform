@@ -36,6 +36,11 @@ if config_env() in [:dev, :test] do
     database: System.get_env("CORE_DB_NAME", "team_collaboration")
 end
 
+# ScyllaDB (D-05): nodos como "host:puerto", separados por comas.
+config :core, Core.Scylla,
+  nodes: System.get_env("CORE_SCYLLA_NODES", "localhost:9042") |> String.split(",", trim: true),
+  keyspace: System.get_env("CORE_SCYLLA_KEYSPACE", "sonimbus_core")
+
 # Verificación del access JWT de Auth (contracts/token-profile.md). El issuer
 # debe ser igual a AUTH_JWT_ISSUER de Auth; las pruebas usan config/test.exs.
 if config_env() in [:dev, :prod] do

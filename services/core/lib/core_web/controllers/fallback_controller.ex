@@ -53,6 +53,20 @@ defmodule CoreWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :not_text_channel}) do
+    Problem.send_problem(conn, 409, "not-a-text-channel", "Not a text channel",
+      detail: "Messages are only available in text channels."
+    )
+  end
+
+  def call(conn, {:error, :unavailable}) do
+    conn
+    |> put_resp_header("retry-after", "5")
+    |> Problem.send_problem(503, "messages-unavailable", "Messages unavailable",
+      detail: "Messages cannot be read right now."
+    )
+  end
+
   # Un nombre de canal repetido (CU-13 EX-01) es un conflicto, no un dato
   # mal formado.
   defp conflict?(changeset) do

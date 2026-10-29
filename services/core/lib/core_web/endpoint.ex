@@ -11,6 +11,12 @@ defmodule CoreWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  # Tiempo real de los clientes; el token va en Sec-WebSocket-Protocol
+  # (auth_token) y no en la URL. Sin longpoll.
+  socket "/socket", CoreWeb.UserSocket,
+    websocket: [auth_token: true],
+    longpoll: false
+
   # socket "/live", Phoenix.LiveView.Socket,
   #   websocket: [connect_info: [session: @session_options]],
   #   longpoll: [connect_info: [session: @session_options]]

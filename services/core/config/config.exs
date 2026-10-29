@@ -27,6 +27,10 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+# El token del WebSocket puede llegar como parámetro: no debe quedar en los
+# registros.
+config :phoenix, :filter_parameters, ["password", "token"]
+
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 

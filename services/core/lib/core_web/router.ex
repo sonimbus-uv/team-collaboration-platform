@@ -23,6 +23,8 @@ defmodule CoreWeb.Router do
       resources "/invitations", InvitationController, only: [:create]
     end
 
+    get "/channels/:channel_id/messages", MessageController, :index
+
     get "/me/profile", ProfileController, :show
     put "/me/profile", ProfileController, :update
 
