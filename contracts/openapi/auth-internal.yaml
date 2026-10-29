@@ -3,11 +3,11 @@
   "info": {
     "title": "Sonimbus Auth: comprobación privada de sesiones",
     "version": "0.1.0",
-    "description": "Diseño Refs #35. Normativa temporal, cuotas propuestas y carreras en ../session-checks.md. Acceso privado directo; nunca gateway público. Credenciales separadas Core/Files con sessions:check. Todos los parámetros operativos adicionales son propuestas pendientes de revisión."
+    "description": "Refs #35. Contrato HTTP 4B aprobado por el solicitante el 2026-10-27 e implementado con activación explícita; no acredita despliegue ni interoperabilidad. HTTPS privado directo, sin gateway público. Bearer svc_ opaco independiente por Core/Files con sessions:check. Cuerpo 64 KiB, lotes 1-100 pares distintos; cuota ponderada y concurrencia por identidad compartidas mediante Redis. Modelo, límites aprobados y operación en ../../services/auth/INTERNAL_API.md; semántica temporal y consumidores pendientes en ../session-checks.md."
   },
   "servers": [
     {
-      "url": "https://auth.internal.example.invalid"
+      "url": "https://auth.internal.example.invalid:3443"
     }
   ],
   "security": [
@@ -538,7 +538,7 @@
       "ServiceBearer": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Secreto opaco de servicio, no JWT usuario. Solo backend y HTTPS verificado."
+        "description": "Token svc_ seguido de base64url sin padding de 32 bytes aleatorios; solo backend y HTTPS verificado. Auth almacena SHA-256 del token ASCII completo y permite una credencial anterior con fecha absoluta; distribución y reinicio coordinados según INTERNAL_API.md. Un JWT de usuario es rechazado."
       }
     },
     "schemas": {

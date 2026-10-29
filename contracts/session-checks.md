@@ -1,6 +1,24 @@
 # Comprobación interna de sesiones v1
 
-Refs #35. Diseño pendiente de implementación, ligado al
+Se aprobó el 2026-10-27 las rutas/respuestas, Bearer opaco,
+archivo de hashes por servicio, rotación con anterior hasta 15 minutos y reinicio,
+HTTPS directo y límites de [INTERNAL_API.md](../services/auth/INTERNAL_API.md).
+Esa implementación es opt-in y no acredita despliegue ni interoperabilidad.
+
+Los párrafos históricos de propuestas siguientes quedan precisados por ese modelo:
+Redis 200 ms de conexión/100 ms de operación, 500 ms para adquisición+SQL, 1 s por
+solicitud, 100 par/es con burst 100 y 20 reservas por identidad compartidos;
+10 solicitudes/s por IP compartidas y 50 conexiones/solicitudes **locales** por
+proceso. Estos 50 locales sustituyen la propuesta histórica de 50 globales.
+Circuit breaker, clientes y parámetros de sus microcachés siguen fuera de este avance.
+
+Refs #35. Consulta interna de dominio implementada en
+[entrega](../services/auth/SESSION_CHECKS.md), sin exposición por red. El
+solicitante aprobó el 2026-10-26 las reglas de actividad, eco y orden,
+fallo completo y lotes de 1–100 pares distintos: vacío, duplicado o elemento
+inválido rechazan toda la entrada. Esa aprobación no incluye parámetros HTTP,
+credenciales ni despliegue. La exposición se implementa según la aprobación
+indicada arriba, ligada al
 [OpenAPI](openapi/auth-internal.yaml) y [ADR](../docs/decisions/ADR-007-auth-sessions.md).
 Auth es autoridad en PostgreSQL. Solo Core y Files, por HTTPS + JSON en red
 privada sin Nginx público; verificación de hostname y cadena del certificado.
@@ -46,11 +64,19 @@ Es una lectura autoritativa al evaluar, no una reserva ni bloqueo de autorizaci�
 Ejemplo individual (`POST /internal/v1/sessions/check`), UUID ficticios:
 
 ```json
-{"sid":"22222222-2222-4222-8222-222222222222","account_id":"11111111-1111-4111-8111-111111111111"}
+{
+"sid":"22222222-2222-4222-8222-222222222222",
+"account_id":"11111111-1111-4111-8111-111111111111"
+}
 ```
 
 ```json
-{"sid":"22222222-2222-4222-8222-222222222222","account_id":"11111111-1111-4111-8111-111111111111","active":true,"session_expires_at":"2026-11-10T12:00:00Z"}
+{
+"sid":"22222222-2222-4222-8222-222222222222",
+"account_id":"11111111-1111-4111-8111-111111111111",
+"active":true,
+"session_expires_at":"2026-11-10T12:00:00Z"
+}
 ```
 
 El lote (`POST /internal/v1/sessions/check-batch`) envuelve los mismos pares en
