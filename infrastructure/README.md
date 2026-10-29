@@ -50,3 +50,18 @@ Pendiente ([`docs/PLAN.md`](../docs/PLAN.md#tareas-abiertas)): RabbitMQ (T-03), 
 - [Registro de decisiones](../docs/decisions/README.md) (D-04, D-05, D-09, D-13, D-14)
 - [Despliegue de la expo](../docs/deployment/README.md)
 - Instrucciones de uso en el [README](../README.md) del repositorio.
+
+## Uso de ScyllaDB
+
+Desde `infrastructure/` (en la VM, `/vagrant/infrastructure`):
+
+```bash
+docker compose --profile messaging up -d scylladb --wait
+docker compose exec scylladb cqlsh -e 'SELECT release_version FROM system.local'
+```
+
+Usar `scylladb:9042` desde contenedores en `backend` y `localhost:9042` desde el host de Docker (puerto configurable con `SCYLLA_PORT`). Desde el equipo anfitrión de Vagrant, usar `192.168.33.30:9042`.
+
+El motor usa un núcleo, `SCYLLA_MEMORY=750M` y `SCYLLA_RESERVE_MEMORY=250M`; el contenedor tiene `SCYLLA_MEM_LIMIT=1200m`. Debe cumplirse `SCYLLA_MEMORY + SCYLLA_RESERVE_MEMORY + ~120 MB <= SCYLLA_MEM_LIMIT`. Sin `--reserve-memory`, ScyllaDB aparta 1.5 GiB para el sistema y no arranca: la configuración de `main` del 2026-10-29 (`2026.1.15`, `--memory 1G`, límite 1536M) falla con `insufficient physical memory: needed 1021313024 available 500000000`. Los esquemas CQL viven en [`database/scylla/`](../database/scylla/); su inicialización automática sigue pendiente.
+
+El volumen `scylla_data` empieza vacío. El volumen anterior `cassandra_data` no se elimina ni se migra. Si Cassandra ya estaba en uso, detener su contenedor con `docker stop <contenedor-cassandra>` antes de iniciar ScyllaDB para liberar el puerto 9042. La conservación de datos requiere una migración separada mediante exportación e importación CQL; no montar el volumen de Cassandra en ScyllaDB.

@@ -2,6 +2,10 @@
 
 Acuerdos entre los servicios y los clientes. Es el lugar donde se coordinan los integrantes: un cliente se programa contra el contrato, no contra el código del servicio.
 
+Para iniciar el desarrollo de autenticación en móvil y escritorio, consultar
+[la guía de contratos públicos y pendientes](auth-clients.md). Su estado es
+candidato para mocks, pendiente de revisión técnica.
+
 | Carpeta | Contenido |
 |---|---|
 | [`openapi/`](openapi/) | Un archivo OpenAPI por servicio: `auth.yaml`, `core.yaml`, `files.yaml`, `reports.yaml`. Rutas bajo `/api/v1`. |
@@ -9,6 +13,11 @@ Acuerdos entre los servicios y los clientes. Es el lugar donde se coordinan los 
 | `proto/` | Archivos `.proto` de gRPC: `checkAccess` de Core y, si se elige, la transferencia de archivos. Se crea con el primer contrato. |
 
 ## Reglas
+
+Entrega de diseño #35: [perfil de tokens/JWKS](token-profile.md),
+[flujos públicos](auth-session-flows.md), [comprobación interna](session-checks.md)
+y [session.revoked](events/session.revoked.md). Contratos por revisar, no capacidades
+ya desplegadas. La API privada Auth se especifica aparte de la pública.
 
 - Un cambio de contrato va en su propio PR, antes de implementarlo en el servicio o en los clientes.
 - Todo cambio incompatible incrementa la versión del contrato o del evento.
