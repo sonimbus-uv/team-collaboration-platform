@@ -57,7 +57,9 @@ pub fn router(state: AppState) -> Router {
                 .post(auth::verify_email),
         )
         .route("/auth/resend-verification", post(auth::resend_verification))
-        .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests));
+        .layer(axum::extract::DefaultBodyLimit::max(4096))
+        .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests))
+        .layer(middleware::from_fn(auth::registration_headers));
 
     Router::new()
         .route("/health", get(health))

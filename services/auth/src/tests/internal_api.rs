@@ -750,7 +750,7 @@ async fn public_router_never_exposes_internal_routes() {
     use crate::{
         repositories::{
             accounts_repository::AccountsRepository,
-            one_time_tokens_repository::OneTimeTokensRepository,
+            registration_attempts_repository::RegistrationAttemptsRepository,
         },
         services::{
             account_service::AuthService, email_verification_service::EmailVerificationService,
@@ -761,8 +761,11 @@ async fn public_router_never_exposes_internal_routes() {
         .unwrap();
     pool.close().await;
     let verification = EmailVerificationService::new(
-        OneTimeTokensRepository::new(pool.clone()),
-        Arc::new(NoMail));
+        RegistrationAttemptsRepository::new(pool.clone()),
+        Arc::new(NoMail),
+        &[0x17; 32],
+    )
+    .unwrap();
     let public = crate::routes::router(crate::state::AppState {
         login_enabled: false,
         auth_service: AuthService::new(

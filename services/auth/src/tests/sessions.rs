@@ -4,7 +4,7 @@ use crate::{
     ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
     repositories::{
         accounts_repository::AccountsRepository,
-        one_time_tokens_repository::OneTimeTokensRepository,
+        registration_attempts_repository::RegistrationAttemptsRepository,
         sessions_repository::SessionsRepository,
     },
     security::password_hasher::{PasswordHasher, PasswordHashingError},
@@ -45,9 +45,11 @@ fn auth(pool: &PgPool, hasher: Arc<dyn PasswordHasher>) -> AuthService {
         AccountsRepository::new(pool.clone()),
         hasher,
         EmailVerificationService::new(
-            OneTimeTokensRepository::new(pool.clone()),
+            RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
-        ),
+            &[0x17; 32],
+        )
+        .unwrap(),
         4,
     )
 }
@@ -382,9 +384,11 @@ async fn bounded_password_verification_runs_off_runtime_and_shares_register_budg
             release: std::sync::Mutex::new(release_rx),
         }),
         EmailVerificationService::new(
-            OneTimeTokensRepository::new(pool.clone()),
+            RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
-        ),
+            &[0x17; 32],
+        )
+        .unwrap(),
         1,
     );
     let copy = passwords.clone();
@@ -404,7 +408,11 @@ async fn bounded_password_verification_runs_off_runtime_and_shares_register_budg
     ));
     assert!(matches!(
         passwords
-            .register("other@example.invalid".into(), "TestPass123!".into())
+            .register(
+                "other@example.invalid".into(),
+                "TestPass123!".into(),
+                &crate::ports::email_verification::TestBudget
+            )
             .await,
         Err(crate::services::account_service::RegisterError::Busy)
     ));
@@ -516,9 +524,11 @@ fn app(pool: &PgPool, enabled: bool) -> axum::Router {
         pool: pool.clone(),
         auth_service: auth(pool, Arc::new(TestHasher)),
         email_verification_service: EmailVerificationService::new(
-            OneTimeTokensRepository::new(pool.clone()),
+            RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
-        ),
+            &[0x17; 32],
+        )
+        .unwrap(),
         token_issuer: crate::tests::token_support::issuer(),
         auth_rate_limiter: Arc::new(
             crate::protection::auth_rate_limiter::AuthRateLimiter::for_tests(
@@ -538,9 +548,11 @@ fn protected_app(
         pool: pool.clone(),
         auth_service: auth(pool, Arc::new(TestHasher)),
         email_verification_service: EmailVerificationService::new(
-            OneTimeTokensRepository::new(pool.clone()),
+            RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
-        ),
+            &[0x17; 32],
+        )
+        .unwrap(),
         token_issuer: crate::tests::token_support::issuer(),
         auth_rate_limiter: Arc::new(limiter),
     })

@@ -136,6 +136,10 @@ impl AuthRateLimiter {
         &self,
         email: &str,
     ) -> Result<RateLimitDecision, RedisConnectionError> {
+        #[cfg(test)]
+        if self.bypass_redis {
+            return Ok(RateLimitDecision::Allowed);
+        }
         let key = self.recipient_key.redis_key(email);
 
         self.check_bucket(&key, self.recipient_policy).await

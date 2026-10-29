@@ -1,106 +1,81 @@
-use crate::ports::email_verification::RecipientBudget;
 use crate::{
-    ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
+    ports::email_verification::{RecipientBudget, VerificationEmailSender},
     repositories::{
-        accounts_repository::Account, one_time_tokens_repository::OneTimeTokensRepository,
+        accounts_repository::Account,
+        registration_attempts_repository::{RegistrationAttempt, RegistrationAttemptsRepository},
     },
+    security::registration_code::RegistrationCodeKey,
 };
-use rand::{rngs::OsRng, RngCore};
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use uuid::Uuid;
 
-pub fn new_token() -> (String, Vec<u8>) {
-    let mut bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    let hash = Sha256::digest(token.as_bytes()).to_vec();
-    (token, hash)
-}
-
-#[derive(Debug)]
-pub enum VerificationError {
-    InvalidToken,
-    Database(sqlx::Error),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn tokens_are_random_and_only_digest_is_persisted() {
-        let (first, hash) = new_token();
-        let (second, _) = new_token();
-        assert_ne!(first, second);
-        assert_eq!(first.len(), 64);
-        assert_eq!(hash.len(), 32);
-        assert_eq!(hash, Sha256::digest(first.as_bytes()).to_vec());
-    }
-}
+pub use crate::repositories::registration_attempts_repository::RegistrationError as VerificationError;
 
 #[derive(Clone)]
 pub struct EmailVerificationService {
-    repository: OneTimeTokensRepository,
+    repository: RegistrationAttemptsRepository,
     sender: Arc<dyn VerificationEmailSender>,
+    key: RegistrationCodeKey,
 }
 
 impl EmailVerificationService {
     pub fn new(
-        repository: OneTimeTokensRepository,
+        repository: RegistrationAttemptsRepository,
         sender: Arc<dyn VerificationEmailSender>,
-    ) -> Self {
-        Self { repository, sender }
+        secret: &[u8],
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            repository,
+            sender,
+            key: RegistrationCodeKey::new(secret)?,
+        })
     }
 
-    pub async fn send(&self, email: &str, token: &str) -> Result<(), EmailDeliveryError> {
-        self.sender.send(email, token, "es-MX").await
-    }
-
-    pub async fn confirm(&self, token: &str) -> Result<Account, VerificationError> {
-        if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(VerificationError::InvalidToken);
+    async fn budget(email: &str, budget: &dyn RecipientBudget) -> Result<(), VerificationError> {
+        match budget.consume(email).await {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(VerificationError::Limited(600)),
+            Err(()) => Err(VerificationError::Unavailable),
         }
-        self.repository
-            .confirm(&Sha256::digest(token.as_bytes()))
-            .await
-            .map_err(VerificationError::Database)?
-            .ok_or(VerificationError::InvalidToken)
+    }
+
+    async fn deliver(&self, email: &str, code: &str) -> bool {
+        // No transaction is held during SMTP/HTTP. Errors never include request bodies.
+        self.sender.send(email, code, "es-MX").await.is_ok()
+    }
+
+    pub async fn start(
+        &self,
+        email: &str,
+        password_hash: &str,
+        budget: &dyn RecipientBudget,
+    ) -> Result<(RegistrationAttempt, bool), VerificationError> {
+        Self::budget(email, budget).await?;
+        let id = Uuid::new_v4();
+        let code = RegistrationCodeKey::generate();
+        let mac = self.key.digest(id, 0, &code);
+        let attempt = self
+            .repository
+            .create(email, password_hash, id, &mac)
+            .await?;
+        let sent = self.deliver(email, &code).await;
+        Ok((attempt, sent))
+    }
+
+    pub async fn confirm(&self, id: Uuid, code: &str) -> Result<Account, VerificationError> {
+        self.repository.confirm(id, code, &self.key).await
     }
 
     pub async fn resend(
         &self,
-        email: &str,
+        id: Uuid,
         budget: &dyn RecipientBudget,
-    ) -> Result<(), VerificationError> {
-        let locked = self
-            .repository
-            .lock_for_reissue(email)
-            .await
-            .map_err(VerificationError::Database)?;
-
-        let Some((tx, account_id)) = locked else {
-            return Ok(());
-        };
-
-        match budget.consume(email).await {
-            Ok(true) => {}
-            Ok(false) | Err(()) => {
-                tx.rollback().await.map_err(VerificationError::Database)?;
-                return Ok(());
-            }
-        }
-
-        let (token, hash) = new_token();
-
-        OneTimeTokensRepository::complete_reissue(tx, account_id, email, &hash)
-            .await
-            .map_err(VerificationError::Database)?;
-
-        if let Err(error) = self.send(email, &token).await {
-            tracing::error!(
-                error = %error,
-                "Verification email delivery failed"
-            );
-        }
-        Ok(())
+    ) -> Result<(RegistrationAttempt, bool), VerificationError> {
+        let attempt = self.repository.resend_candidate(id).await?;
+        Self::budget(&attempt.email, budget).await?;
+        let mut code = RegistrationCodeKey::generate();
+        let attempt = self.repository.reissue(id, &self.key, &mut code).await?;
+        let sent = self.deliver(&attempt.email, &code).await;
+        Ok((attempt, sent))
     }
 }

@@ -1,9 +1,12 @@
-use super::email_verification_service::{new_token, EmailVerificationService};
+use super::email_verification_service::{EmailVerificationService, VerificationError};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 use crate::{
-    repositories::accounts_repository::{Account, AccountsRepository, CreateAccountError},
+    repositories::{
+        accounts_repository::{AccountsRepository, CreateAccountError},
+        registration_attempts_repository::RegistrationAttempt,
+    },
     security::password_hasher::{PasswordHasher, PasswordHashingError},
     validators::auth_validator::{validate_register_input, RegisterInputValidationError},
 };
@@ -21,6 +24,7 @@ pub enum RegisterError {
     InvalidInput(RegisterInputValidationError),
     PasswordHashing(PasswordHashingError),
     CreateAccount(CreateAccountError),
+    Verification(VerificationError),
     Busy,
     Worker(tokio::task::JoinError),
 }
@@ -75,7 +79,8 @@ impl AuthService {
         &self,
         email: String,
         password: String,
-    ) -> Result<(Account, bool), RegisterError> {
+        budget: &dyn crate::ports::email_verification::RecipientBudget,
+    ) -> Result<(RegistrationAttempt, bool), RegisterError> {
         let valid_input =
             validate_register_input(email, password).map_err(RegisterError::InvalidInput)?;
 
@@ -88,30 +93,28 @@ impl AuthService {
 
         let password_hash = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            hasher.hash_password(&valid_input.password)
+            let password = zeroize::Zeroizing::new(valid_input.password);
+            hasher.hash_password(&password)
         })
         .await
         .map_err(RegisterError::Worker)?
         .map_err(RegisterError::PasswordHashing)?;
 
-        let (token, token_hash) = new_token();
-
-        let account = self
+        if self
             .accounts_repository
-            .create_with_password(&valid_input.email, &password_hash, &token_hash)
+            .is_registered(&valid_input.email)
             .await
-            .map_err(RegisterError::CreateAccount)?;
-        let sent = match self.verification.send(&account.email, &token).await {
-            Ok(()) => true,
-            Err(error) => {
-                tracing::error!(
-                    error = %error,
-                    account_id = %account.id,
-                    "verification email delivery failed");
-                false
-            }
-        };
-        Ok((account, sent))
+            .map_err(|error| RegisterError::CreateAccount(CreateAccountError::Database(error)))?
+        {
+            return Err(RegisterError::CreateAccount(
+                CreateAccountError::EmailAlreadyExists,
+            ));
+        }
+
+        self.verification
+            .start(&valid_input.email, &password_hash, budget)
+            .await
+            .map_err(RegisterError::Verification)
     }
 }
 
@@ -120,7 +123,7 @@ mod tests {
     use super::*;
     use crate::{
         ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
-        repositories::one_time_tokens_repository::OneTimeTokensRepository,
+        repositories::registration_attempts_repository::RegistrationAttemptsRepository,
     };
 
     struct NoopSender;
@@ -165,9 +168,11 @@ mod tests {
             .connect_lazy("postgres://test:test@localhost/test")
             .unwrap();
         let verification = EmailVerificationService::new(
-            OneTimeTokensRepository::new(pool.clone()),
+            RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoopSender),
-        );
+            &[0x17; 32],
+        )
+        .unwrap();
 
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -184,8 +189,12 @@ mod tests {
 
         let copy = service.clone();
         let first = tokio::spawn(async move {
-            copy.register("a@b.com".into(), "ValidPass123!".into())
-                .await
+            copy.register(
+                "a@b.com".into(),
+                "ValidPass123!".into(),
+                &crate::ports::email_verification::TestBudget,
+            )
+            .await
         });
         let worker_thread = tokio::time::timeout(std::time::Duration::from_secs(5), started_rx)
             .await
@@ -195,7 +204,11 @@ mod tests {
         assert_ne!(worker_thread, std::thread::current().id());
         assert!(matches!(
             service
-                .register("b@b.com".into(), "ValidPass123!".into())
+                .register(
+                    "b@b.com".into(),
+                    "ValidPass123!".into(),
+                    &crate::ports::email_verification::TestBudget
+                )
                 .await,
             Err(RegisterError::Busy)
         ));

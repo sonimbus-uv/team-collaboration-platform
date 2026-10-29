@@ -17,7 +17,7 @@ impl std::fmt::Display for EmailDeliveryError {
 
 #[async_trait::async_trait]
 pub trait VerificationEmailSender: Send + Sync {
-    async fn send(&self, email: &str, token: &str, locale: &str) -> Result<(), EmailDeliveryError>;
+    async fn send(&self, email: &str, code: &str, locale: &str) -> Result<(), EmailDeliveryError>;
 }
 
 #[async_trait::async_trait]
@@ -26,4 +26,14 @@ pub trait RecipientBudget: Send + Sync {
     // false: budget exhausted.
     // Err: could not be checked.
     async fn consume(&self, email: &str) -> Result<bool, ()>;
+}
+
+#[cfg(test)]
+pub struct TestBudget;
+#[cfg(test)]
+#[async_trait::async_trait]
+impl RecipientBudget for TestBudget {
+    async fn consume(&self, _: &str) -> Result<bool, ()> {
+        Ok(true)
+    }
 }
