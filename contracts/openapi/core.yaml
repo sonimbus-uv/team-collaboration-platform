@@ -1,0 +1,369 @@
+openapi: 3.1.0
+info:
+  title: "Sonimbus Core: grupos, canales, invitaciones y perfil"
+  version: 0.1.0
+  description: >-
+    Contrato candidato del recorrido mínimo de Core para la expo: CU-08 (crear
+    grupo), CU-10 (crear invitación), CU-11 (unirse), CU-13 (crear y listar
+    canales) y el nombre visible de D-29. Pendiente de
+    revisión técnica. Errores con Problem Details; `type` es una referencia
+    relativa `/problems/<nombre>`. Horas en UTC (RFC 3339).
+servers:
+  - url: https://api.example.invalid
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/groups:
+    get:
+      operationId: listMyGroups
+      summary: Grupos vigentes del usuario, con su rol
+      description: >-
+        Sin paginación en v0.1: un usuario pertenece a pocos grupos en el MVP.
+      responses:
+        "200":
+          description: Grupos del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      operationId: createGroup
+      summary: Crear grupo (CU-08); el creador queda como admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateGroup" }
+      responses:
+        "201":
+          description: Grupo creado
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: getGroup
+      summary: Grupo del que el usuario es miembro
+      responses:
+        "200":
+          description: Grupo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    post:
+      operationId: createInvitation
+      summary: Crear invitación (CU-10); rol moderator o superior
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInvitation" }
+      responses:
+        "201":
+          description: Invitación creada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Invitation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/invitations/join:
+    post:
+      operationId: joinGroup
+      summary: Unirse a un grupo con una invitación (CU-11)
+      description: >-
+        La membresía y el descuento del uso ocurren en una sola transacción.
+        El código va en el cuerpo para que no quede en los registros de acceso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "201":
+          description: El usuario se unió como member
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "200":
+          description: Ya era miembro; no se descontó ningún uso (CU-11 EX-02)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Usuario bloqueado en el grupo (CU-11 EX-03), `/problems/banned`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422":
+          description: >-
+            Invitación inexistente, caducada, revocada o agotada (CU-11 EX-01),
+            `/problems/invitation-invalid`. No distingue el motivo.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/groups/{group_id}/channels:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listChannels
+      summary: Canales que el rol del usuario puede ver (D-17)
+      responses:
+        "200":
+          description: Canales por nombre
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: createChannel
+      summary: Crear canal (CU-13); rol admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateChannel" }
+      responses:
+        "201":
+          description: Canal creado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            Nombre repetido en el grupo (`/problems/conflict`, CU-13 EX-01) o
+            grupo archivado (`/problems/group-archived`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/me/profile:
+    get:
+      operationId: getMyProfile
+      summary: Copia local del perfil del usuario
+      responses:
+        "200":
+          description: Perfil
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: putMyProfile
+      summary: Guardar el nombre visible (D-29, desviación temporal de D-20)
+      description: >-
+        Solo mientras Auth no publique el perfil. Cuando llegue el primer
+        `user.updated` (versión mayor que 0), el nombre lo administra Auth y
+        esta operación responde 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [display_name]
+              properties:
+                display_name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: Perfil guardado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: El perfil ya lo administra Auth, `/problems/profile-managed-by-auth`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Access JWT de Auth (contracts/token-profile.md) con `sonimbus-core` en
+        `aud`.
+  parameters:
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        errors:
+          description: Solo en 409 y 422; mensajes por campo
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    Role:
+      type: string
+      enum: [member, moderator, admin]
+      description: Ordenados de menor a mayor (D-18)
+    CreateGroup:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        image_id: { type: string, format: uuid, description: Archivo del File Service }
+    Group:
+      type: object
+      required: [id, name, created_by, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        image_id: { type: [string, "null"], format: uuid }
+        created_by: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/Role" }
+        archived_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    GroupEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/Group" }
+    CreateInvitation:
+      type: object
+      properties:
+        expires_in:
+          type: integer
+          minimum: 3600
+          maximum: 2592000
+          default: 604800
+          description: Segundos hasta la caducidad (1 h a 30 días, D-22)
+        max_uses:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100
+          description: Nulo u omitido = ilimitado
+    Invitation:
+      type: object
+      required: [id, group_id, code, expires_at, uses, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        group_id: { type: string, format: uuid }
+        code: { type: string }
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: [integer, "null"] }
+        uses: { type: integer }
+        created_at: { type: string, format: date-time }
+    CreateChannel:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, pattern: "^[a-z0-9-]+$" }
+        description: { type: string, maxLength: 500 }
+        type: { type: string, enum: [text, voice] }
+        min_role: { $ref: "#/components/schemas/Role" }
+    Channel:
+      type: object
+      required: [id, group_id, name, type, min_role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        group_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        type: { type: string, enum: [text, voice] }
+        min_role: { $ref: "#/components/schemas/Role" }
+        created_at: { type: string, format: date-time }
+    ProfileEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user_id, display_name, updated_at]
+          properties:
+            user_id: { type: string, format: uuid }
+            display_name: { type: string }
+            avatar_id: { type: [string, "null"] }
+            updated_at: { type: string, format: date-time }
+  responses:
+    Unauthorized:
+      description: Falta el access JWT o no es válido, `/problems/unauthorized`
+      headers:
+        WWW-Authenticate:
+          schema: { type: string }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: El rol no permite la acción, `/problems/forbidden`
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: >-
+        No existe o el usuario no tiene acceso; no se distingue, `/problems/not-found`
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    GroupArchived:
+      description: El grupo está archivado (solo lectura), `/problems/group-archived`
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationError:
+      description: Campos inválidos, `/problems/validation-error`
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
