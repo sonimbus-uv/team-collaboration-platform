@@ -2,6 +2,10 @@
 
 ## Estado
 
+Actualización 2026-10-28: [ADR-008](ADR-008-registration-attempt-codes.md) define
+la solución local de #17 con código ligado al intento. Pendiente de revisión;
+login sigue deshabilitado. La referencia a alternativas de #17 más abajo es histórica.
+
 Decisiones confirmadas por el solicitante para la primera entrega de #35;
 pendiente de revisión del equipo y aprobación del ADR. Este ADR registra el diseño
 original; su contexto de inspección es histórico. Actualmente existen firma/JWKS,

@@ -13,7 +13,8 @@ parámetros que los documentos todavía identifican como propuestas.
 | [OpenAPI público](openapi/auth.yaml) | Cuerpos, respuestas y errores de login, refresh, logout y JWKS. El archivo contiene JSON válido, compatible con YAML. |
 | [Flujos de sesión](auth-session-flows.md) | Login, rotación, restauración, logout y resultados inciertos. |
 | [Perfil de tokens](token-profile.md) | Tipos de credenciales, claims, vencimientos y almacenamiento previsto. |
-| [Registro y verificación](../services/auth/REGISTRATION.md) | Rutas existentes `/auth/register`, `/auth/verify-email` y `/auth/resend-verification`, fuera del OpenAPI actual. |
+| [Contrato de registro](registration.md) | Registro con intento+código, reenvío y compatibilidad; incluido en OpenAPI 0.2.0. |
+| [Registro: operación y pruebas](../services/auth/REGISTRATION.md) | Implementación y pruebas aisladas con Mailpit. |
 | [Sesiones implementadas](../services/auth/SESSIONS.md) | Comportamiento del backend y bloqueo de habilitación por #17. |
 | [ADR-007](../docs/decisions/ADR-007-auth-sessions.md) | Contexto de las decisiones de sesiones y revocación. |
 
@@ -28,6 +29,11 @@ necesarios para comenzar con mocks.
   un entorno compartido como consecuencia de esta publicación documental.
 - Forgot/reset password están pendientes de diseño e implementación. No inventar
   rutas, cuerpos o respuestas para integrarlos como si fueran definitivos.
+- Cambio incompatible aprobado 2026-10-28: el registro devuelve identificador de
+  intento, no cuenta; la confirmación envía ID+código, no token. GET antiguo no
+  activa cuentas. La aplicación conserva el ID de su propia solicitud. Ver
+  [registration.md](registration.md). La solución local de #17 sigue en revisión;
+  no sanea automáticamente cuentas verificadas por el flujo anterior.
 - Los prefijos públicos actuales difieren: sesiones bajo `/api/v1/auth` y
   registro/verificación bajo `/auth`. No normalizarlos unilateralmente; la
   convergencia está pendiente en #14.
