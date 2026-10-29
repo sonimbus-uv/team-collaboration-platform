@@ -74,13 +74,17 @@ mvn -pl app javafx:run
 
 Para ejecutarlo desde el IDE, usa como clase principal `mx.uv.sonimbus.desktop.Launcher`.
 
-### URL de Auth Service
+### URL de Auth Service y de Core Service
 
-El cliente toma la URL de Auth de la primera de estas fuentes que esté definida:
+El cliente toma la URL de cada servicio de la primera de estas fuentes que esté definida:
 
-1. Propiedad de sistema `sonimbus.auth.url`.
-2. Variable de entorno `SONIMBUS_AUTH_URL`.
-3. Valor por defecto: `http://192.168.33.30:3001`, que es Auth en la VM de Vagrant.
+| Fuente | Auth | Core |
+|---|---|---|
+| Propiedad de sistema | `sonimbus.auth.url` | `sonimbus.core.url` |
+| Variable de entorno | `SONIMBUS_AUTH_URL` | `SONIMBUS_CORE_URL` |
+| Valor por defecto | `http://192.168.33.30:3001` (Auth en la VM) | `http://localhost:3002` (Core por un túnel SSH) |
+
+El WebSocket de mensajes usa el host de Core (`ws://…/socket/websocket`). Para la demo con Core, el túnel y el orden de arranque están en [`docs/deployment/demo-expo-escritorio.md`](../../docs/deployment/demo-expo-escritorio.md).
 
 ```bash
 SONIMBUS_AUTH_URL=http://localhost:3001 mvn -pl app javafx:run

@@ -76,7 +76,8 @@ class AuthMessagesTest {
     void messagesHaveNoInternals(ApiErrorKind kind) {
         for (String message : new String[] {
                 AuthMessages.forRegister(http(kind, 418, null)),
-                AuthMessages.forResendVerification(http(kind, 418, null))}) {
+                AuthMessages.forResendVerification(http(kind, 418, null)),
+                AuthMessages.forLogin(http(kind, 418, null))}) {
             assertFalse(message.contains("418"), message);
             assertFalse(message.contains(kind.name()), message);
             assertFalse(message.matches(".*\\b(request|failed|retry|invalid|please)\\b.*"), message);
@@ -134,8 +135,17 @@ class AuthMessagesTest {
     }
 
     @Test
+    void loginMessagesAreGeneric() {
+        assertEquals("Correo o contraseña incorrectos.",
+                AuthMessages.forLogin(http(ApiErrorKind.INVALID_CREDENTIALS, 401, null)));
+        assertEquals(CONNECTION, AuthMessages.forLogin(noResponse(ApiErrorKind.NETWORK)));
+        assertEquals(CONNECTION, AuthMessages.forLogin(http(ApiErrorKind.UNAVAILABLE, 503, null)));
+        assertEquals("Demasiadas solicitudes. Intenta de nuevo en 5 segundos.",
+                AuthMessages.forLogin(http(ApiErrorKind.RATE_LIMITED, 429, Duration.ofSeconds(5))));
+    }
+
+    @Test
     void unavailableNotices() {
-        assertEquals("El inicio de sesión todavía no está disponible en el servidor.", AuthMessages.LOGIN_UNAVAILABLE);
         assertEquals("No pudimos enviar el correo de verificación. Usa Reenviar correo.",
                 AuthMessages.VERIFICATION_NOT_SENT);
         assertEquals("Si la cuenta existe y no está verificada, te enviamos un nuevo enlace.", AuthMessages.RESEND_DONE);

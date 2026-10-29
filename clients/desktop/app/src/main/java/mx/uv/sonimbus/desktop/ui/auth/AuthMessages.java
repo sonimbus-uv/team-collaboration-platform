@@ -22,6 +22,7 @@ public final class AuthMessages {
     static final String EMAIL_DELIVERY = "No pudimos enviar el correo de verificación. Intenta de nuevo más tarde.";
     static final String RATE_LIMITED_NO_WAIT = "Demasiadas solicitudes. Intenta de nuevo en unos momentos.";
     static final String UNEXPECTED = "Ocurrió un error inesperado. Intenta de nuevo.";
+    static final String INVALID_CREDENTIALS = "Correo o contraseña incorrectos.";
 
     /** Regla real de Auth ({@code auth_validator.rs}); se repite en el FXML y su accessibleHelp. */
     public static final String PASSWORD_RULE = "De " + RegistrationValidator.PASSWORD_MIN_LENGTH + " a "
@@ -29,7 +30,6 @@ public final class AuthMessages {
             + " caracteres, con al menos una mayúscula, una minúscula, un número y un símbolo.";
 
     public static final String LOGIN_FIELDS_EMPTY = "Escribe tu correo y tu contraseña.";
-    public static final String LOGIN_UNAVAILABLE = "El inicio de sesión todavía no está disponible en el servidor.";
     public static final String GOOGLE_UNAVAILABLE =
             "El inicio de sesión con Google todavía no está disponible en el servidor.";
     public static final String RECOVERY_UNAVAILABLE =
@@ -49,7 +49,7 @@ public final class AuthMessages {
             case VALIDATION -> INVALID_REGISTRATION;
             case RATE_LIMITED -> rateLimited(e);
             case NETWORK, TIMEOUT, SERVER, UNAVAILABLE -> CONNECTION;
-            case UNEXPECTED -> UNEXPECTED;
+            default -> UNEXPECTED;
         };
     }
 
@@ -60,7 +60,20 @@ public final class AuthMessages {
             case RATE_LIMITED -> rateLimited(e);
             case SERVER -> EMAIL_DELIVERY;
             case NETWORK, TIMEOUT, UNAVAILABLE -> CONNECTION;
-            case EMAIL_TAKEN, UNEXPECTED -> UNEXPECTED;
+            default -> UNEXPECTED;
+        };
+    }
+
+    /**
+     * CU-03. Mensaje genérico ante credenciales incorrectas (Fig. 10b): no dice si el correo
+     * existe ni si la cuenta está sin verificar.
+     */
+    public static String forLogin(ApiException e) {
+        return switch (e.kind()) {
+            case INVALID_CREDENTIALS, VALIDATION -> INVALID_CREDENTIALS;
+            case RATE_LIMITED -> rateLimited(e);
+            case NETWORK, TIMEOUT, SERVER, UNAVAILABLE -> CONNECTION;
+            default -> UNEXPECTED;
         };
     }
 

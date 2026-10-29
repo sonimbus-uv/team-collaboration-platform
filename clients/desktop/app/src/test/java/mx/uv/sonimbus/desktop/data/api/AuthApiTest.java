@@ -265,6 +265,51 @@ class AuthApiTest {
         assertEquals(0, e.status());
     }
 
+    // --- Sesión (CU-03) ---
+
+    private static final String TOKENS = """
+            {"access_token":"acc-secret","refresh_token":"ref-secret","token_type":"Bearer",\
+            "access_expires_in":900,"session_expires_at":"2026-11-18T00:00:00Z",\
+            "sid":"5b1f","account_id":"7b0c"}""";
+
+    @Test
+    void loginSendsDesktopClientTypeAndReadsTokens() throws ApiException, IOException {
+        respond(200, TOKENS);
+
+        Tokens tokens = api.login("ana@uv.mx", PASSWORD);
+
+        assertEquals("POST", requestMethod);
+        assertEquals("/api/v1/auth/login", requestPath);
+        assertEquals(Map.of("email", "ana@uv.mx", "password", PASSWORD, "client_type", "desktop",
+                "device_name", AuthApi.DEVICE_NAME), sentJson());
+        assertEquals("acc-secret", tokens.accessToken());
+        assertEquals(900, tokens.accessExpiresIn());
+        assertEquals("7b0c", tokens.accountId());
+        assertFalse(tokens.toString().contains("secret"), tokens.toString());
+    }
+
+    @Test
+    void loginRejectedIsInvalidCredentials() {
+        respond(401, problem(401, "Unauthorized", "Invalid credentials"));
+
+        ApiException e = assertThrows(ApiException.class, () -> api.login("ana@uv.mx", PASSWORD));
+
+        assertEquals(ApiErrorKind.INVALID_CREDENTIALS, e.kind());
+        assertSecretAbsent(e, PASSWORD);
+    }
+
+    @Test
+    void refreshRejectedIsUnauthorized() throws IOException {
+        respond(401, problem(401, "Unauthorized", "Invalid refresh token"));
+
+        ApiException e = assertThrows(ApiException.class, () -> api.refresh("ref-secret"));
+
+        assertEquals("/api/v1/auth/refresh", requestPath);
+        assertEquals(Map.of("refresh_token", "ref-secret"), sentJson());
+        assertEquals(ApiErrorKind.UNAUTHORIZED, e.kind());
+        assertSecretAbsent(e, "ref-secret");
+    }
+
     // --- RNF-SEG-04: la contraseña y el token no salen en textos ---
 
     @Test

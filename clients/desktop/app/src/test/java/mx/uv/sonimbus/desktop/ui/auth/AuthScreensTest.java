@@ -22,6 +22,7 @@ import mx.uv.sonimbus.desktop.data.api.Account;
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
 import mx.uv.sonimbus.desktop.data.api.AuthApi;
+import mx.uv.sonimbus.desktop.data.session.Session;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
@@ -51,6 +52,7 @@ class AuthScreensTest {
         viewManager = new ViewManager(stage, controllers);
         controllers
                 .register(AuthApi.class, authApi)
+                .register(Session.class, new Session(authApi::refresh))
                 // El trabajo corre en el mismo hilo; la respuesta llega con runLater, como en la app.
                 .register(BackgroundTasks.class, new BackgroundTasks(Runnable::run, Platform::runLater))
                 .register(ViewManager.class, viewManager);
@@ -217,7 +219,9 @@ class AuthScreensTest {
     }
 
     @Test
-    void loginIsNotAvailableYet(FxRobot robot) {
+    void loginWithWrongCredentialsShowsGenericError(FxRobot robot) throws Exception {
+        when(authApi.login(EMAIL, PASSWORD))
+                .thenThrow(new ApiException(ApiErrorKind.INVALID_CREDENTIALS, "login", 401, null));
         open(robot, View.LOGIN, null);
 
         robot.interact(() -> {
@@ -227,12 +231,12 @@ class AuthScreensTest {
         robot.clickOn("#loginButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals(AuthMessages.LOGIN_UNAVAILABLE, label(robot, "#errorLabel").getText());
+        assertEquals(AuthMessages.INVALID_CREDENTIALS, label(robot, "#errorLabel").getText());
         Node box = node(robot, "#errorBox");
-        assertTrue(box.getStyleClass().contains("alert-info"));
-        assertFalse(box.getStyleClass().contains("alert-error"));
-        assertEquals("i", label(robot, "#errorIconLabel").getText(), "se distingue por icono, no solo color");
-        verifyNoInteractions(authApi);
+        assertTrue(box.getStyleClass().contains("alert-error"));
+        assertEquals("!", label(robot, "#errorIconLabel").getText(), "se distingue por icono, no solo color");
+        assertEquals("", field(robot, "#passwordField").getText(), "la contraseña no se conserva");
+        verify(authApi).login(EMAIL, PASSWORD);
     }
 
     @Test

@@ -10,20 +10,28 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+import mx.uv.sonimbus.desktop.data.api.ApiException;
+import mx.uv.sonimbus.desktop.data.api.AuthApi;
+import mx.uv.sonimbus.desktop.data.session.Session;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
+import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
+import mx.uv.sonimbus.desktop.ui.common.BusyButton;
 import mx.uv.sonimbus.desktop.ui.common.PasswordVisibility;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
 /**
- * CU-03. Auth todavía no tiene inicio de sesión: la vista valida los campos y avisa que no está
- * disponible. {@code AuthApi} no tiene método de login a propósito, para no inventar el contrato.
+ * CU-03. Inicia la sesión de escritorio con Auth y abre el shell. La sesión vive solo en memoria
+ * ({@link Session}).
  */
 public class LoginController {
 
     private static final String FIELD_INVALID = "field-invalid";
 
     private final ViewManager viewManager;
+    private final AuthApi authApi;
+    private final Session session;
+    private final BackgroundTasks tasks;
 
     @FXML private TextField emailField;
     @FXML private PasswordField passwordField;
@@ -37,8 +45,11 @@ public class LoginController {
     @FXML private Hyperlink forgotPasswordLink;
     @FXML private Hyperlink createAccountLink;
 
-    public LoginController(ViewManager viewManager) {
+    public LoginController(ViewManager viewManager, AuthApi authApi, Session session, BackgroundTasks tasks) {
         this.viewManager = Objects.requireNonNull(viewManager);
+        this.authApi = Objects.requireNonNull(authApi);
+        this.session = Objects.requireNonNull(session);
+        this.tasks = Objects.requireNonNull(tasks);
     }
 
     @FXML
@@ -67,10 +78,19 @@ public class LoginController {
             (emailEmpty ? emailField : visiblePasswordField()).requestFocus();
             return;
         }
-        // TODO CU-03 (#35): autenticar con Auth cuando exista el endpoint; si falla, mensaje
-        //                   genérico «Correo o contraseña incorrectos» (Fig. 10b) y, si funciona,
-        //                   guardar la sesión de forma segura y viewManager.show(View.MAIN).
-        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.INFO, AuthMessages.LOGIN_UNAVAILABLE);
+        String email = emailField.getText().strip();
+        String password = passwordField.getText();
+        BusyButton.setBusy(loginButton, true, "Iniciando sesión…");
+        tasks.run(() -> authApi.login(email, password), tokens -> {
+            session.start(tokens);
+            viewManager.show(View.MAIN);
+        }, error -> {
+            BusyButton.setBusy(loginButton, false, null);
+            String message = error instanceof ApiException e ? AuthMessages.forLogin(e) : AuthMessages.UNEXPECTED;
+            AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, message);
+            passwordField.clear();
+            visiblePasswordField().requestFocus();
+        });
     }
 
     @FXML

@@ -25,7 +25,9 @@ public class AuthApi {
     enum Operation {
         REGISTER("register", AuthPaths.REGISTER),
         VERIFY_EMAIL("verify-email", AuthPaths.VERIFY_EMAIL),
-        RESEND_VERIFICATION("resend-verification", AuthPaths.RESEND_VERIFICATION);
+        RESEND_VERIFICATION("resend-verification", AuthPaths.RESEND_VERIFICATION),
+        LOGIN("login", AuthPaths.LOGIN),
+        REFRESH("refresh", AuthPaths.REFRESH);
 
         private final String label;
         private final String path;
@@ -54,6 +56,25 @@ public class AuthApi {
 
     record ResendVerificationRequest(String email) {
     }
+
+    /** Cuerpo de {@code POST /api/v1/auth/login}. {@link #toString()} oculta la contraseña. */
+    record LoginRequest(String email, String password, String clientType, String deviceName) {
+        @Override
+        public String toString() {
+            return "LoginRequest[email=" + email + ", password=[REDACTED]]";
+        }
+    }
+
+    /** Cuerpo de {@code POST /api/v1/auth/refresh}. {@link #toString()} oculta el token. */
+    record RefreshRequest(String refreshToken) {
+        @Override
+        public String toString() {
+            return "RefreshRequest[refreshToken=[REDACTED]]";
+        }
+    }
+
+    /** Nombre del equipo que Auth muestra en la lista de sesiones (máximo 120 caracteres). */
+    static final String DEVICE_NAME = "Sonimbus escritorio";
 
     private final HttpClient http;
     private final String baseUrl;
@@ -88,6 +109,21 @@ public class AuthApi {
      */
     public void resendVerification(String email) throws ApiException {
         post(Operation.RESEND_VERIFICATION, new ResendVerificationRequest(email));
+    }
+
+    /**
+     * CU-03. Abre la sesión de escritorio; la última iniciada en este tipo de cliente reemplaza a
+     * la anterior (D-12).
+     */
+    public Tokens login(String email, String password) throws ApiException {
+        HttpResponse<String> response =
+                post(Operation.LOGIN, new LoginRequest(email, password, "desktop", DEVICE_NAME));
+        return read(Operation.LOGIN, response, Tokens.class);
+    }
+
+    /** Renueva el par de tokens; el refresh token anterior deja de servir (rotación). */
+    public Tokens refresh(String refreshToken) throws ApiException {
+        return read(Operation.REFRESH, post(Operation.REFRESH, new RefreshRequest(refreshToken)), Tokens.class);
     }
 
     private HttpResponse<String> post(Operation operation, Object body) throws ApiException {
@@ -127,10 +163,15 @@ public class AuthApi {
     }
 
     private Account read(Operation operation, HttpResponse<String> response) throws ApiException {
+        return read(operation, response, Account.class);
+    }
+
+    private <T> T read(Operation operation, HttpResponse<String> response, Class<T> type) throws ApiException {
         try {
-            return json.readValue(response.body(), Account.class);
+            return json.readValue(response.body(), type);
         } catch (JsonProcessingException e) {
-            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, e);
+            // Sin la causa: el mensaje de Jackson podría citar los tokens de la respuesta.
+            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
         }
     }
 
@@ -141,6 +182,7 @@ public class AuthApi {
     static ApiErrorKind classify(Operation operation, int status) {
         return switch (status) {
             case 400 -> ApiErrorKind.VALIDATION;
+            case 401 -> operation == Operation.LOGIN ? ApiErrorKind.INVALID_CREDENTIALS : ApiErrorKind.UNAUTHORIZED;
             case 409 -> operation == Operation.REGISTER ? ApiErrorKind.EMAIL_TAKEN : ApiErrorKind.UNEXPECTED;
             case 429 -> ApiErrorKind.RATE_LIMITED;
             case 500 -> ApiErrorKind.SERVER;
