@@ -64,7 +64,7 @@ impl RefreshTokensRepository {
                 $1,
                 $2,
                 to_timestamp($3::double precision)
-            ) RETURNING id"
+            ) RETURNING id",
         )
         .bind(session.id)
         .bind(hash)
@@ -79,11 +79,12 @@ impl RefreshTokensRepository {
             UPDATE auth.refresh_tokens
             SET revoked_at=clock_timestamp(),
                 replaced_by_token_id=$2
-            WHERE id=$1")
-            .bind(id)
-            .bind(next)
-            .execute(&mut **tx)
-            .await?;
+            WHERE id=$1",
+        )
+        .bind(id)
+        .bind(next)
+        .execute(&mut **tx)
+        .await?;
         Ok(())
     }
 }

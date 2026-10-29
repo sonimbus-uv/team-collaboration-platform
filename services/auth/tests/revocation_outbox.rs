@@ -18,13 +18,13 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
         "
         SELECT auth.open_session($1,'desktop',interval '20 days')
         ",
-        )
-        .bind(account)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(account)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
 
-        let mut tx = pool.begin().await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
 
     sqlx::query(
         "
@@ -41,7 +41,7 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
     let count: i64 = sqlx::query_scalar(
         "
         SELECT count(*) FROM auth.session_revocation_outbox
-        "
+        ",
     )
     .fetch_one(&mut *tx)
     .await
@@ -51,7 +51,7 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
     let count: i64 = sqlx::query_scalar(
         "
         SELECT count(*) FROM auth.session_revocation_outbox
-        "
+        ",
     )
     .fetch_one(&pool)
     .await
@@ -63,7 +63,7 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
         UPDATE auth.sessions
         SET revoked_at=clock_timestamp(),
             revoke_reason='logout'
-        WHERE id=$1 AND revoked_at IS NULL"
+        WHERE id=$1 AND revoked_at IS NULL",
     )
     .bind(sid)
     .execute(&pool)
@@ -73,22 +73,21 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
         "
         UPDATE auth.sessions
         SET last_seen_at=clock_timestamp()
-        WHERE id=$1"
+        WHERE id=$1",
     )
-        .bind(sid)
-        .execute(&pool)
-        .await
-        .unwrap();
+    .bind(sid)
+    .execute(&pool)
+    .await
+    .unwrap();
 
-    let events: Vec<serde_json::Value> =
-        sqlx::query_scalar(
-            "
+    let events: Vec<serde_json::Value> = sqlx::query_scalar(
+        "
             SELECT event FROM auth.session_revocation_outbox
-            "
-        )
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+            ",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
 
     assert_eq!(events.len(), 1);
 

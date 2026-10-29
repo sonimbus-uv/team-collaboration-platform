@@ -25,11 +25,11 @@ async fn session_lifetime_identity_and_final_revocation_are_enforced(pool: PgPoo
         "
         SELECT auth.open_session($1,'desktop',interval '20 days')
         ",
-        )
-        .bind(account)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(account)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert!(sqlx::query(
         "UPDATE auth.sessions SET expires_at=expires_at+interval '1 second' WHERE id=$1"
     )
@@ -69,9 +69,8 @@ async fn absolute_lifetime_rejects_calendar_days_that_add_an_extra_dst_hour(pool
     .unwrap();
     // Fall-back adds 1 hour to twenty calendar days. Exact timestamps make this reproducible.
 
-    assert!(
-        sqlx::query(
-            "
+    assert!(sqlx::query(
+        "
             INSERT INTO auth.sessions(
                 account_id,
                 client_type,
@@ -82,10 +81,11 @@ async fn absolute_lifetime_rejects_calendar_days_that_add_an_extra_dst_hour(pool
                 'desktop',
                 '2026-10-23 12:00:00-04',
                 '2026-11-12 12:00:00-05')"
-            )
-        .bind(account)
-        .execute(&pool)
-        .await.is_err());
+    )
+    .bind(account)
+    .execute(&pool)
+    .await
+    .is_err());
 
     sqlx::query(
         "
@@ -96,9 +96,10 @@ async fn absolute_lifetime_rejects_calendar_days_that_add_an_extra_dst_hour(pool
             $1,
             'desktop',
             '2026-10-23 12:00:00-04',
-            '2026-11-12 11:00:00-05')"
+            '2026-11-12 11:00:00-05')",
     )
     .bind(account)
     .execute(&pool)
-    .await.unwrap();
+    .await
+    .unwrap();
 }

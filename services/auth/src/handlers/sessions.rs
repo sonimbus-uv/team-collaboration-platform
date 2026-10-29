@@ -17,9 +17,7 @@ pub async fn login(
     request: Result<Json<LoginRequest>, JsonRejection>,
 ) -> Response {
     if !state.login_enabled {
-        return problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "auth-unavailable");
+        return problem(StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable");
     }
 
     let Ok(Json(request)) = request else {
@@ -35,9 +33,7 @@ pub async fn login(
         Ok(RateLimitDecision::Limited { retry_after_secs }) => {
             return protection(ApiError::RateLimited { retry_after_secs })
         }
-        Err(_) => return problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "auth-unavailable"),
+        Err(_) => return problem(StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
     }
 
     match state.sessions().login(request).await {
@@ -89,27 +85,12 @@ fn token_request(
 
 pub fn from_error(error: SessionError) -> Response {
     let (status, kind) = match error {
-        SessionError::Malformed => (
-            StatusCode::BAD_REQUEST,
-            "malformed-request"
-        ),
-        SessionError::InvalidCredentials => (
-            StatusCode::UNAUTHORIZED,
-            "invalid-credentials"
-        ),
-        SessionError::InvalidRefresh => (
-            StatusCode::UNAUTHORIZED,
-            "invalid-refresh-token"
-        ),
+        SessionError::Malformed => (StatusCode::BAD_REQUEST, "malformed-request"),
+        SessionError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid-credentials"),
+        SessionError::InvalidRefresh => (StatusCode::UNAUTHORIZED, "invalid-refresh-token"),
         SessionError::Busy => return protection(ApiError::Busy),
-        SessionError::CommitUncertain => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal-error"
-        ),
-        SessionError::Signing => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "auth-unavailable"
-        ),
+        SessionError::CommitUncertain => (StatusCode::INTERNAL_SERVER_ERROR, "internal-error"),
+        SessionError::Signing => (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
         SessionError::Database(error) => {
             if matches!(
                 error,
@@ -118,13 +99,9 @@ pub fn from_error(error: SessionError) -> Response {
                     | sqlx::Error::Io(_)
                     | sqlx::Error::Tls(_)
             ) {
-                (StatusCode::SERVICE_UNAVAILABLE,
-                    "auth-unavailable"
-                )
+                (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable")
             } else {
-                (StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal-error"
-                )
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal-error")
             }
         }
     };
