@@ -191,4 +191,39 @@ defmodule Core.CommunityTest do
       assert {:ok, [_, _]} = Community.list_channels(group.id, owner)
     end
   end
+
+  describe "list_members/2" do
+    test "devuelve rol y nombre visible; nil sin perfil o con cuenta eliminada" do
+      owner = user_id()
+      group = group_fixture(owner)
+      named = user_id()
+      unnamed = user_id()
+      deleted = user_id()
+
+      for user <- [named, unnamed, deleted], do: member_fixture(group, user, :member)
+
+      {:ok, _} = Core.Profiles.put_display_name(owner, %{"display_name" => "Admin"})
+      {:ok, _} = Core.Profiles.put_display_name(named, %{"display_name" => "Ana"})
+      {:ok, _} = Core.Profiles.put_display_name(deleted, %{"display_name" => "Borrado"})
+
+      Repo.update_all(
+        from(p in Core.Profiles.UserProfile, where: p.user_id == ^deleted),
+        set: [account_status: :deleted]
+      )
+
+      assert {:ok, [first | rest]} = Community.list_members(group.id, named)
+      assert %{user_id: ^owner, role: :admin, display_name: "Admin"} = first
+
+      by_user = Map.new(rest, &{&1.user_id, &1})
+      assert by_user[named].display_name == "Ana"
+      assert by_user[unnamed].display_name == nil
+      assert by_user[deleted].display_name == nil
+      refute Map.has_key?(by_user[deleted], :account_status)
+    end
+
+    test "quien no es miembro recibe :not_found" do
+      group = group_fixture(user_id())
+      assert {:error, :not_found} = Community.list_members(group.id, user_id())
+    end
+  end
 end

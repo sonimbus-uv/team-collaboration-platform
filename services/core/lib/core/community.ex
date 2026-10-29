@@ -15,6 +15,7 @@ defmodule Core.Community do
 
   alias Core.Repo
   alias Core.Community.{Ban, Channel, Group, Invitation, Member}
+  alias Core.Profiles.UserProfile
 
   ## Grupos
 
@@ -60,6 +61,44 @@ defmodule Core.Community do
       _ -> {:error, :not_found}
     end
   end
+
+  ## Miembros
+
+  @doc """
+  Miembros del grupo con su nombre visible, de mayor a menor rol y por fecha
+  de ingreso. Solo para miembros del grupo.
+
+  El nombre sale de `user_profiles` con `LEFT JOIN` (sin leer Auth, D-13):
+  es `nil` si el usuario no tiene perfil o si su cuenta está eliminada
+  (anonimizado).
+  """
+  def list_members(group_id, user_id) do
+    with {:ok, group, _role} <- get_group_for_member(group_id, user_id) do
+      members =
+        from(m in Member,
+          left_join: p in UserProfile,
+          on: p.user_id == m.user_id,
+          where: m.group_id == ^group.id,
+          order_by: [desc: m.role, asc: m.joined_at, asc: m.user_id],
+          select: %{
+            user_id: m.user_id,
+            role: m.role,
+            joined_at: m.joined_at,
+            display_name: p.display_name,
+            account_status: p.account_status
+          }
+        )
+        |> Repo.all()
+        |> Enum.map(&anonymize/1)
+
+      {:ok, members}
+    end
+  end
+
+  defp anonymize(%{account_status: :deleted} = member),
+    do: member |> Map.delete(:account_status) |> Map.put(:display_name, nil)
+
+  defp anonymize(member), do: Map.delete(member, :account_status)
 
   ## Invitaciones
 

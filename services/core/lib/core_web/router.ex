@@ -20,6 +20,7 @@ defmodule CoreWeb.Router do
 
     resources "/groups", GroupController, only: [:index, :create, :show] do
       resources "/channels", ChannelController, only: [:index, :create]
+      resources "/members", MemberController, only: [:index]
       resources "/invitations", InvitationController, only: [:create]
     end
 

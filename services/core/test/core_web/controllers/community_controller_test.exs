@@ -91,4 +91,20 @@ defmodule CoreWeb.CommunityControllerTest do
     conn = post(conn, ~p"/api/v1/invitations/join", %{"code" => "no-existe"})
     assert %{"type" => "/problems/invitation-invalid"} = json_response(conn, 422)
   end
+
+  test "GET members devuelve la lista con display_name", %{conn: conn, user: owner} do
+    group = group_fixture(owner)
+    {:ok, _} = Core.Profiles.put_display_name(owner, %{"display_name" => "Ana"})
+
+    conn = get(conn, ~p"/api/v1/groups/#{group.id}/members")
+
+    assert [%{"user_id" => ^owner, "role" => "admin", "display_name" => "Ana", "joined_at" => _}] =
+             json_response(conn, 200)["data"]
+  end
+
+  test "GET members de un grupo ajeno responde 404", %{conn: conn} do
+    group = group_fixture(user_id())
+    conn = get(conn, ~p"/api/v1/groups/#{group.id}/members")
+    assert %{"type" => "/problems/not-found"} = json_response(conn, 404)
+  end
 end
