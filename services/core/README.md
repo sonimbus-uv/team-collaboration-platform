@@ -45,4 +45,22 @@ Además publica en el mensaje la referencia a los archivos que guarda el File Se
 
 ## Estado
 
-Sin inicializar. El primer PR del responsable crea el proyecto (`mix phx.new`) con las versiones exactas de su entorno y actualiza este README con los pasos para compilar y ejecutar.
+Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Por ahora expone solo `GET /health`; la API va bajo `/api/v1`.
+
+## Ejecutar
+
+Dentro de la VM, con PostgreSQL y `postgres-init` en marcha (ver [`infrastructure/`](../../infrastructure/)):
+
+```bash
+cd /vagrant/services/core
+export CORE_DB_PASSWORD=...   # el mismo valor que en infrastructure/.env
+mix deps.get
+mix ecto.migrate
+mix phx.server                # http://localhost:3002/health
+```
+
+Las variables están en [`.env.example`](.env.example); Phoenix no lee archivos `.env`.
+
+- Core se conecta como `core_service` a `team_collaboration`, con `search_path = core, public`: las tablas y `schema_migrations` quedan en el esquema `core`.
+- Las pruebas usan la misma base y el mismo esquema, dentro del *sandbox* de Ecto, porque `core_service` no puede crear bases de datos. Por eso no hay alias `ecto.create`, `ecto.drop` ni `ecto.reset`: borrar la base afectaría a todos los servicios.
+- Antes de un commit: `mix format`, `mix compile --warnings-as-errors` y `mix test`.
