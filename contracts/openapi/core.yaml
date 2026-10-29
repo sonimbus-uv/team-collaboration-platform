@@ -65,6 +65,31 @@ paths:
               schema: { $ref: "#/components/schemas/GroupEnvelope" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listMembers
+      summary: Miembros del grupo con su nombre visible
+      description: >-
+        Solo para miembros del grupo. El nombre sale de la copia local
+        `user_profiles` (D-20, D-29). Orden: rol de mayor a menor y después
+        fecha de ingreso. Sin paginación en v0.1: los grupos del MVP son
+        pequeños.
+      responses:
+        "200":
+          description: Miembros
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/v1/groups/{group_id}/invitations:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -333,6 +358,18 @@ components:
       required: [data]
       properties:
         data: { $ref: "#/components/schemas/Group" }
+    Member:
+      type: object
+      required: [user_id, role, joined_at, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/Role" }
+        joined_at: { type: string, format: date-time }
+        display_name:
+          type: [string, "null"]
+          description: >-
+            Nulo si el usuario nunca guardó su nombre o si su cuenta está
+            eliminada (se muestra anonimizado)
     CreateInvitation:
       type: object
       properties:
