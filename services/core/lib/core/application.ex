@@ -12,8 +12,7 @@ defmodule Core.Application do
       Core.Repo,
       {DNSCluster, query: Application.get_env(:core, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Core.PubSub},
-      # Start a worker by calling: Core.Worker.start_link(arg)
-      # {Core.Worker, arg},
+      Core.AccessToken.JWKS,
       # Start to serve requests, typically the last entry
       CoreWeb.Endpoint
     ]

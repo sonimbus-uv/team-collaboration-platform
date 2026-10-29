@@ -20,7 +20,7 @@ defmodule Core.MixProject do
   def application do
     [
       mod: {Core.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
 

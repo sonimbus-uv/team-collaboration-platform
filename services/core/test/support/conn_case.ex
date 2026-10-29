@@ -36,8 +36,12 @@ defmodule CoreWeb.ConnCase do
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
-  @doc "Conexión autenticada como `user_id`."
+  @doc "Conexión con un access JWT válido de `user_id`."
   def authenticate(conn, user_id) do
-    Plug.Conn.assign(conn, :current_user_id, user_id)
+    Plug.Conn.put_req_header(
+      conn,
+      "authorization",
+      "Bearer " <> Core.AccessTokenHelpers.token_for(user_id)
+    )
   end
 end

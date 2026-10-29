@@ -36,6 +36,27 @@ if config_env() in [:dev, :test] do
     database: System.get_env("CORE_DB_NAME", "team_collaboration")
 end
 
+# Verificación del access JWT de Auth (contracts/token-profile.md). El issuer
+# debe ser igual a AUTH_JWT_ISSUER de Auth; las pruebas usan config/test.exs.
+if config_env() in [:dev, :prod] do
+  {default_issuer, default_jwks_url} =
+    if config_env() == :dev,
+      do: {"https://auth.example.invalid", "http://localhost:3001/.well-known/jwks.json"},
+      else: {nil, nil}
+
+  jwt_issuer =
+    System.get_env("CORE_JWT_ISSUER", default_issuer) ||
+      raise "falta la variable de entorno CORE_JWT_ISSUER"
+
+  jwks_url =
+    System.get_env("CORE_JWKS_URL", default_jwks_url) ||
+      raise "falta la variable de entorno CORE_JWKS_URL"
+
+  config :core, Core.AccessToken,
+    issuer: jwt_issuer,
+    jwks_fetcher: {Core.AccessToken.HTTPFetcher, :fetch, [jwks_url]}
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

@@ -45,7 +45,9 @@ Además publica en el mensaje la referencia a los archivos que guarda el File Se
 
 ## Estado
 
-Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Por ahora expone solo `GET /health`; la API va bajo `/api/v1`.
+Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Expone `GET /health` y, bajo `/api/v1`, el recorrido mínimo de [`core.yaml`](../../contracts/openapi/core.yaml): grupos, invitaciones, unión, canales y nombre visible (D-29).
+
+Autenticación: toda ruta bajo `/api/v1` exige el access JWT de Auth ([perfil](../../contracts/token-profile.md)). Core verifica la firma Ed25519 con `:crypto` y descarga el JWKS con `:httpc`, sin dependencias nuevas; la caché dura como máximo 5 minutos. Si el JWKS no está disponible responde 503. La sesión (`sid`) todavía no se consulta en Auth: desviación temporal D-30 ([borrador de decisiones](../../docs/database/core-decisions-draft.md)).
 
 ## Ejecutar
 
@@ -54,6 +56,7 @@ Dentro de la VM, con PostgreSQL y `postgres-init` en marcha (ver [`infrastructur
 ```bash
 cd /vagrant/services/core
 export CORE_DB_PASSWORD=...   # el mismo valor que en infrastructure/.env
+export CORE_JWT_ISSUER=...    # igual a AUTH_JWT_ISSUER; opcional en desarrollo
 mix deps.get
 mix ecto.migrate
 mix phx.server                # http://localhost:3002/health

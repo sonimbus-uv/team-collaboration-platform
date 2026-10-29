@@ -12,7 +12,7 @@ defmodule CoreWeb.Router do
   end
 
   pipeline :authenticated do
-    plug CoreWeb.Plugs.RequireUser
+    plug CoreWeb.Plugs.Authenticate
   end
 
   scope "/api/v1", CoreWeb do

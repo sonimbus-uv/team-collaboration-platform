@@ -28,3 +28,9 @@ config :phoenix, :plug_init_mode, :runtime
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Access JWT de prueba: test/support/access_token_helpers.ex genera la clave
+# Ed25519 y firma los tokens.
+config :core, Core.AccessToken,
+  issuer: "https://auth.test.invalid",
+  jwks_fetcher: {Core.AccessTokenHelpers, :fetch_jwks, []}
