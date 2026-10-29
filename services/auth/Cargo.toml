@@ -27,6 +27,12 @@ ed25519-dalek = { version = "=2.2.0", features = ["pem"] }
 base64 = "0.22"
 zeroize = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
+# Direct TLS listener and bounded HTTP/1 parsing; no public router changes.
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+subtle = "2"
+ipnet = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
