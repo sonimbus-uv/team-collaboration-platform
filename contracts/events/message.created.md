@@ -13,6 +13,10 @@ pendiente de revisión técnica. El historial va por REST
   `Sec-WebSocket-Protocol` y no en la URL. Se acepta también el parámetro
   `token`, que Core filtra de sus registros.
 - Token ausente o inválido: la conexión se rechaza.
+- `Origin`: los clientes nativos (JavaFX y Flutter) no lo envían y pasan.
+  Si viene, por ejemplo desde un navegador, debe estar en la lista de Core
+  (`CORE_WS_ALLOWED_ORIGINS`; por omisión, localhost en desarrollo y el host
+  público en producción). Si no está, el *upgrade* responde 403.
 
 ## Tema `channel:<channel_id>`
 
