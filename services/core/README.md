@@ -47,7 +47,7 @@ Además publica en el mensaje la referencia a los archivos que guarda el File Se
 
 Proyecto creado con Phoenix 1.8.16 (`mix phx.new core --no-html --no-assets --no-mailer --no-gettext --no-dashboard --binary-id`), Elixir 1.20.3 y Erlang/OTP 29 según [`.tool-versions`](../../.tool-versions). Expone `GET /health` y, bajo `/api/v1`, el recorrido mínimo de [`core.yaml`](../../contracts/openapi/core.yaml): grupos, invitaciones, unión, canales, historial de mensajes y nombre visible (D-29).
 
-Mensajes: WebSocket de Phoenix en `/socket`, tema `channel:<channel_id>` ([contrato](../../contracts/events/message.created.md)). Se guardan en ScyllaDB con Xandra, con idempotencia por `client_message_id` (`INSERT ... IF NOT EXISTS`) y `message_id` timeuuid generado por Core (D-08).
+Mensajes: WebSocket de Phoenix en `/socket`, tema `channel:<channel_id>` ([contrato](../../contracts/events/message.created.md)). Los clientes nativos no envían `Origin`; si llega uno, debe estar en `CORE_WS_ALLOWED_ORIGINS` (por omisión, localhost en desarrollo y el host de `PHX_HOST` en producción). Se guardan en ScyllaDB con Xandra, con idempotencia por `client_message_id` (`INSERT ... IF NOT EXISTS`) y `message_id` timeuuid generado por Core (D-08).
 
 Autenticación: toda ruta bajo `/api/v1` exige el access JWT de Auth ([perfil](../../contracts/token-profile.md)). Core verifica la firma Ed25519 con `:crypto` y descarga el JWKS con `:httpc`, sin dependencias nuevas; la caché dura como máximo 5 minutos. Si el JWKS no está disponible responde 503. La sesión (`sid`) todavía no se consulta en Auth: desviación temporal D-30 ([borrador de decisiones](../../docs/database/core-decisions-draft.md)).
 

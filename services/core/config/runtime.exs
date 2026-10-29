@@ -36,6 +36,22 @@ if config_env() in [:dev, :test] do
     database: System.get_env("CORE_DB_NAME", "team_collaboration")
 end
 
+# Orígenes permitidos en el WebSocket (/socket), separados por comas, con el
+# formato de check_origin de Phoenix ("https://app.example", "//localhost").
+# Los clientes nativos (JavaFX y Flutter) no envían Origin y siempre pasan;
+# la lista solo filtra navegadores. Sin la variable: en desarrollo, localhost
+# con cualquier esquema y puerto; en producción, el host de PHX_HOST.
+if config_env() in [:dev, :prod] do
+  ws_origins =
+    case {System.get_env("CORE_WS_ALLOWED_ORIGINS"), config_env()} do
+      {nil, :dev} -> ["//localhost", "//127.0.0.1"]
+      {nil, :prod} -> true
+      {value, _env} -> value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+    end
+
+  config :core, CoreWeb.Endpoint, check_origin: ws_origins
+end
+
 # ScyllaDB (D-05): nodos como "host:puerto", separados por comas.
 config :core, Core.Scylla,
   nodes: System.get_env("CORE_SCYLLA_NODES", "localhost:9042") |> String.split(",", trim: true),
