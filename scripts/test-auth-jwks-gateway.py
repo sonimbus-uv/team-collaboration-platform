@@ -128,6 +128,8 @@ def main():
                     assert limited[0][1]["Cache-Control"] == "no-store"
                 assert request(port, "/.well-known/jwks.json")[0] == 200
                 assert request(port, "/not-a-route")[0] == 404
+                for internal in ("/internal/v1/sessions/check", "/internal/v1/sessions/check-batch"):
+                    assert request(port, internal, "POST")[0] == 404
                 print("PASS: nginx -t, public JWKS GET/HEAD, cache headers, isolated budgets and default 404")
             finally:
                 subprocess.run(command + ["-s", "quit"], check=False, capture_output=True)

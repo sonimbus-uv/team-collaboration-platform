@@ -73,6 +73,15 @@ impl InternalServer {
         })
     }
 
+    #[cfg(test)]
+    pub fn for_tests(listener: TcpListener, acceptor: TlsAcceptor, api: Arc<InternalApi>) -> Self {
+        Self {
+            listener,
+            acceptor,
+            api,
+        }
+    }
+
     pub async fn run(self) -> anyhow::Result<()> {
         let slots = Arc::new(Semaphore::new(self.api.config.local_limit));
         let mut connections = JoinSet::new();

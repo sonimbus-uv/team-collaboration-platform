@@ -3,6 +3,10 @@ pub mod credentials;
 pub mod limits;
 pub mod server;
 
+#[cfg(test)]
+#[path = "../tests/internal_api.rs"]
+mod tests;
+
 use auth_service::{
     session_check_service::{SessionCheckError, SessionCheckService},
     session_check_types::{SessionCheckBatchRequest, SessionCheckRequest, MAX_SESSION_CHECKS},
