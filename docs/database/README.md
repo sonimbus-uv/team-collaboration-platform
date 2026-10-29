@@ -33,7 +33,7 @@ Pendiente en Auth: tablas o columnas de perfil (nombre visible e identificador d
 
 ### Esquema `core`
 
-Diagrama entidad-relación del esquema `core`, usuario `core_service` (D-13). Las decisiones que lo justifican son D-17 a D-28, todavía en borrador en [core-decisions-draft.md](core-decisions-draft.md); se agruparán en el ADR-008. El detalle de columnas está en [core-erd-input.md](core-erd-input.md).
+Diagrama entidad-relación del esquema `core`, usuario `core_service` (D-13). Las decisiones que lo justifican son D-17 a D-29, todavía en borrador en [core-decisions-draft.md](core-decisions-draft.md); se agruparán en el ADR-009. El detalle de columnas está en [core-erd-input.md](core-erd-input.md).
 
 Leyenda:
 

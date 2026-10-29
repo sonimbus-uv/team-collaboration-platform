@@ -1,9 +1,9 @@
 # Decisiones de datos de Core (borrador)
 
 Borrador del 2026-10-27, previo al ERD del esquema `core`. Las decisiones se
-numeran como D-17 a D-28 y se agruparán en el ADR-008 (modelo de datos de Core).
-D-16 y el ADR-007 los reserva el PR #44 (sesiones de Auth); si ese número cambia
-o se adelanta otro PR, se renumera al fusionar.
+numeran como D-17 a D-29 y se agruparán en el ADR-009 (modelo de datos de Core).
+D-16 y el ADR-007 son de las sesiones de Auth (#44) y el ADR-008 de los códigos
+de registro (#47), ya fusionados en `main`.
 
 Referencias: [casos de uso](../requirements/casos-de-uso.md),
 [requisitos](../requirements/requisitos.md), [modelo de datos](README.md),
@@ -23,8 +23,9 @@ Referencias: [casos de uso](../requirements/casos-de-uso.md),
 | D-24 | Moderación (CU-15) | Marca en el mensaje dentro de ScyllaDB y auditoría en PostgreSQL. | ScyllaDB: `deleted`, `deleted_reason` (`author` o `moderation`) y `deleted_by` en la tabla de mensajes. PostgreSQL: `moderation_actions (id, group_id, actor_id, target_user_id, action, target_ref, reason, created_at)` y `group_bans (group_id, user_id, banned_by, reason, created_at)` para FA-03 y FA-04. |
 | D-25 | Sobre de eventos | Igual que `session.revoked` de #44 más `correlation_id`: `type`, `version`, `event_id` (UUID estable entre reintentos), `occurred_at` (UTC), `correlation_id` y `payload`. Exchange *topic* `sonimbus.events`, clave de ruteo igual a `type`. | Columnas del mismo nombre en `outbox_events`. Pendiente: proponer `correlation_id` a Auth en el catálogo de eventos, opcional para que `session.revoked` v1 siga siendo válido. |
 | D-26 | Retención de `processed_events` | 30 días: 20 de vida máxima de sesión más 10 de margen para reintentos y reproceso desde la DLQ. | Índice por `processed_at`; un trabajo diario borra lo anterior a `now() - interval '30 days'`. Las *tombstones* de sesiones revocadas siguen su propia regla (#44, hasta la expiración de la sesión). |
-| D-27 | Numeración | Core usa D-17 en adelante y un solo ADR-008. | Ninguna. |
+| D-27 | Numeración | Core usa D-17 en adelante y un solo ADR-009 (el ADR-008 lo tomó Auth en #47). | Ninguna. |
 | D-28 | T-03 RabbitMQ y TLS | Un usuario AMQP por servicio con permisos mínimos; cola durable `core.session-revoked.v1` con DLQ en `definitions.json`. AMQP y HTTP interno **sin TLS hasta después de la expo** (29 de octubre), dentro de la red `backend` aislada. | Ninguna en PostgreSQL. Es una desviación temporal de #44, que pide AMQP con TLS; se registra como tarea con fecha posterior al 29 de octubre (mkcert, puerto 5671). |
+| D-29 | Nombre visible para la expo (29 de octubre) | Auth no guarda nombre visible y el JWT no lleva datos de perfil (`contracts/token-profile.md`). Para la expo, el cliente envía `display_name` a Core y Core lo guarda en `user_profiles`. **Desviación temporal de D-20**: el nombre lo declara el usuario y no lo valida Auth. | `user_profiles` se llena con una operación de Core (`PUT /api/v1/me/profile`) en lugar del evento `user.updated`; `version` queda en 0 hasta que llegue el primer evento de Auth, que siempre gana. |
 
 ## Entidades e invariantes por servicio interno
 
@@ -69,4 +70,5 @@ Todas las tablas viven en el esquema `core`. Las horas se guardan en UTC
 - Acordar con @tuzc0 el contenido de `user.updated` (D-20) y `correlation_id` en el sobre (D-25).
 - Registrar la tarea de TLS en AMQP y HTTP interno con fecha posterior a la expo (D-28).
 - ERD del esquema `core` (otra sesión).
-- Pasar las decisiones aprobadas a `docs/decisions/README.md` y al ADR-008.
+- Pasar las decisiones aprobadas a `docs/decisions/README.md` y al ADR-009.
+- Sustituir D-29 por `user.updated` (D-20) cuando Auth guarde el nombre visible.
