@@ -1,5 +1,9 @@
 # Revisión de Auth y validación de la reorganización
 
+Nota 2026-10-28: este informe conserva la validación histórica. El flujo de
+registro con enlaces fue sustituido por [códigos e intentos](REGISTRATION.md);
+ver [validación de #17](REGISTRATION_VALIDATION.md) para el estado posterior.
+
 Fecha: 2026-10-24. Rama: `fix/auth-registration-e2e`.
 
 ## Alcance revisado

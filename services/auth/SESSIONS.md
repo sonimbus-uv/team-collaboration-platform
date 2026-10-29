@@ -1,5 +1,10 @@
 # Sesiones, login, refresh y logout: tercera entrega
 
+Actualización 2026-10-28: solución local de #17 mediante
+[intentos y códigos](REGISTRATION.md), pendiente de revisión y auditoría de
+cuentas heredadas. Login sigue deshabilitado por defecto. Los párrafos de #17
+de esta entrega documentan el bloqueo original; el flujo vigente está en ADR-008.
+
 La [entrega 4A](SESSION_CHECKS.md) añade consulta autoritativa individual y por
 lotes como componente interno de solo lectura. No añade rutas ni habilita login.
 

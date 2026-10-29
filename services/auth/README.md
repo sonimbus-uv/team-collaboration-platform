@@ -47,9 +47,9 @@ Actualmente cuenta con:
 - Endpoint `GET /health/db` para verificar conexión con PostgreSQL.
 - Endpoint `GET /health/redis` para comprobar Redis con PING.
 - Manejo básico de errores HTTP con formato Problem Details.
-- Registro de cuentas con contraseña Argon2id y token de verificación atómicos.
-- Envío de verificación mediante Resend o Mailpit, confirmación y reenvío con cooldown.
-- Verificación desde el enlace del correo mediante GET con respuesta HTML, conservando POST con JSON para clientes móviles y de escritorio.
+- Registro con intentos independientes, contraseña Argon2id y código HMAC ligado al intento; la cuenta se crea/activa al confirmar.
+- Código por Resend o Mailpit, confirmación ID+código y reenvío con cooldown y fallos persistidos.
+- Enlaces antiguos retirados (GET informativo 410); el POST antiguo con token ya no activa cuentas.
 - Hash fuera del runtime asíncrono y límites de concurrencia y solicitudes.
 - Rate limiting distribuido con Redis por operación, IP y destinatario.
 - Configuración de Nginx y firewall persistente para proteger la entrada; los
@@ -59,6 +59,7 @@ Actualmente cuenta con:
 - Endpoint público `GET/HEAD /.well-known/jwks.json`, con caché de cinco minutos y claves retenidas para rotación.
 - Sesiones transaccionales, rotación estricta de refresh y logout con intención de revocación en outbox.
 - Rutas `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`; login deshabilitado por defecto por #17.
+- API interna HTTPS de consulta de sesiones para Core/Files, con credenciales y cuotas independientes; activación explícita.
 
 Ver [registro, configuración y pruebas](REGISTRATION.md) para el flujo actualizado.
 
@@ -70,13 +71,15 @@ copiar `.env.example` por sí solo no es suficiente. No hay generación automát
 
 Ver [sesiones, bloqueo de habilitación por #17, transacciones y pruebas](SESSIONS.md).
 
+Ver [API interna 4B, TLS, credenciales, rotación y límites](INTERNAL_API.md).
+
 Ver [revisión documental y evidencia de validación](VALIDATION.md).
 
 Pendiente:
 
-- Resolver #17 y aprobar su mitigación antes de habilitar login fuera de pruebas.
+- Revisar la solución local de #17 ([ADR-008](../../docs/decisions/ADR-008-registration-attempt-codes.md)), auditar cuentas heredadas y aprobar su habilitación antes de usar login fuera de pruebas.
 - Recuperación de contraseña.
-- Comprobación privada de sesiones según D-16 y PoC de verificación Rust–Elixir.
+- Despliegue privado de 4B y PoC de verificación Rust–Elixir con los consumidores.
 - Publicación/consumo de outbox, microcaché e integración con consumidores.
 - Inicio de sesión con Google.
 - Perfil (nombre visible y foto predefinida) y evento `user.updated`.
@@ -166,7 +169,7 @@ El archivo `.env` no debe subirse al repositorio.
 `src/config.rs` carga `EMAIL_PROVIDER` desde el entorno: `mailpit` para desarrollo
 o `resend` para producción. Si no se define, se utiliza `resend`.
 Ambos proveedores implementan `VerificationEmailSender` y comparten la plantilla
-HTML y de texto, el idioma y el enlace de verificación.
+HTML y de texto, el idioma y el código de registro ligado a un intento.
 
 Para desarrollo, configura `services/auth/.env`:
 
@@ -175,7 +178,6 @@ EMAIL_PROVIDER=mailpit
 MAILPIT_SMTP_HOST=localhost
 MAILPIT_SMTP_PORT=1025
 EMAIL_FROM="Team <noreply@example.com>"
-EMAIL_VERIFICATION_URL=http://localhost:8080/auth/verify-email
 ```
 
 Inicia Mailpit desde la raíz del proyecto:
@@ -190,7 +192,10 @@ Si auth corre dentro de la red de Compose, utiliza `MAILPIT_SMTP_HOST=mailpit`.
 Reinicia auth después de cambiar el proveedor.
 
 Para producción, configura `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`,
-`EMAIL_FROM` y una `EMAIL_VERIFICATION_URL` con HTTPS. La clave de Resend
+`EMAIL_FROM` y el secreto independiente `AUTH_REGISTRATION_CODE_HMAC_SECRET`
+aprovisionado fuera del repositorio (al menos 32 bytes aleatorios, sin valor por
+defecto; requerido también con Mailpit). Ya no se usa `EMAIL_VERIFICATION_URL`.
+La clave de Resend
 solo se exige cuando se selecciona ese proveedor.
 
 ## Base de Datos
@@ -329,19 +334,20 @@ CARGO_TARGET_DIR=~/.cargo-target/auth-service cargo run
 
 ## Contratos
 
-Contrato parcial de sesiones y JWKS:
+Contrato candidato público 0.2.0 de registro, sesiones y JWKS:
 
 ```text
 contracts/openapi/auth.yaml
 ```
 
-Este OpenAPI todavía no describe registro/verificación/reenvío. Sus rutas actuales
-`/auth/...` se documentan en [REGISTRATION.md](REGISTRATION.md); completar el contrato
-es un pendiente, no una garantía de cobertura de toda la API.
+El OpenAPI incluye registro/verificación/reenvío por intento y código bajo
+`/auth/...`; ver [contrato](../../contracts/registration.md) y
+[operación y pruebas](REGISTRATION.md). Forgot/reset password sigue pendiente.
 
 El diseño prevé que los demás servicios validen la firma JWT localmente con JWKS.
-La futura comprobación privada del estado de sesión es adicional y tendrá su
-propio presupuesto de caché; todavía no está implementada. Ver [SESSIONS.md](SESSIONS.md).
+La comprobación privada del estado de sesión es adicional: [4A](SESSION_CHECKS.md)
+implementa la lectura y [4B](INTERNAL_API.md) su API HTTPS protegida. La microcaché
+del consumidor y la interoperabilidad Rust–Elixir siguen pendientes.
 
 ## Fuera de Alcance
 

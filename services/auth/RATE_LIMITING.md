@@ -59,7 +59,7 @@ Valores predeterminados:
 | Registro por IP | 6 | 60 segundos |
 | Reenvío por IP | 3 | 60 segundos |
 | Verificación por IP | 20 | 60 segundos |
-| Envío por destinatario | 3 | 3600 segundos |
+| Envío por destinatario (registro y reenvío) | 10 | 600 segundos |
 | Login por IP | 6 | 60 segundos |
 | Refresh por IP | 30 | 60 segundos |
 | Logout por IP | 30 | 60 segundos |
@@ -146,32 +146,35 @@ Por ello no se reintenta automáticamente el consumo.
 
 ## Presupuesto por destinatario y cooldown
 
-El presupuesto por destinatario se aplica únicamente a reenvíos elegibles.
-El registro inicial no lo consume; los registros duplicados no envían correo.
+Desde la solución local de #17, registro y reenvío comparten este presupuesto.
+El intento liga correo, hash de contraseña y MAC del código. Ver
+[contrato vigente](../../contracts/registration.md).
 
 Este presupuesto cuenta intentos admitidos hacia una operación que
 puede enviar correo. No representa un contador de correos entregados.
 
-La cuenta se bloquea en PostgreSQL y se comprueban su estado y el cooldown
-antes de consumir presupuesto. Las cuentas inexistentes, verificadas o
-inactivas y las solicitudes durante el cooldown no lo consumen.
-Si Redis rechaza el consumo o falla, se revierte la transacción sin crear
-un token y se responde `202`. No se devuelve presupuesto si después falla
-la base de datos o el proveedor: un timeout no demuestra que no hubo consumo.
+El reenvío comprueba elegibilidad/cooldown antes de consultar el presupuesto,
+y revalida bajo bloqueo antes de actualizar la MAC. Redis se consulta fuera de
+la transacción. Si rechaza el consumo, responde 429; si falla, 503. No devuelve
+presupuesto si después falla SQL, otro proceso gana la carrera o falla el
+proveedor: un timeout no demuestra que no hubo consumo. Registro confirma
+disponibilidad de cuenta antes de consultar presupuesto; la creación revalida
+el cupo de cinco pendientes y el estado bajo bloqueo por correo.
 
 El cooldown de PostgreSQL de 60 segundos sigue siendo una protección
 independiente.
 
-Un `202` de reenvío no garantiza que se haya enviado otro correo.
-Los errores del proveedor se registran sin cambiar ese estado HTTP.
+Un `202` de reenvío no garantiza entrega; `verification_email_sent` comunica
+si el proveedor aceptó el envío. Un fallo conserva el intento y su cooldown.
 Esto no garantiza tiempos de respuesta indistinguibles; el registro
 conserva su respuesta `409` para cuentas existentes.
 
-Reenviar no invalida los enlaces anteriores: conservan su caducidad original.
-Confirmar uno verifica la cuenta e invalida los demás enlaces pendientes
-en la misma transacción. Los tokens solo se persisten como hashes.
+Reenviar invalida el código anterior del mismo intento, conserva vencimiento
+y contador de fallos; máximo tres reenvíos. Crear otro intento no invalida los
+existentes. Confirmar uno instala su contraseña e invalida los demás.
 
-La confirmación del token no consume presupuesto por destinatario.
+Confirmar no consume presupuesto de correo: cada intento permite cinco fallos
+persistidos en PostgreSQL. Código/intento vencen a los diez minutos.
 
 ## Respuestas y fallos
 
@@ -180,16 +183,18 @@ La confirmación del token no consume presupuesto por destinatario.
 | Presupuesto por IP de Auth agotado | `429` con `Retry-After` |
 | Redis no disponible para registro o reenvío por IP | `503` |
 | Redis no disponible para verificación por IP | Continúa la verificación |
-| Presupuesto por destinatario agotado o no disponible | `202` sin generar token |
+| Presupuesto por destinatario agotado / no disponible | `429` / `503` |
 | Presupuesto de Nginx agotado | `429` con `X-RateLimit-Layer: nginx` y `Retry-After: 60` |
 | Dirección ausente o inválida desde un proxy confiable | `500` |
-| Token inválido admitido por los limitadores | `400` |
+| Intento/código inválido admitido por los limitadores | `400` genérico |
+| GET antiguo admitido por los limitadores | `410` informativo, sin activar |
 | HEAD de verificación | `405` |
 
 Registro y reenvío fallan con `503` si falla su comprobación por IP.
 GET y POST de verificación continúan cuando esa comprobación de Redis falla:
-el token tiene 256 bits aleatorios y Nginx mantiene su límite independiente.
-La validación del token y la transacción de PostgreSQL siguen siendo obligatorias.
+la confirmación tiene un límite persistido de cinco fallos por intento en
+PostgreSQL y Nginx mantiene su límite independiente. El código de ocho dígitos
+está protegido con HMAC; nunca se confía solo en el límite IP. GET no activa nada.
 Un rechazo explícito de Redis por presupuesto agotado sigue produciendo `429`.
 
 GET de verificación conserva respuestas HTML.
@@ -238,10 +243,10 @@ El formato no incluye URL completa, parámetros, cuerpos ni cabeceras.
 
 Esto describe los registros de Nginx. En Auth, el manejo genérico de
 `ApiError::Database` registra el error SQLx con Debug; los detalles de PostgreSQL
-pueden incluir valores de campos, como un correo duplicado. Las rutas de sesión
-usan un mapeo distinto que no registra ese detalle. No se acredita redacción
-completa de errores SQL para registro/reenvío; debe revisarse antes de tratar
-todos los logs del servicio como libres de datos personales.
+pueden incluir valores de campos. Las rutas de sesión y las nuevas rutas de
+registro/verificación/reenvío usan mapeos distintos sin ese detalle; sus errores
+de registro también tienen Debug redactado. El mapeo genérico sigue existiendo
+para otros caminos, por lo que no se acredita redacción universal del servicio.
 
 Interpretación:
 
