@@ -6,18 +6,17 @@ defmodule Core.AccessTokenHelpers do
 
   @kid "test-key-1"
 
-  @doc "Par de claves de la ejecución; se genera una vez."
-  def keypair do
-    case :persistent_term.get({__MODULE__, :keypair}, nil) do
-      nil ->
-        {public, private} = :crypto.generate_key(:eddsa, :ed25519)
-        :persistent_term.put({__MODULE__, :keypair}, {public, private})
-        {public, private}
-
-      keypair ->
-        keypair
-    end
+  @doc """
+  Genera el par de claves de la ejecución. Se llama una sola vez desde
+  `test/test_helper.exs`, antes de las pruebas: generarlo a demanda dejaba
+  que dos pruebas asíncronas crearan claves distintas a la vez.
+  """
+  def init_keypair! do
+    :persistent_term.put({__MODULE__, :keypair}, :crypto.generate_key(:eddsa, :ed25519))
   end
+
+  @doc "Par de claves `{pública, privada}` de la ejecución."
+  def keypair, do: :persistent_term.get({__MODULE__, :keypair})
 
   def kid, do: @kid
 
