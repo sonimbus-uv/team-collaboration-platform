@@ -1,4 +1,4 @@
-use crate::rate_limit::BucketPolicy;
+use crate::protection::rate_limit::BucketPolicy;
 use anyhow::Context;
 use std::{env, net::IpAddr};
 
@@ -8,12 +8,19 @@ pub enum EmailProvider {
 }
 
 pub struct Config {
+    pub internal: Option<crate::internal::config::InternalConfig>,
+    pub login_enabled: bool,
+    pub login_ip_policy: BucketPolicy,
+    pub refresh_ip_policy: BucketPolicy,
+    pub logout_ip_policy: BucketPolicy,
+    pub login_account_policy: BucketPolicy,
+    pub tokens: auth_service::tokens::config::TokenConfig,
     pub server_addr: String,
     pub database_url: String,
     pub database_max_connections: u32,
     pub email_provider: EmailProvider,
     pub email_from: String,
-    pub email_verification_url: String,
+    pub registration_code_hmac_secret: String,
     pub max_concurrent_hashes: usize,
     pub trusted_proxy_ips: Vec<IpAddr>,
     pub register_ip_policy: BucketPolicy,
@@ -80,6 +87,17 @@ impl Config {
             .context("DATABASE_MAX_CONNECTIONS must be a valid u32")?;
 
         Ok(Self {
+            internal: crate::internal::config::InternalConfig::from_env()?,
+            login_enabled: match env::var("AUTH_LOGIN_ENABLED").as_deref() {
+                Ok("true") => true,
+                Ok("false") | Err(env::VarError::NotPresent) => false,
+                _ => anyhow::bail!("AUTH_LOGIN_ENABLED must be true or false"),
+            },
+            login_ip_policy: bucket_policy_from_env("AUTH_LOGIN_IP", 6, 60)?,
+            refresh_ip_policy: bucket_policy_from_env("AUTH_REFRESH_IP", 30, 60)?,
+            logout_ip_policy: bucket_policy_from_env("AUTH_LOGOUT_IP", 30, 60)?,
+            login_account_policy: bucket_policy_from_env("AUTH_LOGIN_ACCOUNT", 10, 900)?,
+            tokens: auth_service::tokens::config::TokenConfig::from_env()?,
             server_addr,
             trusted_proxy_ips,
             recipient_hmac_secret,
@@ -89,7 +107,7 @@ impl Config {
             register_ip_policy: bucket_policy_from_env("AUTH_REGISTER_IP", 6, 60)?,
             resend_ip_policy: bucket_policy_from_env("AUTH_RESEND_IP", 3, 60)?,
             verify_ip_policy: bucket_policy_from_env("AUTH_VERIFY_IP", 20, 60)?,
-            recipient_policy: bucket_policy_from_env("AUTH_RECIPIENT", 3, 3600)?,
+            recipient_policy: bucket_policy_from_env("AUTH_RECIPIENT", 10, 600)?,
             database_url,
             database_max_connections,
             email_provider: match env::var("EMAIL_PROVIDER")
@@ -115,7 +133,14 @@ impl Config {
                 _ => anyhow::bail!("EMAIL_PROVIDER must be resend or mailpit"),
             },
             email_from: required_env("EMAIL_FROM")?,
-            email_verification_url: required_env("EMAIL_VERIFICATION_URL")?,
+            registration_code_hmac_secret: {
+                let secret = required_env("AUTH_REGISTRATION_CODE_HMAC_SECRET")?;
+                anyhow::ensure!(
+                    secret.len() >= 32 && !secret.trim().is_empty(),
+                    "Registration code HMAC secret requires at least 32 bytes"
+                );
+                secret
+            },
             max_concurrent_hashes: {
                 let value = env::var("MAX_CONCURRENT_HASHES")
                     .unwrap_or_else(|_| "4".into())

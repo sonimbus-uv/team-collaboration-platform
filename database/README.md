@@ -8,7 +8,7 @@
 
 | Carpeta | Contenido | Responsable |
 |---|---|---|
-| [`postgres/`](postgres/) | Scripts de inicialización: creación de esquemas y usuarios por servicio | `@tuzc0` |
+| [`postgres/`](postgres/) | Scripts de inicialización: creación de esquemas y usuarios por servicio | `@Maple-M136279841` |
 | [`scylla/`](scylla/) | Esquemas CQL (*keyspaces* y tablas) de ScyllaDB (D-05) | `@Maple-M136279841` |
 
 Las migraciones son responsabilidad de cada servicio: `@tuzc0` en Auth, `@Maple-M136279841` en Core y Files, y `@roluva` en Reports.

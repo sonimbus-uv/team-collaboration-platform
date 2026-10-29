@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-team_collaboration}
       POSTGRES_USER: ${POSTGRES_USER:-team_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_postgres_password}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -21,17 +21,46 @@ services:
     networks:
       - backend
 
+  # Esquema y usuario por servicio (D-13, T-04). Se ejecuta en cada `up`,
+  # es idempotente y termina; también aplica a volúmenes ya existentes.
+  postgres-init:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-team_collaboration}
+      PGUSER: ${POSTGRES_USER:-team_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change_this_postgres_password}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Define AUTH_DB_PASSWORD en infrastructure/.env}
+      CORE_DB_PASSWORD: ${CORE_DB_PASSWORD:?Define CORE_DB_PASSWORD en infrastructure/.env}
+      FILES_DB_PASSWORD: ${FILES_DB_PASSWORD:?Define FILES_DB_PASSWORD en infrastructure/.env}
+      REPORTS_DB_PASSWORD: ${REPORTS_DB_PASSWORD:?Define REPORTS_DB_PASSWORD en infrastructure/.env}
+    command: ["sh", "/database/init.sh"]
+    volumes:
+      - type: bind
+        source: ../database/postgres
+        target: /database
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - backend
+
   redis:
     image: redis:8-alpine
     restart: unless-stopped
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me_redis}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_this_redis_password}
     command:
       - redis-server
       - --appendonly
       - "yes"
       - --requirepass
-      - ${REDIS_PASSWORD:-change_me_redis}
+      - ${REDIS_PASSWORD:-change_this_redis_password}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -51,6 +80,12 @@ services:
     ports:
       - "${MAILPIT_SMTP_PORT:-1025}:1025"
       - "${MAILPIT_WEB_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - backend
 
@@ -88,29 +123,37 @@ services:
     networks:
       auth_gateway:
         ipv4_address: 172.30.250.2
-  cassandra:
-    image: cassandra:5.0.9
+  # Mensajes y reacciones de Core (D-05, T-01). Un nodo con memoria acotada.
+  scylladb:
+    image: scylladb/scylla:${SCYLLA_VERSION:-2026.3.4}
     profiles:
       - messaging
     restart: unless-stopped
-    environment:
-      CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-TeamCollaborationCluster}
-      CASSANDRA_DC: ${CASSANDRA_DC:-datacenter1}
-      CASSANDRA_RACK: ${CASSANDRA_RACK:-rack1}
-      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
-      MAX_HEAP_SIZE: ${CASSANDRA_MAX_HEAP_SIZE:-1024M}
-      HEAP_NEWSIZE: ${CASSANDRA_HEAP_NEWSIZE:-256M}
+    command:
+      - --smp
+      - "${SCYLLA_SMP:-1}"
+      - --memory
+      - "${SCYLLA_MEMORY:-750M}"
+      # Sin esto, Seastar aparta 1.5 GiB para el sistema y deja solo 500 MB,
+      # menos que SCYLLA_MEMORY. Además descuenta unos 120 MB del límite del
+      # contenedor; por eso SCYLLA_MEM_LIMIT es 1200m y no 1g.
+      - --reserve-memory
+      - "${SCYLLA_RESERVE_MEMORY:-250M}"
+      - --overprovisioned
+      - "1"
+      - --developer-mode
+      - "1"
     ports:
-      - "${CASSANDRA_PORT:-9042}:9042"
+      - "${SCYLLA_PORT:-9042}:9042"
     volumes:
-      - cassandra_data:/var/lib/cassandra
+      - scylla_data:/var/lib/scylla
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'SELECT release_version FROM system.local' >/dev/null 2>&1"]
-      interval: 20s
+      interval: 15s
       timeout: 10s
-      retries: 15
-      start_period: 120s
-    mem_limit: 2g
+      retries: 20
+      start_period: 60s
+    mem_limit: ${SCYLLA_MEM_LIMIT:-1200m}
     networks:
       - backend
 
@@ -122,12 +165,39 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_this_minio_password}
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - backend
+
+  # Bucket de archivos (T-05). Idempotente; termina al crearlo o si ya existe.
+  minio-init:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles:
+      - storage
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_this_minio_password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-sonimbus-files}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null &&
+        mc mb --ignore-existing "local/$$MINIO_BUCKET"
     networks:
       - backend
 
@@ -147,5 +217,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  cassandra_data:
+  scylla_data:
   minio_data:

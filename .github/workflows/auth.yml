@@ -34,18 +34,38 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mailpit:
+        image: axllent/mailpit:v1.29.7
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       DATABASE_URL: postgres://test:test@127.0.0.1:5432/auth_test
       REDIS_URL: redis://127.0.0.1:6379/0
       AUTH_RECIPIENT_HMAC_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+      AUTH_REGISTRATION_CODE_HMAC_SECRET: ci-only-registration-code-key-not-for-deployment
+      AUTH_TEST_MAILPIT_SMTP_PORT: "1025"
+      AUTH_TEST_MAILPIT_API_URL: http://127.0.0.1:8025
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Prepare test configuration
         run: cp .env.example .env
       - name: Check formatting
         run: cargo fmt --check
+      - name: Check all targets
+        run: cargo check --all-targets --locked
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Run all tests including Redis tests
         run: cargo test --locked -- --include-ignored
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nginx for isolated gateway test
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nginx
+      - name: Check public JWKS routing and existing budgets
+        run: python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx

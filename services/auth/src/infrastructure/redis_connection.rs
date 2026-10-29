@@ -1,4 +1,4 @@
-use crate::rate_limit::{BucketPolicy, RateLimitDecision};
+use crate::protection::rate_limit::{BucketPolicy, RateLimitDecision};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -20,6 +20,31 @@ pub enum RedisConnectionError {
 }
 
 impl RedisConnection {
+    /// Execute a bounded internal-protection script using the existing connection manager.
+    /// Errors remain finite categories; never log keys, arguments or Redis diagnostics.
+    pub async fn script(
+        &self,
+        script: &redis::Script,
+        keys: &[String],
+        args: &[String],
+    ) -> Result<Vec<i64>, RedisConnectionError> {
+        let mut connection = self.manager.clone();
+        let mut invocation = script.prepare_invoke();
+        for key in keys {
+            invocation.key(key);
+        }
+        for arg in args {
+            invocation.arg(arg);
+        }
+        timeout(
+            self.operation_timeout,
+            invocation.invoke_async(&mut connection),
+        )
+        .await
+        .map_err(|_| RedisConnectionError::OperationTimeout)?
+        .map_err(|_| RedisConnectionError::OperationFailed)
+    }
+
     pub async fn connect(
         url: &str,
         connect_timeout: Duration,
@@ -52,7 +77,7 @@ impl RedisConnection {
         policy: BucketPolicy,
     ) -> Result<RateLimitDecision, RedisConnectionError> {
         let mut connection = self.manager.clone();
-        let script = redis::Script::new(include_str!("rate_limit.lua"));
+        let script = redis::Script::new(include_str!("../protection/rate_limit.lua"));
 
         let refill_ms = u64::from(policy.refill_period_secs()) * 1000;
 

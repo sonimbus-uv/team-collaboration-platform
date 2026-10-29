@@ -3,25 +3,14 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
-pub fn verification_success_page() -> String {
+pub fn verification_legacy_page() -> String {
     page(
-        "Correo verificado",
-        "Tu correo quedó verificado. Vuelve a Sonimbus para continuar.",
+        "Verifica desde Sonimbus",
+        "Este enlace ya no activa cuentas. Inicia un registro en la aplicación e introduce allí el código recibido por correo.",
         "success",
         "✓",
-        "Todo listo",
-        "Ya puedes cerrar esta pestaña y continuar en la aplicación.",
-    )
-}
-
-pub fn verification_invalid_page() -> String {
-    page(
-        "Enlace no disponible",
-        "Este enlace no es válido o ya no puede utilizarse. Solicita uno nuevo desde Sonimbus.",
-        "invalid",
-        "!",
-        "Revisa tu enlace",
-        "Si ya verificaste tu correo, puedes continuar en la aplicación.",
+        "Registro con código",
+        "No compartas el código. Si no solicitaste el registro, ignora el mensaje.",
     )
 }
 
