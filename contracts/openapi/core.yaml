@@ -5,7 +5,7 @@ info:
   description: >-
     Contrato candidato del recorrido mínimo de Core para la expo: CU-08 (crear
     grupo), CU-10 (crear invitación), CU-11 (unirse), CU-13 (crear y listar
-    canales) y el nombre visible de D-29. Pendiente de
+    canales), CU-20 (historial) y el nombre visible de D-29. Pendiente de
     revisión técnica. Errores con Problem Details; `type` es una referencia
     relativa `/problems/<nombre>`. Horas en UTC (RFC 3339).
 servers:
@@ -181,6 +181,57 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/channels/{channel_id}/messages:
+    parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listMessages
+      summary: Historial de un canal de texto, del más reciente al más antiguo (CU-20)
+      description: >-
+        Paginación por cursor. El envío va por WebSocket
+        (contracts/events/message.created.md).
+      parameters:
+        - name: before
+          in: query
+          required: false
+          description: Cursor; `next_cursor` de la página anterior
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Página del historial
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+                  next_cursor:
+                    type: [string, "null"]
+                    format: uuid
+                    description: Nulo cuando no quedan mensajes
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El canal es de voz, `/problems/not-a-text-channel`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/me/profile:
     get:
       operationId: getMyProfile
@@ -231,7 +282,8 @@ components:
       bearerFormat: JWT
       description: >-
         Access JWT de Auth (contracts/token-profile.md) con `sonimbus-core` en
-        `aud`.
+        `aud`. Si Core no puede obtener un JWKS vigente responde 503
+        `/problems/auth-unavailable` con `Retry-After`.
   parameters:
     GroupId:
       name: group_id
@@ -325,6 +377,20 @@ components:
         type: { type: string, enum: [text, voice] }
         min_role: { $ref: "#/components/schemas/Role" }
         created_at: { type: string, format: date-time }
+    Message:
+      type: object
+      required: [id, channel_id, author_id, client_message_id, created_at, deleted]
+      properties:
+        id: { type: string, format: uuid, description: timeuuid asignado por Core (D-08) }
+        channel_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        client_message_id: { type: string, format: uuid }
+        content: { type: [string, "null"], description: Nulo si está eliminado }
+        reply_to: { type: [string, "null"], format: uuid }
+        file_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        edited_at: { type: [string, "null"], format: date-time }
+        deleted: { type: boolean }
     ProfileEnvelope:
       type: object
       required: [data]
