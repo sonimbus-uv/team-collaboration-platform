@@ -76,6 +76,10 @@ guardar el mensaje.
     "id": "0955f155-d37a-11f1-bf48-3f32a97dd8eb",
     "channel_id": "c3349769-ec75-4913-9af0-d405da793293",
     "author_id": "11111111-1111-4111-8111-111111111111",
+    "author": {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "display_name": "Ana"
+    },
     "client_message_id": "8f0e7c52-3a59-4f7e-9d43-4a5b7a3c2e10",
     "content": "Hola, equipo",
     "reply_to": null,
@@ -90,5 +94,10 @@ guardar el mensaje.
 - `id` es un timeuuid que asigna Core y define el orden (D-08); `created_at`
   sale de él.
 - Con `deleted = true`, `content` y `file_id` son `null` (D-24).
+- `author.display_name` es el nombre del autor al enviar (`user_profiles`);
+  es `null` si no tiene perfil o su cuenta está eliminada. Un cambio
+  posterior de nombre no corrige los mensajes ya recibidos: el vigente está
+  en `GET /api/v1/groups/{group_id}/members`. La respuesta de
+  `message.create` y el historial REST usan la misma forma.
 - Los clientes deduplican por `id` (el autor recibe la respuesta y la
   difusión).

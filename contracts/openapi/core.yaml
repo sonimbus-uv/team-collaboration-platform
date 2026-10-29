@@ -416,11 +416,23 @@ components:
         created_at: { type: string, format: date-time }
     Message:
       type: object
-      required: [id, channel_id, author_id, client_message_id, created_at, deleted]
+      required: [id, channel_id, author_id, author, client_message_id, created_at, deleted]
       properties:
         id: { type: string, format: uuid, description: timeuuid asignado por Core (D-08) }
         channel_id: { type: string, format: uuid }
         author_id: { type: string, format: uuid }
+        author:
+          type: object
+          description: >-
+            Nombre visible del autor al momento de la respuesta. Si cambia
+            después, los mensajes ya cargados conservan el anterior; la lista
+            de miembros tiene el vigente.
+          required: [id, display_name]
+          properties:
+            id: { type: string, format: uuid }
+            display_name:
+              type: [string, "null"]
+              description: Nulo sin perfil o con cuenta eliminada
         client_message_id: { type: string, format: uuid }
         content: { type: [string, "null"], description: Nulo si está eliminado }
         reply_to: { type: [string, "null"], format: uuid }
