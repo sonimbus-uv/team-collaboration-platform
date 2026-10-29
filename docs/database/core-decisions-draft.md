@@ -1,7 +1,7 @@
 # Decisiones de datos de Core (borrador)
 
 Borrador del 2026-10-27, previo al ERD del esquema `core`. Las decisiones se
-numeran como D-17 a D-29 y se agruparán en el ADR-009 (modelo de datos de Core).
+numeran como D-17 a D-30 y se agruparán en el ADR-009 (modelo de datos de Core).
 D-16 y el ADR-007 son de las sesiones de Auth (#44) y el ADR-008 de los códigos
 de registro (#47), ya fusionados en `main`.
 
@@ -26,6 +26,7 @@ Referencias: [casos de uso](../requirements/casos-de-uso.md),
 | D-27 | Numeración | Core usa D-17 en adelante y un solo ADR-009 (el ADR-008 lo tomó Auth en #47). | Ninguna. |
 | D-28 | T-03 RabbitMQ y TLS | Un usuario AMQP por servicio con permisos mínimos; cola durable `core.session-revoked.v1` con DLQ en `definitions.json`. AMQP y HTTP interno **sin TLS hasta después de la expo** (29 de octubre), dentro de la red `backend` aislada. | Ninguna en PostgreSQL. Es una desviación temporal de #44, que pide AMQP con TLS; se registra como tarea con fecha posterior al 29 de octubre (mkcert, puerto 5671). |
 | D-29 | Nombre visible para la expo (29 de octubre) | Auth no guarda nombre visible y el JWT no lleva datos de perfil (`contracts/token-profile.md`). Para la expo, el cliente envía `display_name` a Core y Core lo guarda en `user_profiles`. **Desviación temporal de D-20**: el nombre lo declara el usuario y no lo valida Auth. | `user_profiles` se llena con una operación de Core (`PUT /api/v1/me/profile`) en lugar del evento `user.updated`; `version` queda en 0 hasta que llegue el primer evento de Auth, que siempre gana. |
+| D-30 | Comprobación de la sesión del JWT para la expo (29 de octubre) | Core verifica la firma Ed25519 con el JWKS de Auth y los claims de `contracts/token-profile.md` (`iss`, `aud` con `sonimbus-core`, `sub`, `sid`, `iat`, `exp`, `jti`), pero **no consulta la sesión en Auth** (`contracts/session-checks.md`). **Desviación temporal de D-16**: una sesión revocada o una cuenta bloqueada siguen entrando hasta que vence su access token, como máximo 15 minutos. | Ninguna en PostgreSQL. Falta el cliente HTTPS de la API interna de Auth con su credencial de servicio y la microcaché de 10 s; después, aplicar `session.revoked` (D-21). |
 
 ## Entidades e invariantes por servicio interno
 
@@ -72,3 +73,4 @@ Todas las tablas viven en el esquema `core`. Las horas se guardan en UTC
 - ERD del esquema `core` (otra sesión).
 - Pasar las decisiones aprobadas a `docs/decisions/README.md` y al ADR-009.
 - Sustituir D-29 por `user.updated` (D-20) cuando Auth guarde el nombre visible.
+- Retirar D-30: consultar la sesión en Auth (`contracts/session-checks.md`) y consumir `session.revoked`.
