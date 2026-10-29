@@ -1,5 +1,8 @@
 # Sesiones, login, refresh y logout: tercera entrega
 
+La [entrega 4A](SESSION_CHECKS.md) añade consulta autoritativa individual y por
+lotes como componente interno de solo lectura. No añade rutas ni habilita login.
+
 Refs #35 y #17. Contexto histórico de la tercera entrega: base `b5451ef`,
 rama de trabajo original `feature/auth-sessions`.
 La referencia `feature/auth-jwt-jwks` se conserva en `b5451ef`.
