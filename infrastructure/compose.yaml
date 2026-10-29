@@ -88,29 +88,31 @@ services:
     networks:
       auth_gateway:
         ipv4_address: 172.30.250.2
-  cassandra:
-    image: cassandra:5.0.9
+  scylladb:
+    image: scylladb/scylla:2026.1.15
     profiles:
       - messaging
     restart: unless-stopped
-    environment:
-      CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-TeamCollaborationCluster}
-      CASSANDRA_DC: ${CASSANDRA_DC:-datacenter1}
-      CASSANDRA_RACK: ${CASSANDRA_RACK:-rack1}
-      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
-      MAX_HEAP_SIZE: ${CASSANDRA_MAX_HEAP_SIZE:-1024M}
-      HEAP_NEWSIZE: ${CASSANDRA_HEAP_NEWSIZE:-256M}
+    command:
+      - --smp
+      - "1"
+      - --memory
+      - ${SCYLLA_MEMORY:-1G}
+      - --overprovisioned
+      - "1"
+      - --cluster-name
+      - ${SCYLLA_CLUSTER_NAME:-TeamCollaborationCluster}
     ports:
-      - "${CASSANDRA_PORT:-9042}:9042"
+      - "${SCYLLA_PORT:-9042}:9042"
     volumes:
-      - cassandra_data:/var/lib/cassandra
+      - scylla_data:/var/lib/scylla
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'SELECT release_version FROM system.local' >/dev/null 2>&1"]
       interval: 20s
       timeout: 10s
       retries: 15
       start_period: 120s
-    mem_limit: 2g
+    mem_limit: ${SCYLLA_MEM_LIMIT:-1536M}
     networks:
       - backend
 
@@ -147,5 +149,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  cassandra_data:
+  scylla_data:
   minio_data:

@@ -1,97 +1,41 @@
-use super::brand::SONIMBUS_BRAND;
-
 pub struct VerificationEmailContent {
     pub subject: &'static str,
     pub text: String,
     pub html: String,
 }
 
-pub fn verification_email_content(
-    locale: &str,
-    verification_url: &str,
-) -> VerificationEmailContent {
-    match locale {
-        "en" | "en-US" => build_email(verification_url, true),
-        _ => build_email(verification_url, false),
-    }
-}
-
-fn build_email(verification_url: &str, english: bool) -> VerificationEmailContent {
-    let brand = &SONIMBUS_BRAND;
-    let app_name = escape_html(brand.app_name);
-    let logo_url = escape_html(brand.logo_url);
-    let primary_color = brand.primary_color;
-    let background_color = brand.background_color;
-    let text_color = brand.text_color;
-    let (language, subject, introduction, button, footer, text) = if english {
-        (
-            "en",
-            "Verify your email",
-            format!("Thanks for registering with {app_name}. Please confirm your email address."),
-            "Verify email",
-            "This link expires in 24 hours. If you did not create this account, you can ignore this message.",
-            format!("Verify your email by opening this link: {verification_url}\nThe link expires in 24 hours."),
-        )
+pub fn verification_email_content(locale: &str, code: &str) -> VerificationEmailContent {
+    let english = matches!(locale, "en" | "en-US");
+    let (subject, message) = if english {
+        ("Complete your Sonimbus registration", "Enter this code in the application to complete your Sonimbus registration. It expires 10 minutes after the registration request; resending does not extend that deadline. Do not share it. If you did not request this registration, ignore this message.")
     } else {
-        (
-            "es",
-            "Verifica tu correo",
-            format!("Gracias por registrarte en {app_name}. Confirma tu correo electrónico."),
-            "Verificar correo",
-            "Este enlace vence en 24 horas. Si no creaste esta cuenta, puedes ignorar este mensaje.",
-            format!("Verifica tu correo abriendo este enlace: {verification_url}\nEl enlace vence en 24 horas."),
-        )
+        ("Completa tu registro en Sonimbus", "Introduce este código en la aplicación para completar tu registro en Sonimbus. Vence a los 10 minutos de solicitar el registro; reenviarlo no amplía ese plazo. No lo compartas. Si no solicitaste el registro, ignora este mensaje.")
     };
-
-    let verification_url = escape_html(verification_url);
-
-    let html = format!(
-        r#"
-        <!doctype html>
-        <html lang="{language}">
-        <body style="margin:0; padding:0; background:{background_color}; font-family:Arial, sans-serif;">
-            <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                    <td align="center" style="padding:32px 16px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px; background:#FFFFFF; border-radius:12px; overflow:hidden;">
-                            <tr>
-                                <td style="padding:32px; text-align:center;">
-                                    <img src="{logo_url}" alt="{app_name}" width="120" style="margin-bottom:24px;" />
-                                    <h1 style="margin:0; color:{text_color}; font-size:24px;">
-                                        {subject}
-                                    </h1>
-                                    <p style="color:#475569; font-size:16px; line-height:1.5;">
-                                        {introduction}
-                                    </p>
-                                    <a href="{verification_url}" style="display:inline-block; margin-top:16px; padding:12px 20px; background:{primary_color}; color:#FFFFFF; text-decoration:none; border-radius:8px; font-weight:bold;">
-                                        {button}
-                                    </a>
-                                    <p style="color:#64748B; font-size:13px; line-height:1.5; margin-top:24px;">
-                                        {footer}
-                                    </p>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-        "#
-    );
-
-    VerificationEmailContent {
-        subject,
-        text,
-        html,
-    }
-}
-
-fn escape_html(value: &str) -> String {
-    value
+    let safe_code = code
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-        .replace('\'', "&#39;")
+        .replace('\'', "&#39;");
+    VerificationEmailContent {
+        subject,
+        text: format!("{message}\n\n{code}"),
+        html: format!("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><h1>{subject}</h1><p>{message}</p><p style=\"font-size:28px;letter-spacing:4px\">{safe_code}</p></body></html>"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn code_mail_has_no_activation_link_or_external_resources() {
+        for locale in ["es-MX", "en"] {
+            let mail = verification_email_content(locale, "<test-code>");
+            assert!(!mail.html.contains("href="));
+            assert!(!mail.html.contains("src="));
+            assert!(!mail.html.contains("<test-code>"));
+            assert!(mail.html.contains("&lt;test-code&gt;"));
+            assert!(mail.text.contains("10"));
+        }
+    }
 }

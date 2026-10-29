@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.sonimbus.invalid/events/session.revoked.v1.schema.json",
+  "title": "session.revoked v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "version",
+    "event_id",
+    "occurred_at",
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "const": "session.revoked"
+    },
+    "version": {
+      "const": 1
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sid",
+        "account_id",
+        "client_type",
+        "reason",
+        "revoked_at",
+        "session_expires_at"
+      ],
+      "properties": {
+        "sid": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "account_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_type": {
+          "type": "string",
+          "enum": [
+            "desktop",
+            "mobile"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "logout",
+            "superseded",
+            "expired",
+            "refresh_reuse",
+            "password_changed",
+            "admin"
+          ]
+        },
+        "revoked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "session_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

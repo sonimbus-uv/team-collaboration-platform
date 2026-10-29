@@ -25,6 +25,7 @@ Una decisión que cambia la arquitectura, que tiene alternativas serias o que es
 | D-13 | PostgreSQL: una base de datos con un esquema y un usuario por servicio | Aceptada | 2026-10-07 | — |
 | D-14 | Desarrollo en VM Vagrant; expo en Ubuntu nativo | Aceptada | 2026-10-07 | [ADR-006](ADR-006-vagrant-docker-compose.md) |
 | D-15 | VoiceService (en Core) emite los tokens de LiveKit | Aceptada | 2026-10 | — |
+| D-16 | Sesiones absolutas de 20 días, refresh rotativo y comprobación privada de sesión | Confirmada por solicitante; revisión del equipo pendiente | 2026-10-22 | [ADR-007](ADR-007-auth-sessions.md) |
 
 ## Detalle
 
@@ -69,7 +70,7 @@ El catálogo de eventos vive en [`contracts/events/`](../../contracts/events/).
 
 - Motivo: el entorno tiene recursos limitados (RES-07) y la máquina de desarrollo tiene 6 GB. ScyllaDB corre con un núcleo y una memoria acotada (`--smp 1 --memory <N> --overprovisioned 1`), en lugar del *heap* de 1 GB o más de Cassandra.
 - Compatibilidad: ScyllaDB usa el mismo CQL y funciona con el mismo driver (Xandra en Elixir), así que el diseño de tablas no cambia.
-- Pendiente: `infrastructure/compose.yaml` todavía levanta `cassandra:5.0.9`; el cambio está registrado como tarea T-01 en [`docs/PLAN.md`](../PLAN.md).
+- Implementado: `infrastructure/compose.yaml` levanta ScyllaDB con el perfil `messaging`, un núcleo, memoria acotada y el volumen `scylla_data` (T-01).
 
 El diseño de las tablas está en [`docs/database/`](../database/).
 
@@ -127,7 +128,7 @@ Se resuelven mediante issue o PoC y se agregan a la tabla anterior al cerrarse.
 |---|---|---|
 | Transferencia de archivos | gRPC con streaming frente a REST con subida por partes y `Range`. PoC: 50 MB por bloques, de JavaFX a Elixir pasando por Nginx | @Maple-M136279841 |
 | Lenguaje de Report Service | Propuesta: Elixir | @roluva |
-| Tokens | Vigencia del token de acceso y del de renovación; rotación del de renovación en cada uso; almacenamiento seguro en JavaFX y Flutter | @tuzc0 |
+| Sesiones: pendientes de D-16 | Llavero no disponible; parámetros operativos propuestos; compromiso de claves; integración Files y PoC Rust–Elixir. Vigencias, rotación y persistencia ya definidas en ADR-007 | @tuzc0 y responsables consumidores |
 | Google OAuth en escritorio | Propuesta: redirección a *loopback* con PKCE; credenciales en Google Cloud Console | @tuzc0 |
 | Catálogo de eventos de RabbitMQ | Nombre, productor, consumidores y contenido de cada evento | Cada productor |
 | Valores concretos | Longitud máxima de mensaje; tamaño y tipos de archivo; caducidad de códigos; política de contraseñas; intentos fallidos antes de bloquear; tamaño de página del historial; rango máximo de reportes; valores por defecto de invitaciones | Dueño de cada servicio |

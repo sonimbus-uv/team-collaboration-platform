@@ -43,7 +43,6 @@ impl PasswordHasher for Argon2PasswordHasher {
     ) -> Result<bool, PasswordHashingError> {
         let parsed_hash =
             PasswordHash::new(password_hash).map_err(|_| PasswordHashingError::InvalidHash)?;
-
         let argon2 = Argon2::default();
 
         match argon2.verify_password(password.as_bytes(), &parsed_hash) {
@@ -62,6 +61,7 @@ mod tests {
         let hasher = Argon2PasswordHasher;
         let first = hasher.hash_password("ValidPass123!").unwrap();
         let second = hasher.hash_password("ValidPass123!").unwrap();
+
         assert_ne!(first, second);
         assert!(first.starts_with("$argon2id$"));
         assert!(hasher.verify_password("ValidPass123!", &first).unwrap());

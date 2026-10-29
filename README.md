@@ -72,7 +72,7 @@ La máquina virtual utiliza:
 | PostgreSQL | Predeterminado | 5432 | Persistencia relacional |
 | Redis | Predeterminado | 6379 | Caché e información temporal |
 | Mailpit | Predeterminado | 1025 / 8025 | Pruebas locales de correo |
-| Cassandra | Perfil `messaging` | 9042 | Mensajería e historial (se reemplaza por ScyllaDB, T-01) |
+| ScyllaDB | Perfil `messaging` | 9042 | Mensajería e historial |
 | MinIO | Perfil `storage` | 9000 / 9001 | Almacenamiento de objetos |
 
 ## Inicio rápido
@@ -139,7 +139,7 @@ cd /vagrant/infrastructure
 docker compose ps
 ```
 
-Iniciar la base de mensajes (hoy Cassandra; ScyllaDB tras T-01):
+Iniciar la base de mensajes (ScyllaDB):
 
 ```bash
 docker compose --profile messaging up -d

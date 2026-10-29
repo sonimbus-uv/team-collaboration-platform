@@ -7,6 +7,7 @@ use serde::Serialize;
 
 #[derive(Debug)]
 pub enum ApiError {
+    RequestTooLarge,
     Database(sqlx::Error),
     Conflict(String),
     Validation(String),
@@ -40,6 +41,15 @@ impl IntoResponse for ApiError {
         };
 
         let (status, problem) = match self {
+            Self::RequestTooLarge => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ProblemDetails {
+                    problem_type: "about:blank",
+                    title: "Payload Too Large",
+                    status: 413,
+                    detail: "Request body exceeds the configured limit".into(),
+                },
+            ),
             Self::Database(error) => {
                 tracing::error!(error = ?error, "database error");
 

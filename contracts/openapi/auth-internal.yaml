@@ -1,0 +1,683 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sonimbus Auth: comprobación privada de sesiones",
+    "version": "0.1.0",
+    "description": "Refs #35. Contrato HTTP 4B aprobado por el solicitante el 2026-10-27 e implementado con activación explícita; no acredita despliegue ni interoperabilidad. HTTPS privado directo, sin gateway público. Bearer svc_ opaco independiente por Core/Files con sessions:check. Cuerpo 64 KiB, lotes 1-100 pares distintos; cuota ponderada y concurrencia por identidad compartidas mediante Redis. Modelo, límites aprobados y operación en ../../services/auth/INTERNAL_API.md; semántica temporal y consumidores pendientes en ../session-checks.md."
+  },
+  "servers": [
+    {
+      "url": "https://auth.internal.example.invalid:3443"
+    }
+  ],
+  "security": [
+    {
+      "ServiceBearer": []
+    }
+  ],
+  "paths": {
+    "/internal/v1/sessions/check": {
+      "post": {
+        "operationId": "checkSession",
+        "security": [
+          {
+            "ServiceBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionPair"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado autoritativo al evaluar",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/malformed-request"
+                        },
+                        "status": {
+                          "const": 400
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/invalid-service-credentials"
+                        },
+                        "status": {
+                          "const": 401
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Bearer challenge sin datos sensibles"
+              }
+            }
+          },
+          "403": {
+            "description": "Permiso insuficiente",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/service-forbidden"
+                        },
+                        "status": {
+                          "const": 403
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo demasiado grande",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/request-too-large"
+                        },
+                        "status": {
+                          "const": 413
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "429": {
+            "description": "Límite excedido; Retry-After en segundos",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/service-rate-limited"
+                        },
+                        "status": {
+                          "const": 429
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Indisponibilidad temporal, no revocación",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/session-check-unavailable"
+                        },
+                        "status": {
+                          "const": 503
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          }
+        },
+        "description": "Semántica normativa: ../session-checks.md"
+      }
+    },
+    "/internal/v1/sessions/check-batch": {
+      "post": {
+        "operationId": "checkSessionBatch",
+        "security": [
+          {
+            "ServiceBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Batch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Un resultado por par en orden; todo el lote falla si no puede evaluarse",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/malformed-request"
+                        },
+                        "status": {
+                          "const": 400
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Credencial inválida",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/invalid-service-credentials"
+                        },
+                        "status": {
+                          "const": 401
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Bearer challenge sin datos sensibles"
+              }
+            }
+          },
+          "403": {
+            "description": "Permiso insuficiente",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/service-forbidden"
+                        },
+                        "status": {
+                          "const": 403
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo demasiado grande",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/request-too-large"
+                        },
+                        "status": {
+                          "const": 413
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          },
+          "429": {
+            "description": "Límite excedido; Retry-After en segundos",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/service-rate-limited"
+                        },
+                        "status": {
+                          "const": 429
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Indisponibilidad temporal, no revocación",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "/problems/session-check-unavailable"
+                        },
+                        "status": {
+                          "const": 503
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                },
+                "description": "no-store"
+              }
+            }
+          }
+        },
+        "description": "Semántica normativa: ../session-checks.md"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ServiceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token svc_ seguido de base64url sin padding de 32 bytes aleatorios; solo backend y HTTPS verificado. Auth almacena SHA-256 del token ASCII completo y permite una credencial anterior con fecha absoluta; distribución y reinicio coordinados según INTERNAL_API.md. Un JWT de usuario es rechazado."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionPair": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sid",
+          "account_id"
+        ],
+        "properties": {
+          "sid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SessionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sid",
+          "account_id",
+          "active",
+          "session_expires_at"
+        ],
+        "properties": {
+          "sid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "session_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "No nulo para active=true; null para false. Vencimiento absoluto, no TTL deslizante."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "active": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "session_expires_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "session_expires_at": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Batch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/SessionPair"
+            }
+          }
+        }
+      },
+      "BatchResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/SessionResult"
+            }
+          }
+        }
+      }
+    }
+  }
+}
