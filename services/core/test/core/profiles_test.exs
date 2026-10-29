@@ -42,4 +42,19 @@ defmodule Core.ProfilesTest do
 
     assert Repo.get!(UserProfile, user).display_name == "Desde Auth"
   end
+
+  test "display_names/1 resuelve varios usuarios; nil sin perfil o eliminado" do
+    [named, unnamed, deleted] = for _ <- 1..3, do: Ecto.UUID.generate()
+    {:ok, _} = Profiles.put_display_name(named, %{"display_name" => "Ana"})
+    {:ok, _} = Profiles.put_display_name(deleted, %{"display_name" => "Borrado"})
+
+    Repo.update_all(from(p in UserProfile, where: p.user_id == ^deleted),
+      set: [account_status: :deleted]
+    )
+
+    assert Profiles.display_names([named, unnamed, deleted, named]) ==
+             %{named => "Ana", unnamed => nil, deleted => nil}
+
+    assert Profiles.display_names([]) == %{}
+  end
 end

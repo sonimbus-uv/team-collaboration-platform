@@ -12,7 +12,7 @@ defmodule CoreWeb.MessageController do
            Community.get_channel_for_member(channel_id, conn.assigns.current_user_id),
          {:ok, page} <- Messaging.list_messages(channel, Map.take(params, ["before", "limit"])) do
       json(conn, %{
-        data: Enum.map(page.messages, &MessageJSON.message/1),
+        data: MessageJSON.messages(page.messages),
         next_cursor: page.next_cursor
       })
     end

@@ -40,8 +40,14 @@ defmodule CoreWeb.MessageChannelTest do
     {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
     payload = %{"client_message_id" => Ecto.UUID.generate(), "content" => "hola"}
 
+    {:ok, _} = Core.Profiles.put_display_name(ctx.owner, %{"display_name" => "Ana"})
+    owner = ctx.owner
+
     ref = push(socket, "message.create", payload)
-    assert_reply ref, :ok, %{message: %{id: id, content: "hola"}}
+
+    assert_reply ref, :ok, %{
+      message: %{id: id, content: "hola", author: %{id: ^owner, display_name: "Ana"}}
+    }
 
     assert_broadcast "message.created", %{
       type: "message.created",
@@ -77,7 +83,14 @@ defmodule CoreWeb.MessageChannelTest do
       |> CoreWeb.ConnCase.authenticate(ctx.owner)
       |> Phoenix.ConnTest.get("/api/v1/channels/#{ctx.channel.id}/messages")
 
-    assert %{"data" => [%{"content" => "hola"}], "next_cursor" => nil} =
+    owner = ctx.owner
+
+    assert %{
+             "data" => [
+               %{"content" => "hola", "author" => %{"id" => ^owner, "display_name" => nil}}
+             ],
+             "next_cursor" => nil
+           } =
              Phoenix.ConnTest.json_response(conn, 200)
   end
 end

@@ -40,6 +40,25 @@ defmodule Core.Profiles do
     end
   end
 
+  @doc """
+  Nombres visibles de varios usuarios en una sola consulta:
+  `%{user_id => display_name}`. Un usuario sin perfil o con la cuenta
+  eliminada (anonimizado) queda como `nil`.
+  """
+  def display_names(user_ids) do
+    user_ids = Enum.uniq(user_ids)
+
+    found =
+      from(p in UserProfile,
+        where: p.user_id in ^user_ids and p.account_status != :deleted,
+        select: {p.user_id, p.display_name}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    Map.new(user_ids, &{&1, Map.get(found, &1)})
+  end
+
   @doc "Perfil local del usuario o `nil`."
   def get_profile(user_id), do: Repo.get(UserProfile, user_id)
 end
