@@ -35,4 +35,9 @@ defmodule CoreWeb.ConnCase do
     Core.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc "Conexión autenticada como `user_id`."
+  def authenticate(conn, user_id) do
+    Plug.Conn.assign(conn, :current_user_id, user_id)
+  end
 end
