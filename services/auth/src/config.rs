@@ -8,6 +8,7 @@ pub enum EmailProvider {
 }
 
 pub struct Config {
+    pub internal: Option<crate::internal::config::InternalConfig>,
     pub login_enabled: bool,
     pub login_ip_policy: BucketPolicy,
     pub refresh_ip_policy: BucketPolicy,
@@ -86,6 +87,7 @@ impl Config {
             .context("DATABASE_MAX_CONNECTIONS must be a valid u32")?;
 
         Ok(Self {
+            internal: crate::internal::config::InternalConfig::from_env()?,
             login_enabled: match env::var("AUTH_LOGIN_ENABLED").as_deref() {
                 Ok("true") => true,
                 Ok("false") | Err(env::VarError::NotPresent) => false,

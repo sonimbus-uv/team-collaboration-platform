@@ -5,6 +5,7 @@ mod email;
 mod error;
 mod handlers;
 mod infrastructure;
+mod internal;
 mod ports;
 mod protection;
 mod providers;
@@ -40,6 +41,18 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
+    // Validate files/TLS and bind the private socket before starting either listener.
+    let internal = match config.internal.clone() {
+        Some(internal) => Some(
+            internal::server::InternalServer::prepare(
+                internal,
+                config.redis_url.clone(),
+                &config.database_url,
+            )
+            .await?,
+        ),
+        None => None,
+    };
     let token_issuer = Arc::new(auth_service::tokens::issuer::AccessTokenIssuer::load(
         config.tokens.clone(),
     )?);
@@ -95,11 +108,18 @@ async fn main() -> anyhow::Result<()> {
 
     let app = routes::router(state);
     let listener = tokio::net::TcpListener::bind(config.server_addr).await?;
-    axum::serve(
+    let public = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await?;
+    );
+    if let Some(internal) = internal {
+        tokio::select! {
+            result = public => result?,
+            result = internal.run() => result?,
+        }
+    } else {
+        public.await?;
+    }
 
     Ok(())
 }
