@@ -1,0 +1,73 @@
+$kind: http-request
+name: http://localhost:18080/api/v1/auth/login
+description: 04-Registro
+url: http://localhost:18080/api/v1/auth/login
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"email\": \"prueba2.postman.01@example.invalid\",\r
+
+    \  \"password\": \"PruebaSegura123!\",\r
+
+    \  \"client_type\": \"desktop\",\r
+
+    \  \"device_name\": \"Postman\"\r
+
+    }"
+scripts:
+  - type: afterResponse
+    code: "pm.test(\"Login devuelve HTTP 200\", () => {\r
+
+      \    pm.response.to.have.status(200);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"Devuelve tokens y datos de sesión\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body.token_type).to.eql(\"Bearer\");\r
+
+      \    pm.expect(body.access_token).to.be.a(\"string\").and.not.empty;\r
+
+      \    pm.expect(body.refresh_token).to.be.a(\"string\").and.not.empty;\r
+
+      \    pm.expect(body.sid).to.be.a(\"string\").and.not.empty;\r
+
+      \    pm.expect(body.account_id)\r
+
+      \        .to.eql(pm.collectionVariables.get(\"account_id\"));\r
+
+      \r
+
+      \    pm.collectionVariables.set(\"access_token\", body.access_token);\r
+
+      \    pm.collectionVariables.set(\"refresh_token\", body.refresh_token);\r
+
+      \    pm.collectionVariables.set(\"sid\", body.sid);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"El access token dura como máximo 15 minutos\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body.access_expires_in).to.be.a(\"number\");\r
+
+      \    pm.expect(body.access_expires_in).to.be.above(0);\r
+
+      \    pm.expect(body.access_expires_in).to.be.at.most(900);\r
+
+      });"
+    language: text/javascript
+order: 4000

@@ -1,0 +1,51 @@
+$kind: http-request
+name: http://localhost:18080/auth/register
+description: 04-Registro
+url: http://localhost:18080/auth/register
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"email\": \"prueba.postman.01@example.invalid\",\r
+
+    \  \"password\": \"PruebaSegura123!\"\r
+
+    }"
+scripts:
+  - type: afterResponse
+    code: "pm.test(\"Registro devuelve 201\", () => {\r
+
+      \    pm.response.to.have.status(201);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"Devuelve un intento y confirma el envío del correo\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body.registration_attempt_id)\r
+
+      \        .to.be.a(\"string\").and.not.empty;\r
+
+      \r
+
+      \    pm.expect(body.verification_email_sent).to.eql(true);\r
+
+      \r
+
+      \    pm.collectionVariables.set(\r
+
+      \        \"registration_attempt_id\",\r
+
+      \        body.registration_attempt_id\r
+
+      \    );\r
+
+      });"
+    language: text/javascript
+order: 1000

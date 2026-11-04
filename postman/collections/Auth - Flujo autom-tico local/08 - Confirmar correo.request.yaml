@@ -1,0 +1,22 @@
+$kind: http-request
+url: "{{base_url}}/auth/verify-email"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "registration_attempt_id": "{{registration_attempt_id}}",
+      "code": "{{verification_code}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const b=pm.response.json();
+      pm.test("Cuenta verificada sin sesi?n", () => { pm.expect(b.email_verified).to.eql(true); pm.expect(b).not.to.have.property('access_token'); });
+      pm.collectionVariables.set('account_id', b.user_id);
+    language: text/javascript
+order: 8000

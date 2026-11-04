@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{base_url}}/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{email}}",
+      "password": "{{password}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 201", () => pm.response.to.have.status(201));
+      if (pm.response.code !== 201) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const b=pm.response.json();
+      pm.test("Correo aceptado por proveedor", () => pm.expect(b.verification_email_sent).to.eql(true));
+      if (!b.verification_email_sent || !b.registration_attempt_id) { pm.execution.setNextRequest(null); throw new Error("Registro sin c?digo enviado"); }
+      pm.collectionVariables.set('registration_attempt_id', b.registration_attempt_id);
+    language: text/javascript
+order: 5000
