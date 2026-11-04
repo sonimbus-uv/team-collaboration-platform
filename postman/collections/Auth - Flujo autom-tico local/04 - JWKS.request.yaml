@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{base_url}}/.well-known/jwks.json"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const keys = pm.response.json().keys;
+      pm.test("Claves p?blicas Ed25519", () => {
+       pm.expect(keys).to.be.an('array').and.not.empty;
+       keys.forEach(k => { pm.expect(k.kty).to.eql('OKP'); pm.expect(k.crv).to.eql('Ed25519'); pm.expect(k).not.to.have.property('d'); });
+      });
+    language: text/javascript
+order: 4000

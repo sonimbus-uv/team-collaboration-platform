@@ -1,0 +1,1028 @@
+{
+  "info": {
+    "name": "Auth - API privada local",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Una iteracion. Requiere API interna HTTPS habilitada, certificado confiable, credenciales core/files con sessions:check, login y Mailpit. Crea usuario, valida sesion por API privada y cierra sesion. No modifica infraestructura ni credenciales."
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:18080"
+    },
+    {
+      "key": "mailpit_url",
+      "value": "http://localhost:18025"
+    },
+    {
+      "key": "password",
+      "value": "PruebaSegura123!"
+    },
+    {
+      "key": "internal_url",
+      "value": "https://localhost:18443"
+    },
+    {
+      "key": "core_service_token",
+      "value": ""
+    },
+    {
+      "key": "files_service_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Salud Auth",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.info.iteration > 0) { pm.execution.setNextRequest(null); throw new Error(\"Ejecuta solo una iteraci?n por corrida\"); }",
+              "const now = Date.now().toString(36);",
+              "const uid = pm.variables.replaceIn('{{$guid}}');",
+              "pm.collectionVariables.set('email', `postman-${now}-${uid}@example.invalid`);",
+              "['registration_attempt_id','verification_code','access_token','refresh_token','previous_refresh_token','sid','account_id'].forEach(k => pm.collectionVariables.unset(k));",
+              "pm.collectionVariables.set('mail_attempts', '0');",
+              "for (const key of ['core_service_token','files_service_token']) { if (!pm.variables.get(key)) { pm.execution.setNextRequest(null); throw new Error('Falta configurar ' + key); } }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "pm.test(\"Estado ok\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Salud PostgreSQL",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health/db"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "pm.test(\"Estado ok\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Salud Redis",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health/redis"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "pm.test(\"Estado ok\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - JWKS",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/.well-known/jwks.json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const keys = pm.response.json().keys;",
+              "pm.test(\"Claves p?blicas Ed25519\", () => {",
+              " pm.expect(keys).to.be.an('array').and.not.empty;",
+              " keys.forEach(k => { pm.expect(k.kty).to.eql('OKP'); pm.expect(k.crv).to.eql('Ed25519'); pm.expect(k).not.to.have.property('d'); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Registro",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if (pm.response.code !== 201) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const b=pm.response.json();",
+              "pm.test(\"Correo aceptado por proveedor\", () => pm.expect(b.verification_email_sent).to.eql(true));",
+              "if (!b.verification_email_sent || !b.registration_attempt_id) { pm.execution.setNextRequest(null); throw new Error(\"Registro sin c?digo enviado\"); }",
+              "pm.collectionVariables.set('registration_attempt_id', b.registration_attempt_id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Buscar correo Mailpit",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{mailpit_url}}/api/v1/search?query=to%3A{{email}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const messages=pm.response.json().messages || [];",
+              "const matching=messages.find(m => (m.To || []).some(t => (t.Address || '').toLowerCase() === pm.collectionVariables.get('email').toLowerCase()));",
+              "if (!matching) {",
+              " const n=Number(pm.collectionVariables.get('mail_attempts'))+1;",
+              " pm.collectionVariables.set('mail_attempts', String(n));",
+              " if (n >= 10) { pm.test(\"Correo encontrado\", () => pm.expect.fail(\"No apareci? el correo tras diez consultas\")); pm.execution.setNextRequest(null); }",
+              " else { pm.execution.setNextRequest(pm.info.requestId); }",
+              "} else {",
+              " pm.collectionVariables.set('mail_id', matching.ID);",
+              " pm.test(\"Correo del destinatario encontrado\", () => pm.expect(matching.ID).to.be.a('string'));",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Leer c?digo Mailpit",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{mailpit_url}}/api/v1/message/{{mail_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const match=(pm.response.json().Text || '').match(/(?<!\\d)\\d{8}(?!\\d)/);",
+              "pm.test(\"C?digo de ocho d?gitos\", () => pm.expect(match).not.to.eql(null));",
+              "if (!match) { pm.execution.setNextRequest(null); throw new Error(\"Correo sin c?digo reconocible\"); }",
+              "pm.collectionVariables.set('verification_code', match[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Confirmar correo",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/auth/verify-email",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"registration_attempt_id\": \"{{registration_attempt_id}}\",\n  \"code\": \"{{verification_code}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const b=pm.response.json();",
+              "pm.test(\"Cuenta verificada sin sesi?n\", () => { pm.expect(b.email_verified).to.eql(true); pm.expect(b).not.to.have.property('access_token'); });",
+              "pm.collectionVariables.set('account_id', b.user_id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"client_type\": \"desktop\",\n  \"device_name\": \"Postman autom?tico\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "const b=pm.response.json();",
+              "pm.test(\"Tokens y cuenta v?lidos\", () => { pm.expect(b.access_token).to.be.a('string').and.not.empty; pm.expect(b.refresh_token).to.be.a('string').and.not.empty; pm.expect(b.account_id).to.eql(pm.collectionVariables.get('account_id')); pm.expect(b.access_expires_in).to.be.above(0).and.at.most(900); });",
+              "pm.collectionVariables.set('access_token', b.access_token);",
+              "pm.collectionVariables.set('refresh_token', b.refresh_token);",
+              "pm.collectionVariables.set('sid', b.sid);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Core consulta sesion activa",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "const b=pm.response.json(); pm.test('Sesion activa y vinculada a cuenta', () => { pm.expect(b.active).to.eql(true); pm.expect(b.sid).to.eql(pm.collectionVariables.get('sid')); pm.expect(b.account_id).to.eql(pm.collectionVariables.get('account_id')); pm.expect(Date.parse(b.session_expires_at)).to.be.above(Date.now()); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Files consulta sesion activa",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{files_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "const b=pm.response.json(); pm.test('Sesion activa y vinculada a cuenta', () => { pm.expect(b.active).to.eql(true); pm.expect(b.sid).to.eql(pm.collectionVariables.get('sid')); pm.expect(b.account_id).to.eql(pm.collectionVariables.get('account_id')); pm.expect(Date.parse(b.session_expires_at)).to.be.above(Date.now()); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Sin credencial",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "if (pm.response.code !== 401) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/invalid-service-credentials'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - JWT de usuario no es credencial de servicio",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "if (pm.response.code !== 401) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/invalid-service-credentials'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - UUID invalido",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"incorrecto\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 - Campo extra rechazado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\",\n  \"extra\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 - Query rechazada",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check?extra=1",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 - Sesion inexistente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{$guid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Sesion inactiva', () => { const b=pm.response.json(); pm.expect(b.active).to.eql(false); pm.expect(b.session_expires_at).to.eql(null); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 - Cuenta no coincide",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{$guid}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Sesion inactiva', () => { const b=pm.response.json(); pm.expect(b.active).to.eql(false); pm.expect(b.session_expires_at).to.eql(null); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 - Lote mixto",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check-batch",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessions\": [\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{$guid}}\",\n      \"account_id\": \"{{account_id}}\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Orden y actividad del lote', () => { const r=pm.response.json().results; pm.expect(r).to.have.lengthOf(2); pm.expect(r[0].sid).to.eql(pm.collectionVariables.get('sid')); pm.expect(r[0].active).to.eql(true); pm.expect(r[1].active).to.eql(false); pm.expect(r[1].session_expires_at).to.eql(null); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 - Lote vacio",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check-batch",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessions\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 - Lote duplicado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check-batch",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessions\": [\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 - Lote mayor de 100",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check-batch",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessions\": [\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    },\n    {\n      \"sid\": \"{{sid}}\",\n      \"account_id\": \"{{account_id}}\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 - Logout publico",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/auth/logout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "if (pm.response.code !== 204) { pm.execution.setNextRequest(null); throw new Error(\"Estado inesperado; se detuvo la ejecuci?n\"); }",
+              "pm.test(\"Sin cuerpo\", () => pm.expect(pm.response.text()).to.eql(\"\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 - Consulta autoritativa tras logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{core_service_token}}"
+          }
+        ],
+        "url": "{{internal_url}}/internal/v1/sessions/check",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sid\": \"{{sid}}\",\n  \"account_id\": \"{{account_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 300);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }",
+              "pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });",
+              "pm.test('Sesion inactiva', () => { const b=pm.response.json(); pm.expect(b.active).to.eql(false); pm.expect(b.session_expires_at).to.eql(null); });",
+              "['access_token','refresh_token','verification_code','mail_id'].forEach(k => pm.collectionVariables.unset(k));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

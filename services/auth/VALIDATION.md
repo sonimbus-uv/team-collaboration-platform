@@ -62,7 +62,7 @@ correctas, cero fallos y cero ignoradas**: 8 de biblioteca, 72 del binario y
 Desde la raíz:
 
 ```sh
-python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
+python3 scripts/auth/tests/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
 ```
 
 Resultado: prueba existente con Nginx real correcta; sintaxis, JWKS GET/HEAD,

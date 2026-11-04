@@ -299,7 +299,7 @@ Modificados por 4B, además del trabajo previo identificado:
 - `src/main.rs`, `src/config.rs`, `src/infrastructure/redis_connection.rs`.
 - `Cargo.toml`, `Cargo.lock`, `.env.example`, `README.md`.
 - `contracts/session-checks.md`, `contracts/openapi/auth-internal.yaml` y
-  `scripts/test-auth-jwks-gateway.py` (rutas desde la raíz).
+  `scripts/auth/tests/test-auth-jwks-gateway.py` (rutas desde la raíz).
 
 Propuesta de commits para revisión, sin preparar ni ejecutar:
 
@@ -308,7 +308,7 @@ Propuesta de commits para revisión, sin preparar ni ejecutar:
    Dejar el hunk que conecta el módulo de pruebas HTTP para el siguiente commit.
 2. `test(auth): verify internal TLS, credentials and shared limits`:
    `src/tests/internal_api.rs`, hunk de inclusión en `src/internal/mod.rs` y
-   `scripts/test-auth-jwks-gateway.py`.
+   `scripts/auth/tests/test-auth-jwks-gateway.py`.
 3. `docs(auth): document approved 4B contract and deployment`:
    `.env.example`, ejemplo JSON, este documento, README, contratos y plantilla nft.
 

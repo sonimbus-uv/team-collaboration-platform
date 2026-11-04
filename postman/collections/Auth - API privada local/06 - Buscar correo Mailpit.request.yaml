@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{mailpit_url}}/api/v1/search?query=to%3A{{email}}"
+method: GET
+queryParams:
+  query: to%3A{{email}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const messages=pm.response.json().messages || [];
+      const matching=messages.find(m => (m.To || []).some(t => (t.Address || '').toLowerCase() === pm.collectionVariables.get('email').toLowerCase()));
+      if (!matching) {
+       const n=Number(pm.collectionVariables.get('mail_attempts'))+1;
+       pm.collectionVariables.set('mail_attempts', String(n));
+       if (n >= 10) { pm.test("Correo encontrado", () => pm.expect.fail("No apareci? el correo tras diez consultas")); pm.execution.setNextRequest(null); }
+       else { pm.execution.setNextRequest(pm.info.requestId); }
+      } else {
+       pm.collectionVariables.set('mail_id', matching.ID);
+       pm.test("Correo del destinatario encontrado", () => pm.expect(matching.ID).to.be.a('string'));
+      }
+    language: text/javascript
+order: 6000

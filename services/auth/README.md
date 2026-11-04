@@ -1,5 +1,9 @@
 # Auth Service
 
+Para preparar y arrancar el entorno de desarrollo con scripts, consulta
+[Automated development environment](DEVELOPMENT.md). La configuración y los
+secretos existentes se conservan; login requiere habilitación explícita.
+
 **Responsable principal:** `@tuzc0`
 
 ## Responsabilidad

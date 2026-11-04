@@ -1,0 +1,25 @@
+$kind: http-request
+url: "{{internal_url}}/internal/v1/sessions/check"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+body:
+  type: json
+  content: |-
+    {
+      "sid": "{{sid}}",
+      "account_id": "{{account_id}}"
+    }
+scripts:
+  - type: beforeRequest
+    code: setTimeout(() => {}, 300);
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('HTTP 401', () => pm.response.to.have.status(401));
+      if (pm.response.code !== 401) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }
+      pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });
+      pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/invalid-service-credentials'); });
+    language: text/javascript
+order: 13000

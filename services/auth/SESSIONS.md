@@ -185,7 +185,7 @@ presupuesto por cuenta y por IP. Para resultados actuales, ver [VALIDATION.md](V
 Desde la raíz, Nginx real y backend desechable:
 
 ```sh
-python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
+python3 scripts/auth/tests/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
 ```
 
 La prueba comprueba rutas, límites y encabezados, no autenticación del backend stub.

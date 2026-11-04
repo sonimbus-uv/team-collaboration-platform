@@ -1,0 +1,33 @@
+$kind: http-request
+name: POST http://localhost:18080/api/v1/auth/refresh
+description: 09 - Refresh después de logout
+url: http://localhost:18080/api/v1/auth/refresh
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"refresh_token\": \"WhkEtTjlkNY0LOn8xpYBZgOrYinqQ-MOkCW-UymolO0\"\r
+
+    }"
+scripts:
+  - type: afterResponse
+    code: "pm.test(\"La sesión cerrada no permite renovar\", () => {\r
+
+      \    pm.response.to.have.status(401);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"El error indica refresh inválido\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body.type).to.eql(\"/problems/invalid-refresh-token\");\r
+
+      });"
+    language: text/javascript
+order: 7000

@@ -1,0 +1,57 @@
+$kind: http-request
+name: http://localhost:18080/auth/verify-email
+description: 04-Registro
+url: http://localhost:18080/auth/verify-email
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"email\": \"prueba2.postman.01@example.invalid\",\r
+
+    \  \"code\": \"51480943\"\r
+
+    }"
+scripts:
+  - type: afterResponse
+    code: "pm.test(\"Confirmación devuelve HTTP 200\", () => {\r
+
+      \    pm.response.to.have.status(200);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"La cuenta queda verificada\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body.email_verified).to.eql(true);\r
+
+      \    pm.expect(body.user_id).to.be.a(\"string\").and.not.empty;\r
+
+      \r
+
+      \    pm.collectionVariables.set(\"account_id\", body.user_id);\r
+
+      \    pm.collectionVariables.set(\"email\", body.email);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"La confirmación no entrega tokens de sesión\", () => {\r
+
+      \    const body = pm.response.json();\r
+
+      \r
+
+      \    pm.expect(body).not.to.have.property(\"access_token\");\r
+
+      \    pm.expect(body).not.to.have.property(\"refresh_token\");\r
+
+      });"
+    language: text/javascript
+order: 2000

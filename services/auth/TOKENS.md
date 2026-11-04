@@ -157,7 +157,7 @@ La prueba de router completo con DB/Redis inaccesibles no realiza consultas a el
 Desde la raíz, con Nginx instalado:
 
 ```sh
-python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
+python3 scripts/auth/tests/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
 ```
 
 Ejecuta Nginx real con copias temporales de su configuración y backend HTTP stub,

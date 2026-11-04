@@ -1,0 +1,7 @@
+$kind: collection
+name: Auth - Flujo autom?tico local
+description: Entorno aislado con login habilitado y Mailpit. Ejecutar en orden, una iteraci?n y 1000 ms entre solicitudes. Crea una cuenta nueva; no borra mensajes ni datos. No verifica criptogr?ficamente JWT.
+variables:
+  base_url: http://localhost:18080
+  mailpit_url: http://localhost:18025
+  password: PruebaSegura123!
