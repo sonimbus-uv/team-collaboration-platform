@@ -88,7 +88,7 @@ login únicamente mediante variable del proceso de prueba aislado, sin editar
 defaults ni `.env`. Ejecutar desde la raíz:
 
 ```sh
-python3 scripts/test-auth-registration-code.py \
+python3 scripts/auth/tests/test-auth-registration-code.py \
   --base-url http://127.0.0.1:PUERTO_AUTH \
   --mailpit-url http://127.0.0.1:PUERTO_HTTP_MAILPIT --confirm-isolated
 ```

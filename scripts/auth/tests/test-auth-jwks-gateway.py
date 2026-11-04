@@ -65,7 +65,7 @@ def main():
     args = parser.parse_args()
     if not args.nginx:
         parser.error("nginx is required; install it or supply --nginx")
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[3]
     backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
     worker = threading.Thread(target=backend.serve_forever, daemon=True)
     worker.start()

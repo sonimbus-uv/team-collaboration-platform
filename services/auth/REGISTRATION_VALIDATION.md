@@ -99,7 +99,7 @@ Nuevos archivos de esta entrega:
 - `REGISTRATION_VALIDATION.md`.
 - Desde raíz: `contracts/registration.md`,
   `docs/decisions/ADR-008-registration-attempt-codes.md`,
-  `scripts/test-auth-registration-code.py`.
+  `scripts/auth/tests/test-auth-registration-code.py`.
 
 Archivos modificados por esta entrega (rutas relativas a Auth salvo indicación):
 
