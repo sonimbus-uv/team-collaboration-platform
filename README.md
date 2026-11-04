@@ -17,7 +17,7 @@ Proyecto de las materias **Desarrollo de Sistemas en Red** (NRC 20226) y **Despl
 | File Service | [`services/files/`](services/files/) | Elixir, MinIO | [@Maple-M136279841](https://github.com/Maple-M136279841) |
 | Report Service | [`services/reports/`](services/reports/) | Por decidir (propuesta: Elixir) | [@roluva](https://github.com/roluva) |
 | API Gateway | [`gateway/nginx/`](gateway/nginx/) | Nginx | [@tuzc0](https://github.com/tuzc0) |
-| Infraestructura | [`infrastructure/`](infrastructure/) | Vagrant, Docker Compose, LiveKit | [@tuzc0](https://github.com/tuzc0) |
+| Infraestructura | [`infrastructure/`](infrastructure/) | Vagrant, Docker Compose, LiveKit | [@Maple-M136279841](https://github.com/Maple-M136279841) |
 
 El reparto completo, las fases y las tareas abiertas están en [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -56,7 +56,8 @@ El entorno local se ejecuta sobre una máquina virtual común para todo el equip
 - Ubuntu Server 24.04 LTS;
 - Vagrant con VirtualBox o libvirt (KVM), a elección de cada integrante;
 - Docker Engine;
-- Docker Compose.
+- Docker Compose;
+- Erlang/OTP y Elixir con las versiones de [`.tool-versions`](.tool-versions), instalados con `mise`.
 
 La máquina virtual utiliza:
 
@@ -69,11 +70,11 @@ La máquina virtual utiliza:
 
 | Servicio | Inicio | Puerto | Propósito |
 |---|---|---:|---|
-| PostgreSQL | Predeterminado | 5432 | Persistencia relacional |
+| PostgreSQL | Predeterminado | 5432 | Persistencia relacional; un esquema y un usuario por servicio ([`database/postgres/`](database/postgres/)) |
 | Redis | Predeterminado | 6379 | Caché e información temporal |
 | Mailpit | Predeterminado | 1025 / 8025 | Pruebas locales de correo |
-| ScyllaDB | Perfil `messaging` | 9042 | Mensajería e historial |
-| MinIO | Perfil `storage` | 9000 / 9001 | Almacenamiento de objetos |
+| ScyllaDB | Perfil `messaging` | 9042 | Mensajes y reacciones (D-05) |
+| MinIO | Perfil `storage` | 9000 / 9001 | Almacenamiento de objetos; el *bucket* se crea al iniciar |
 
 ## Inicio rápido
 
@@ -132,7 +133,7 @@ Después del primer `vagrant up`, Vagrant recuerda el proveedor y basta con `vag
 > printf '* 192.168.56.0/21\n* 192.168.33.0/24\n' | sudo tee /etc/vbox/networks.conf
 > ```
 
-PostgreSQL, Redis y Mailpit se inician durante el aprovisionamiento. Para revisar su estado dentro de la VM:
+PostgreSQL, Redis y Mailpit se inician durante el aprovisionamiento. En cada inicio, el servicio `postgres-init` crea o actualiza los esquemas y usuarios por servicio y termina; su estado `Exited (0)` es el esperado. Para revisar su estado dentro de la VM:
 
 ```bash
 cd /vagrant/infrastructure
