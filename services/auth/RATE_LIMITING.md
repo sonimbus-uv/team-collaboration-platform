@@ -4,16 +4,16 @@
 
 La protección cubre:
 
-- `POST /auth/register`.
-- `POST /auth/resend-verification`.
-- `GET` y `POST /auth/verify-email`.
+- `POST /api/v1/auth/register`.
+- `POST /api/v1/auth/resend-verification`.
+- `GET` y `POST /api/v1/auth/verify-email`.
 - `POST /api/v1/auth/login`, `/api/v1/auth/refresh` y `/api/v1/auth/logout`.
   Sus presupuestos y contratos se detallan en [SESSIONS.md](SESSIONS.md).
 
-`GET /health`, `GET /health/db`, `GET /health/redis` y `HEAD /auth/verify-email` no consumen
+`GET /health`, `GET /health/db`, `GET /health/redis` y `HEAD /api/v1/auth/verify-email` no consumen
 presupuesto del limitador de Auth.
 
-`HEAD /auth/verify-email` responde `405` sin confirmar el correo.
+`HEAD /api/v1/auth/verify-email` responde `405` sin confirmar el correo.
 
 ## Capas de protección
 

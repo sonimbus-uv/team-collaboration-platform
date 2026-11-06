@@ -124,7 +124,7 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     let code_a = mail.last();
     let result = call(
         &app,
-        "/auth/register",
+        "/api/v1/auth/register",
         serde_json::json!({"email":" OWNER@Example.COM ","password":"OwnerPass456!"}),
         StatusCode::CREATED,
     )
@@ -146,21 +146,21 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     );
     call(
         &app,
-        "/auth/verify-email",
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":attacker,"code":code_b}),
         StatusCode::BAD_REQUEST,
     )
     .await;
     call(
         &app,
-        "/auth/verify-email",
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":owner,"code":code_b}),
         StatusCode::OK,
     )
     .await;
     call(
         &app,
-        "/auth/verify-email",
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":attacker,"code":code_a}),
         StatusCode::BAD_REQUEST,
     )
@@ -222,7 +222,7 @@ async fn wrong_codes_persist_and_fifth_failure_locks_even_correct_code(pool: PgP
     for expected in 1..=5 {
         call(
             &app,
-            "/auth/verify-email",
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":"invalid-format"}),
             StatusCode::BAD_REQUEST,
         )
@@ -477,7 +477,7 @@ async fn mail_failure_keeps_attempt_and_can_retry_without_open_transaction(pool:
     let app = crate::routes::router(state.clone());
     let response = call(
         &app,
-        "/auth/register",
+        "/api/v1/auth/register",
         serde_json::json!({"email":"mail@example.com","password":"ValidPass123!"}),
         StatusCode::CREATED,
     )
@@ -492,7 +492,7 @@ async fn mail_failure_keeps_attempt_and_can_retry_without_open_transaction(pool:
     mail.fail.store(false, Ordering::SeqCst);
     call(
         &app,
-        "/auth/resend-verification",
+        "/api/v1/auth/resend-verification",
         serde_json::json!({"registration_attempt_id":id}),
         StatusCode::ACCEPTED,
     )
@@ -643,8 +643,8 @@ async fn legacy_paths_and_malformed_inputs_never_activate_or_expose_secrets(pool
     let code = mail.last();
     let app = crate::routes::router(state.clone());
     for uri in [
-        "/auth/verify-email",
-        "/auth/verify-email?token=legacy-secret",
+        "/api/v1/auth/verify-email",
+        "/api/v1/auth/verify-email?token=legacy-secret",
     ] {
         let response = app
             .clone()
@@ -668,7 +668,7 @@ async fn legacy_paths_and_malformed_inputs_never_activate_or_expose_secrets(pool
         serde_json::json!({"registration_attempt_id":"malformed","code":code}),
         serde_json::json!({"registration_attempt_id":id,"code":code,"password":"leaked"}),
     ] {
-        let problem = call(&app, "/auth/verify-email", body, StatusCode::BAD_REQUEST).await;
+        let problem = call(&app, "/api/v1/auth/verify-email", body, StatusCode::BAD_REQUEST).await;
         assert!(!problem.to_string().contains(&code));
         assert!(!problem.to_string().contains("leaked"));
     }
@@ -725,7 +725,7 @@ async fn initial_delivery_and_resends_share_recipient_budget(pool: PgPool) {
     let email = format!("budget-{}@example.com", Uuid::new_v4());
     let registered = call(
         &app,
-        "/auth/register",
+        "/api/v1/auth/register",
         serde_json::json!({"email":email,"password":"ValidPass123!"}),
         StatusCode::CREATED,
     )
@@ -739,14 +739,14 @@ async fn initial_delivery_and_resends_share_recipient_budget(pool: PgPool) {
     age(&pool, id).await;
     call(
         &app,
-        "/auth/resend-verification",
+        "/api/v1/auth/resend-verification",
         serde_json::json!({"registration_attempt_id":id}),
         StatusCode::TOO_MANY_REQUESTS,
     )
     .await;
     call(
         &app,
-        "/auth/register",
+        "/api/v1/auth/register",
         serde_json::json!({"email":email,"password":"OtherPass456!"}),
         StatusCode::TOO_MANY_REQUESTS,
     )
@@ -796,7 +796,7 @@ async fn registration_errors_do_not_log_codes_passwords_or_mac(pool: PgPool) {
     async {
         call(
             &app,
-            "/auth/verify-email",
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":"SensitiveWrongCode"}),
             StatusCode::BAD_REQUEST,
         )
@@ -804,7 +804,7 @@ async fn registration_errors_do_not_log_codes_passwords_or_mac(pool: PgPool) {
         pool.close().await;
         call(
             &app,
-            "/auth/verify-email",
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":code}),
             StatusCode::SERVICE_UNAVAILABLE,
         )

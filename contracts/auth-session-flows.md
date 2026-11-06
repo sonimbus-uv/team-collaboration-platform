@@ -8,9 +8,8 @@ despliegue disponible.
 Refs #35. [OpenAPI público](openapi/auth.yaml), [perfil](token-profile.md) y
 [ADR](../docs/decisions/ADR-007-auth-sessions.md). Implementado en la tercera entrega,
 con login deshabilitado por defecto mientras #17 siga abierto; ver
-[operación y limitaciones](../services/auth/SESSIONS.md). Rutas bajo `/api/v1/auth`; no
-renombra `/auth/register`, `/auth/verify-email` ni `/auth/resend-verification`.
-La convergencia del prefijo y contrato de registro/verificación queda en #14.
+[operación y limitaciones](../services/auth/SESSIONS.md). Todas las rutas de autenticación, registro y verificación usan el prefijo
+`/api/v1/auth`. El resto del contrato de registro/verificación se coordina en #14.
 
 ## Login
 

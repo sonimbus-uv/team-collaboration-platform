@@ -7,7 +7,7 @@ Ver [ADR-008](../docs/decisions/ADR-008-registration-attempt-codes.md) y
 
 ## Registro
 
-`POST /auth/register`, JSON `{"email":"person@example.invalid","password":"ExamplePass123!"}`.
+`POST /api/v1/auth/register`, JSON `{"email":"person@example.invalid","password":"ExamplePass123!"}`.
 Normaliza correo y valida la política actual de contraseña; Argon2id fuera del
 runtime con concurrencia limitada. Devuelve 201 con `registration_attempt_id`
 (UUID v4), `expires_at` UTC y `verification_email_sent` booleano. No devuelve
@@ -21,7 +21,7 @@ Una cuenta verificada/bloqueada mantiene 409; esto conserva enumeración conocid
 
 ## Confirmación
 
-`POST /auth/verify-email`, JSON con `registration_attempt_id` y `code` string de
+`POST /api/v1/auth/verify-email`, JSON con `registration_attempt_id` y `code` string de
 ocho dígitos (preservar ceros iniciales). 200 devuelve `user_id`, `email`,
 `email_verified=true`, `status` y `verification_email_sent=false` (no se envía
 correo al confirmar). No inicia sesión ni devuelve access/refresh.
@@ -36,7 +36,7 @@ el código correcto. Se mantienen los fallos después de reenvíos.
 
 ## Reenvío
 
-`POST /auth/resend-verification`, JSON con `registration_attempt_id`, sin correo.
+`POST /api/v1/auth/resend-verification`, JSON con `registration_attempt_id`, sin correo.
 202 devuelve los mismos campos de intento que registro. Máximo tres reenvíos,
 intervalo mínimo de 60 segundos, nuevo código y vencimiento original intacto.
 El código anterior queda invalidado. Los reenvíos de otros intentos no afectan
@@ -76,7 +76,7 @@ No interpretar un enlace antiguo ni el ID solo como prueba de verificación.
 
 ## Enlaces y datos anteriores
 
-GET `/auth/verify-email` responde 410 informativo, ignorando query/token y sin
+GET `/api/v1/auth/verify-email` responde 410 informativo, ignorando query/token y sin
 cambiar datos; HEAD 405. POST `{"token":...}` y reenvío `{"email":...}` ya no
 son admitidos. Los enlaces anteriores no activan nada. La migración no purga
 cuentas ni tokens reales. Una confirmación nueva válida puede reclamar una

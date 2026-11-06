@@ -47,16 +47,16 @@ pub fn router(state: AppState) -> Router {
         ));
 
     let auth_routes = Router::new()
-        .route("/auth/register", post(auth::register))
+        .route("/api/v1/auth/register", post(auth::register))
         .route(
-            "/auth/verify-email",
+            "/api/v1/auth/verify-email",
             get(auth::verify_email_page)
                 .head(|| async {
                     verification_page_response(StatusCode::METHOD_NOT_ALLOWED, String::new())
                 })
                 .post(auth::verify_email),
         )
-        .route("/auth/resend-verification", post(auth::resend_verification))
+        .route("/api/v1/auth/resend-verification", post(auth::resend_verification))
         .layer(axum::extract::DefaultBodyLimit::max(4096))
         .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests))
         .layer(middleware::from_fn(auth::registration_headers));
@@ -185,13 +185,13 @@ mod tests {
 
     fn protected_app(limiter: AuthRateLimiter) -> Router {
         Router::new()
-            .route("/auth/register", post(|| async { StatusCode::CREATED }))
+            .route("/api/v1/auth/register", post(|| async { StatusCode::CREATED }))
             .route(
-                "/auth/resend-verification",
+                "/api/v1/auth/resend-verification",
                 post(|| async { StatusCode::ACCEPTED }),
             )
             .route(
-                "/auth/verify-email",
+                "/api/v1/auth/verify-email",
                 get(|| async { StatusCode::OK }).post(|| async { StatusCode::OK }),
             )
             .route_layer(middleware::from_fn_with_state(
@@ -214,16 +214,16 @@ mod tests {
     async fn redis_failure_allows_only_verification() {
         let app = protected_app(AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()));
         for (method, path, expected) in [
-            (Method::GET, "/auth/verify-email", StatusCode::OK),
-            (Method::POST, "/auth/verify-email", StatusCode::OK),
+            (Method::GET, "/api/v1/auth/verify-email", StatusCode::OK),
+            (Method::POST, "/api/v1/auth/verify-email", StatusCode::OK),
             (
                 Method::POST,
-                "/auth/register",
+                "/api/v1/auth/register",
                 StatusCode::SERVICE_UNAVAILABLE,
             ),
             (
                 Method::POST,
-                "/auth/resend-verification",
+                "/api/v1/auth/resend-verification",
                 StatusCode::SERVICE_UNAVAILABLE,
             ),
         ] {
@@ -253,7 +253,7 @@ mod tests {
         let response = app
             .oneshot(protected_request(
                 Method::POST,
-                "/auth/register",
+                "/api/v1/auth/register",
                 peer,
                 "invalid",
             ))
@@ -308,7 +308,7 @@ mod tests {
                     .clone()
                     .oneshot(protected_request(
                         Method::POST,
-                        "/auth/resend-verification",
+                        "/api/v1/auth/resend-verification",
                         peer,
                         client,
                     ))
@@ -356,7 +356,7 @@ mod tests {
 
         let app = Router::new()
             .route(
-                "/auth/verify-email",
+                "/api/v1/auth/verify-email",
                 get(|| async { StatusCode::OK }).head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
             )
             .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests));
@@ -365,7 +365,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::HEAD)
-                    .uri("/auth/verify-email")
+                    .uri("/api/v1/auth/verify-email")
                     .body(axum::body::Body::empty())
                     .unwrap(),
             )

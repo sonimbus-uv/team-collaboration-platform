@@ -17,9 +17,9 @@ impl AuthOperation {
             ("POST", "/api/v1/auth/login") => Some(Self::Login),
             ("POST", "/api/v1/auth/refresh") => Some(Self::Refresh),
             ("POST", "/api/v1/auth/logout") => Some(Self::Logout),
-            ("POST", "/auth/register") => Some(Self::Register),
-            ("POST", "/auth/resend-verification") => Some(Self::Resend),
-            ("GET" | "POST", "/auth/verify-email") => Some(Self::Verify),
+            ("POST", "/api/v1/auth/register") => Some(Self::Register),
+            ("POST", "/api/v1/auth/resend-verification") => Some(Self::Resend),
+            ("GET" | "POST", "/api/v1/auth/verify-email") => Some(Self::Verify),
             _ => None,
         }
     }
@@ -132,10 +132,10 @@ mod tests {
         let ip = "192.0.2.10".parse().unwrap();
 
         let get_operation =
-            AuthOperation::from_request(&Method::GET, "/auth/verify-email").unwrap();
+            AuthOperation::from_request(&Method::GET, "/api/v1/auth/verify-email").unwrap();
 
         let post_operation =
-            AuthOperation::from_request(&Method::POST, "/auth/verify-email").unwrap();
+            AuthOperation::from_request(&Method::POST, "/api/v1/auth/verify-email").unwrap();
 
         assert_eq!(get_operation.ip_key(ip), post_operation.ip_key(ip));
     }
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn head_and_health_have_no_auth_operation() {
         assert_eq!(
-            AuthOperation::from_request(&Method::HEAD, "/auth/verify-email"),
+            AuthOperation::from_request(&Method::HEAD, "/api/v1/auth/verify-email"),
             None
         );
 

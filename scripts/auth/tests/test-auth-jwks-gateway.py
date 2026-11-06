@@ -114,7 +114,7 @@ def main():
                     assert headers["Content-Type"] == "application/json"
                 status, headers, body = request(port, "/.well-known/jwks.json", "HEAD")
                 assert status == 200 and not body and headers["Cache-Control"] == CACHE
-                statuses = [request(port, "/auth/register", "POST")[0] for _ in range(16)]
+                statuses = [request(port, "/api/v1/auth/register", "POST")[0] for _ in range(16)]
                 assert 429 in statuses, "existing registration edge budget must remain enabled"
                 assert request(port, "/.well-known/jwks.json")[0] == 200
                 for operation in ["login", "refresh", "logout"]:

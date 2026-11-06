@@ -36,7 +36,7 @@ public class AuthApi {
         }
     }
 
-    /** Cuerpo de {@code POST /auth/register}. {@link #toString()} oculta la contraseña. */
+    /** Cuerpo de {@code POST /api/v1/auth/register}. {@link #toString()} oculta la contraseña. */
     record RegisterRequest(String email, String password) {
         @Override
         public String toString() {
@@ -44,7 +44,7 @@ public class AuthApi {
         }
     }
 
-    /** Cuerpo de {@code POST /auth/verify-email}. {@link #toString()} oculta el token. */
+    /** Cuerpo de {@code POST /api/v1/auth/verify-email}. {@link #toString()} oculta el token. */
     record VerifyEmailRequest(String token) {
         @Override
         public String toString() {

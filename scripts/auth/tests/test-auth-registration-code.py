@@ -47,17 +47,17 @@ def main():
             raise RuntimeError("Registration email contains a link")
         return re.search(r"(?<!\d)\d{8}(?!\d)", message["Text"])[0]
 
-    first = call("/auth/register", {"email": email, "password": password_a}, 201)
+    first = call("/api/v1/auth/register", {"email": email, "password": password_a}, 201)
     assert first["verification_email_sent"]
     code_a = latest_code()
-    second = call("/auth/register", {"email": email, "password": password_b}, 201)
+    second = call("/api/v1/auth/register", {"email": email, "password": password_b}, 201)
     assert second["verification_email_sent"]
     code_b = latest_code()
-    call("/auth/verify-email?token=retired-test-token", expected=410)
-    call("/auth/verify-email", {"token": "retired-test-token"}, 400)
-    call("/auth/verify-email", {"registration_attempt_id": second["registration_attempt_id"],
+    call("/api/v1/auth/verify-email?token=retired-test-token", expected=410)
+    call("/api/v1/auth/verify-email", {"token": "retired-test-token"}, 400)
+    call("/api/v1/auth/verify-email", {"registration_attempt_id": second["registration_attempt_id"],
                                 "code": code_b})
-    call("/auth/verify-email", {"registration_attempt_id": first["registration_attempt_id"],
+    call("/api/v1/auth/verify-email", {"registration_attempt_id": first["registration_attempt_id"],
                                 "code": code_a}, 400)
     login = {"email": email, "password": password_a, "client_type": "desktop"}
     call("/api/v1/auth/login", login, 401)
