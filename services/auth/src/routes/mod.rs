@@ -6,9 +6,11 @@ use crate::{
     email::verification_page::{verification_page_response, verification_unavailable_page},
     error::ApiError,
     handlers::auth,
-    protection::auth_rate_limiter::AuthRateLimiter,
-    protection::client_ip::resolve_client_ip,
-    protection::rate_limit::{AuthOperation, RateLimitDecision},
+    protection::{
+        auth_rate_limiter::AuthRateLimiter,
+        client_ip::resolve_client_ip,
+        rate_limit::{AuthOperation, RateLimitDecision},
+    },
     state::AppState,
 };
 use axum::{
@@ -27,11 +29,26 @@ struct HealthResponse {
 }
 
 pub fn router(state: AppState) -> Router {
-    let public_keys = jwks::router(state.token_issuer.clone());
-    let limiter = state.auth_rate_limiter.clone();
+    let jwks_routes = jwks::router(state.token_issuer.clone());
+    let rate_limiter = state.auth_rate_limiter.clone();
 
-    let session_routes = Router::new()
-        .route("/api/v1/auth/login", post(crate::handlers::sessions::login))
+    let session_and_password_routes = Router::new()
+        .route(
+            "/api/v1/auth/change-password",
+            post(crate::handlers::passwords::change),
+        )
+        .route(
+            "/api/v1/auth/forgot-password",
+            post(crate::handlers::passwords::forgot),
+        )
+        .route(
+            "/api/v1/auth/reset-password",
+            post(crate::handlers::passwords::reset),
+        )
+        .route(
+            "/api/v1/auth/login",
+            post(crate::handlers::sessions::login),
+        )
         .route(
             "/api/v1/auth/refresh",
             post(crate::handlers::sessions::refresh),
@@ -42,12 +59,15 @@ pub fn router(state: AppState) -> Router {
         )
         .layer(axum::extract::DefaultBodyLimit::max(4096))
         .route_layer(middleware::from_fn_with_state(
-            limiter.clone(),
+            rate_limiter.clone(),
             limit_auth_requests,
         ));
 
-    let auth_routes = Router::new()
-        .route("/api/v1/auth/register", post(auth::register))
+    let registration_routes = Router::new()
+        .route(
+            "/api/v1/auth/register",
+            post(auth::register)
+        )
         .route(
             "/api/v1/auth/verify-email",
             get(auth::verify_email_page)
@@ -56,57 +76,70 @@ pub fn router(state: AppState) -> Router {
                 })
                 .post(auth::verify_email),
         )
-        .route("/api/v1/auth/resend-verification", post(auth::resend_verification))
+        .route(
+            "/api/v1/auth/resend-verification",
+            post(auth::resend_verification),
+        )
         .layer(axum::extract::DefaultBodyLimit::max(4096))
-        .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests))
+        .route_layer(middleware::from_fn_with_state(
+            rate_limiter,
+            limit_auth_requests,
+        ))
         .layer(middleware::from_fn(auth::registration_headers));
 
     Router::new()
         .route("/health", get(health))
         .route("/health/db", get(health_db))
         .route("/health/redis", get(health_redis))
-        .merge(auth_routes)
-        .merge(session_routes)
-        .merge(public_keys)
+        .merge(registration_routes)
+        .merge(session_and_password_routes)
+        .merge(jwks_routes)
         .with_state(state)
 }
 
 async fn limit_auth_requests(
-    State(limiter): State<Arc<AuthRateLimiter>>,
+    State(rate_limiter): State<Arc<AuthRateLimiter>>,
     request: Request,
     next: Next,
 ) -> Response {
-    let Some(operation) = AuthOperation::from_request(request.method(), request.uri().path())
+    let Some(auth_operation) = AuthOperation::from_request(request.method(), request.uri().path())
     else {
         return next.run(request).await;
     };
 
-    let respond = |browser, error| {
-        if operation.is_session() {
+    let respond_with_protection_error = |is_browser_request, error| {
+        if auth_operation.is_session() {
             crate::handlers::sessions::protection(error)
         } else {
-            protection_error_response(browser, error)
+            protection_error_response(is_browser_request, error)
         }
     };
 
-    let browser_verification =
-        request.method() == Method::GET && operation == AuthOperation::Verify;
+    let is_browser_verification =
+        request.method() == Method::GET && auth_operation == AuthOperation::Verify;
 
-    let Some(peer) = request
+    let Some(peer_address) = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0)
+        .map(|connection_info| connection_info.0)
     else {
         tracing::error!("Connection information missing for protected Auth request");
 
-        return respond(browser_verification, ApiError::RateLimitUnavailable);
+        return respond_with_protection_error(
+            is_browser_verification,
+            ApiError::RateLimitUnavailable,
+        );
     };
 
-    let client_ip = match resolve_client_ip(peer, request.headers(), limiter.trusted_proxy_ips()) {
-        Ok(ip) => ip,
+    let client_ip = match resolve_client_ip(
+        peer_address,
+        request.headers(),
+        rate_limiter.trusted_proxy_ips(),
+    ) {
+        Ok(resolved_ip) => resolved_ip,
         Err(_) => {
-            return respond(
-                browser_verification,
+            return respond_with_protection_error(
+                is_browser_verification,
                 ApiError::InternalServerError(
                     "Missing or invalid client address from trusted proxy".into(),
                 ),
@@ -114,13 +147,13 @@ async fn limit_auth_requests(
         }
     };
 
-    match limiter.check_ip(operation, client_ip).await {
+    match rate_limiter.check_ip(auth_operation, client_ip).await {
         Ok(RateLimitDecision::Allowed) => next.run(request).await,
-        Ok(RateLimitDecision::Limited { retry_after_secs }) => respond(
-            browser_verification,
+        Ok(RateLimitDecision::Limited { retry_after_secs }) => respond_with_protection_error(
+            is_browser_verification,
             ApiError::RateLimited { retry_after_secs },
         ),
-        Err(error) if operation == AuthOperation::Verify => {
+        Err(error) if auth_operation == AuthOperation::Verify => {
             tracing::warn!(
                 error_kind = ?error,
                 "Auth verification admitted without Redis rate limiting"
@@ -133,15 +166,15 @@ async fn limit_auth_requests(
                 "Auth rate limit check unavailable"
             );
 
-            respond(browser_verification, ApiError::RateLimitUnavailable)
+            respond_with_protection_error(is_browser_verification, ApiError::RateLimitUnavailable)
         }
     }
 }
 
-fn protection_error_response(browser_verification: bool, error: ApiError) -> Response {
+fn protection_error_response(is_browser_verification: bool, error: ApiError) -> Response {
     let api_response = error.into_response();
 
-    if !browser_verification {
+    if !is_browser_verification {
         return api_response;
     }
 
@@ -167,6 +200,7 @@ async fn health_redis(State(state): State<AppState>) -> Result<Json<HealthRespon
         .health_check()
         .await
         .map_err(|_| ApiError::RateLimitUnavailable)?;
+
     Ok(Json(HealthResponse { status: "ok" }))
 }
 
@@ -183,9 +217,12 @@ mod tests {
     use super::*;
     use tower::ServiceExt;
 
-    fn protected_app(limiter: AuthRateLimiter) -> Router {
+    fn protected_app(rate_limiter: AuthRateLimiter) -> Router {
         Router::new()
-            .route("/api/v1/auth/register", post(|| async { StatusCode::CREATED }))
+            .route(
+                "/api/v1/auth/register",
+                post(|| async { StatusCode::CREATED }),
+            )
             .route(
                 "/api/v1/auth/resend-verification",
                 post(|| async { StatusCode::ACCEPTED }),
@@ -195,25 +232,31 @@ mod tests {
                 get(|| async { StatusCode::OK }).post(|| async { StatusCode::OK }),
             )
             .route_layer(middleware::from_fn_with_state(
-                Arc::new(limiter),
+                Arc::new(rate_limiter),
                 limit_auth_requests,
             ))
     }
 
-    fn protected_request(method: Method, path: &str, peer: SocketAddr, client: &str) -> Request {
+    fn protected_request(
+        method: Method,
+        path: &str,
+        peer_address: SocketAddr,
+        client_ip_header: &str,
+    ) -> Request {
         Request::builder()
             .method(method)
             .uri(path)
-            .extension(ConnectInfo(peer))
-            .header("x-real-ip", client)
+            .extension(ConnectInfo(peer_address))
+            .header("x-real-ip", client_ip_header)
             .body(axum::body::Body::empty())
             .unwrap()
     }
 
     #[tokio::test]
     async fn redis_failure_allows_only_verification() {
-        let app = protected_app(AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()));
-        for (method, path, expected) in [
+        let test_router = protected_app(AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()));
+
+        for (method, path, expected_status) in [
             (Method::GET, "/api/v1/auth/verify-email", StatusCode::OK),
             (Method::POST, "/api/v1/auth/verify-email", StatusCode::OK),
             (
@@ -227,7 +270,7 @@ mod tests {
                 StatusCode::SERVICE_UNAVAILABLE,
             ),
         ] {
-            let response = app
+            let response = test_router
                 .clone()
                 .oneshot(protected_request(
                     method,
@@ -237,24 +280,25 @@ mod tests {
                 ))
                 .await
                 .unwrap();
-            assert_eq!(response.status(), expected);
+
+            assert_eq!(response.status(), expected_status);
         }
     }
 
     #[tokio::test]
     async fn malformed_trusted_proxy_address_is_server_error() {
-        let peer: SocketAddr = "172.30.250.2:45000".parse().unwrap();
-        let app = protected_app(
+        let peer_address: SocketAddr = "172.30.250.2:45000".parse().unwrap();
+        let test_router = protected_app(
             AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()).with_ip_policy_for_tests(
-                vec![peer.ip()],
+                vec![peer_address.ip()],
                 crate::protection::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
             ),
         );
-        let response = app
+        let response = test_router
             .oneshot(protected_request(
                 Method::POST,
                 "/api/v1/auth/register",
-                peer,
+                peer_address,
                 "invalid",
             ))
             .await
@@ -267,54 +311,58 @@ mod tests {
     async fn trusted_proxy_isolates_clients_and_untrusted_proxy_shares_budget() {
         let _ = dotenvy::dotenv();
         let redis_url = std::env::var("REDIS_URL").expect("Redis test requires REDIS_URL");
-        for trusted in [true, false] {
-            // Unique peers/clients avoid sharing keys with other tests or prior runs.
-            let peer: SocketAddr = format!(
+        for proxy_is_trusted in [true, false] {
+            let peer_address: SocketAddr = format!(
                 "[2001:db8::{:x}:{:x}]:45000",
                 rand::random::<u16>(),
                 rand::random::<u16>()
             )
             .parse()
             .unwrap();
-            let first = format!(
+            let first_client_ip = format!(
                 "2001:db8:1::{:x}:{:x}",
                 rand::random::<u16>(),
                 rand::random::<u16>()
             );
-            let second = format!(
+            let second_client_ip = format!(
                 "2001:db8:2::{:x}:{:x}",
                 rand::random::<u16>(),
                 rand::random::<u16>()
             );
-            let app = protected_app(
+            let test_router = protected_app(
                 AuthRateLimiter::for_tests(redis_url.clone()).with_ip_policy_for_tests(
-                    if trusted { vec![peer.ip()] } else { vec![] },
+                    if proxy_is_trusted {
+                        vec![peer_address.ip()]
+                    } else {
+                        vec![]
+                    },
                     crate::protection::rate_limit::BucketPolicy::new(1, 3600).unwrap(),
                 ),
             );
-            for (client, expected) in [
-                (first.as_str(), StatusCode::ACCEPTED),
-                (first.as_str(), StatusCode::TOO_MANY_REQUESTS),
+            for (client_ip_header, expected_status) in [
+                (first_client_ip.as_str(), StatusCode::ACCEPTED),
+                (first_client_ip.as_str(), StatusCode::TOO_MANY_REQUESTS),
                 (
-                    second.as_str(),
-                    if trusted {
+                    second_client_ip.as_str(),
+                    if proxy_is_trusted {
                         StatusCode::ACCEPTED
                     } else {
                         StatusCode::TOO_MANY_REQUESTS
                     },
                 ),
             ] {
-                let response = app
+                let response = test_router
                     .clone()
                     .oneshot(protected_request(
                         Method::POST,
                         "/api/v1/auth/resend-verification",
-                        peer,
-                        client,
+                        peer_address,
+                        client_ip_header,
                     ))
                     .await
                     .unwrap();
-                assert_eq!(response.status(), expected);
+
+                assert_eq!(response.status(), expected_status);
             }
         }
     }
@@ -352,16 +400,19 @@ mod tests {
 
     #[tokio::test]
     async fn head_bypasses_client_identity_and_redis() {
-        let limiter = Arc::new(AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()));
+        let rate_limiter = Arc::new(AuthRateLimiter::for_tests("redis://127.0.0.1:1/0".into()));
 
-        let app = Router::new()
+        let test_router = Router::new()
             .route(
                 "/api/v1/auth/verify-email",
                 get(|| async { StatusCode::OK }).head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
             )
-            .route_layer(middleware::from_fn_with_state(limiter, limit_auth_requests));
+            .route_layer(middleware::from_fn_with_state(
+                rate_limiter,
+                limit_auth_requests,
+            ));
 
-        let response = app
+        let response = test_router
             .oneshot(
                 Request::builder()
                     .method(Method::HEAD)
