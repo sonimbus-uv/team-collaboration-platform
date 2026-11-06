@@ -31,8 +31,23 @@ impl AccountsRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    pub async fn is_registered(&self, email: &str) -> Result<bool, sqlx::Error> {
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM auth.accounts WHERE email=$1 AND (email_verified_at IS NOT NULL OR status<>'active'))")
-            .bind(email).fetch_one(&self.pool).await
+
+    pub async fn is_registered(
+        &self,
+        email: &str
+    ) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM auth.accounts
+                WHERE email = $1
+                  AND (email_verified_at IS NOT NULL OR status <> 'active')
+            )
+            "#,
+        )
+        .bind(email)
+        .fetch_one(&self.pool)
+        .await
     }
 }
