@@ -178,6 +178,8 @@ def main():
         "AUTH_JWT_AUDIENCES": "sonimbus-core,sonimbus-files,sonimbus-auth",
         "AUTH_REGISTRATION_CODE_HMAC_SECRET": secrets.token_hex(32),
         "AUTH_RECIPIENT_HMAC_SECRET": secrets.token_hex(32),
+        "AUTH_PASSWORD_RESET_HMAC_SECRET": secrets.token_hex(32),
+        "AUTH_PASSWORDS_ENABLED": "false",
         "EMAIL_PROVIDER": "mailpit",
         "MAILPIT_SMTP_HOST": "127.0.0.1",
         "MAILPIT_SMTP_PORT": smtp_port,

@@ -61,8 +61,8 @@ class Backend(BaseHTTPRequestHandler):
         pass
 
 
-def request(port, path, method="GET"):
-    req = Request(f"http://127.0.0.1:{port}{path}", method=method)
+def request(port, path, method="GET", data=None):
+    req = Request(f"http://127.0.0.1:{port}{path}", method=method, data=data)
     try:
         response = urlopen(req, timeout=2)
     except HTTPError as error:
@@ -140,9 +140,24 @@ def main():
                 ), "existing registration edge budget must remain enabled"
                 assert request(port, "/.well-known/jwks.json")[0] == 200
                 for operation in [
+                    "change-password",
+                    "forgot-password",
+                    "reset-password",
+                ]:
+                    path = f"/api/v1/auth/{operation}"
+                    assert request(port, path, "POST")[0] == 201
+                    status, headers, body = request(port, path, "POST", b"x" * 5000)
+                    assert status == 413
+                    assert headers["Content-Type"] == "application/problem+json"
+                    assert json.loads(body)["type"] == "/problems/request-too-large"
+                    assert headers["Cache-Control"] == "no-store"
+                for operation in [
                     "login",
                     "refresh",
                     "logout",
+                    "change-password",
+                    "forgot-password",
+                    "reset-password",
                 ]:
                     path = f"/api/v1/auth/{operation}"
                     # Stub 201 proves forwarding, not authentication semantics.
