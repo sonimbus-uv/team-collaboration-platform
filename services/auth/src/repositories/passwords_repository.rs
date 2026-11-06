@@ -57,7 +57,7 @@ pub async fn session_active(
 
 pub async fn recovery(
     pool: &PgPool,
-    id: Uuid,
+    id: Uuid
 ) -> Result<Option<RecoveryRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
@@ -81,7 +81,7 @@ pub async fn recovery(
 
 pub async fn lock_recovery(
     tx: &mut Tx<'_>,
-    id: Uuid,
+    id: Uuid
 ) -> Result<Option<RecoveryRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
@@ -106,8 +106,7 @@ pub async fn lock_recovery(
 
 pub async fn invalidate(
     tx: &mut Tx<'_>,
-    account_id: Uuid,
-) -> Result<(), sqlx::Error> {
+    account_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
             UPDATE auth.password_recovery_attempts
@@ -167,4 +166,195 @@ pub async fn install(
     }
 
     Ok(())
+}
+
+pub async fn lock_account_by_email(
+    tx: &mut Tx<'_>,
+    email: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM auth.accounts
+        WHERE email = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(email)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn recovery_eligible(
+    tx: &mut Tx<'_>,
+    account_id: Uuid
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT
+            status = 'active'
+                AND email_verified_at IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM auth.password_credentials
+                    WHERE account_id = $1
+                )
+        FROM auth.accounts
+        WHERE id = $1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn recovery_cooldown_elapsed(
+    tx: &mut Tx<'_>,
+    account_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT NOT EXISTS (
+            SELECT 1
+            FROM auth.password_recovery_attempts
+            WHERE account_id = $1
+              AND created_at > clock_timestamp() - INTERVAL '60 seconds'
+        )
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn lock_credential_version(
+    tx: &mut Tx<'_>,
+    account_id: Uuid,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT (EXTRACT(EPOCH FROM password_changed_at) * 1000000)::bigint
+        FROM auth.password_credentials
+        WHERE account_id = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn create_recovery(
+    tx: &mut Tx<'_>,
+    id: Uuid,
+    account_id: Uuid,
+    credential_version: i64,
+    code_mac: &[u8],
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO auth.password_recovery_attempts(
+            id,
+            account_id,
+            credential_version,
+            code_mac
+        )
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(id)
+    .bind(account_id)
+    .bind(credential_version)
+    .bind(code_mac)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn recovery_expiry(
+    tx: &mut Tx<'_>,
+    id: Uuid
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT to_char(
+            expires_at AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+        )
+        FROM auth.password_recovery_attempts
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn synthetic_recovery_expiry(
+    tx: &mut Tx<'_>
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT to_char(
+            (clock_timestamp() + INTERVAL '10 minutes') AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+        )
+        "#,
+    )
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn record_failed_recovery(
+    tx: &mut Tx<'_>,
+    id: Uuid
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE auth.password_recovery_attempts
+        SET failed_attempts = failed_attempts + 1
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn consume_recovery(
+    tx: &mut Tx<'_>,
+    id: Uuid
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE auth.password_recovery_attempts
+        SET consumed_at = clock_timestamp()
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn cleanup(
+    pool: &PgPool
+) -> Result<u64, sqlx::Error> {
+    // Retain terminal records for at least 24 hours after their terminal timestamp.
+    let result = sqlx::query(
+        r#"
+        DELETE FROM auth.password_recovery_attempts
+        WHERE COALESCE(consumed_at, invalidated_at, expires_at)
+            < clock_timestamp() - INTERVAL '24 hours'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
 }
