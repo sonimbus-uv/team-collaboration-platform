@@ -1,5 +1,6 @@
 //! Uses only sqlx-created databases, disposable credentials/certificates and unique Redis keys.
 use super::*;
+use crate::tests::support::{AbortOnDrop, TemporaryDirectory};
 use axum::{
     body::{to_bytes, Body, Bytes},
     http::Request,
@@ -40,24 +41,29 @@ fn settings() -> InternalConfig {
         header_timeout: Duration::from_secs(1),
     }
 }
+
 fn token(seed: u8) -> String {
     format!("svc_{}", URL_SAFE_NO_PAD.encode([seed; 32]))
 }
+
 fn digest(seed: u8) -> String {
     Sha256::digest(token(seed).as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
 }
+
 fn document() -> serde_json::Value {
     serde_json::json!({
         "core":{"enabled":true,"permissions":["sessions:check"],"active_sha256":digest(1)},
         "files":{"enabled":true,"permissions":["sessions:check"],"active_sha256":digest(2)}
     })
 }
+
 fn redis_url() -> String {
     std::env::var("REDIS_URL").expect("Use an isolated REDIS_URL")
 }
+
 fn api(pool: PgPool, config: InternalConfig, document: serde_json::Value) -> Arc<InternalApi> {
     InternalApi::new(
         config,
@@ -67,6 +73,7 @@ fn api(pool: PgPool, config: InternalConfig, document: serde_json::Value) -> Arc
     )
     .unwrap()
 }
+
 fn request(path: &str, credential: Option<&str>, body: Body) -> Request<Body> {
     let mut builder = Request::builder()
         .method("POST")
@@ -80,16 +87,37 @@ fn request(path: &str, credential: Option<&str>, body: Body) -> Request<Body> {
     }
     builder.body(body).unwrap()
 }
+
 fn pair(sid: Uuid, account: Uuid) -> serde_json::Value {
     serde_json::json!({"sid":sid,"account_id":account})
 }
+
 async fn fixture(pool: &PgPool) -> serde_json::Value {
-    let account: Uuid = sqlx::query_scalar("INSERT INTO auth.accounts(email,email_verified_at) VALUES($1,statement_timestamp()) RETURNING id")
-        .bind(format!("{}@example.invalid",Uuid::new_v4())).fetch_one(pool).await.unwrap();
-    let sid: Uuid = sqlx::query_scalar("INSERT INTO auth.sessions(account_id,client_type,created_at,expires_at) VALUES($1,'desktop',statement_timestamp(),statement_timestamp()+interval '1 day') RETURNING id")
-        .bind(account).fetch_one(pool).await.unwrap();
+    let account: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO auth.accounts (email, email_verified_at)
+        VALUES ($1, statement_timestamp())
+        RETURNING id
+        "#,
+    )
+    .bind(format!("{}@example.invalid", Uuid::new_v4()))
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let sid: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO auth.sessions (account_id, client_type, created_at, expires_at)
+        VALUES ($1, 'desktop', statement_timestamp(), statement_timestamp() + interval '1 day')
+        RETURNING id
+        "#,
+    )
+    .bind(account)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     pair(sid, account)
 }
+
 async fn call(
     api: &Arc<InternalApi>,
     path: &str,
@@ -101,6 +129,7 @@ async fn call(
         .await
         .unwrap()
 }
+
 async fn assert_problem(response: Response, status: StatusCode, kind: &str) {
     assert_eq!(response.status(), status);
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
@@ -230,6 +259,7 @@ async fn redis_connection_timeout_is_503_without_sql_or_authorization() {
         let _ = sent.send(());
         std::future::pending::<()>().await;
     });
+    let _stalled_task_guard = AbortOnDrop::new(&stalled);
     let pool = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy("postgres://test:test@127.0.0.1:1/test")
         .unwrap();
@@ -284,15 +314,16 @@ async fn http_input_limits_and_duplicate_pairs_never_become_authorization(pool: 
         .await;
     }
     for (body, content_type) in [("{", "application/json"), ("{}", "text/plain")] {
-        let mut req = request(
+        let mut http_request = request(
             "/internal/v1/sessions/check",
             Some(&token(1)),
             Body::from(body),
         );
-        req.headers_mut()
+        http_request
+            .headers_mut()
             .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
         assert_problem(
-            api.router().oneshot(req).await.unwrap(),
+            api.router().oneshot(http_request).await.unwrap(),
             StatusCode::BAD_REQUEST,
             "malformed-request",
         )
@@ -533,33 +564,32 @@ async fn http_dependency_failures_timeouts_and_local_limit_are_fail_closed(pool:
 #[ignore = "requires isolated Redis; use --include-ignored"]
 async fn http_ignores_forged_proxy_headers_and_checks_cidr(pool: PgPool) {
     let api = api(pool, settings(), document());
-    let mut req = request(
+    let mut http_request = request(
         "/internal/v1/sessions/check",
         Some(&token(1)),
         Body::from(pair(Uuid::new_v4(), Uuid::new_v4()).to_string()),
     );
-    req.extensions_mut().insert(ConnectInfo(
+    http_request.extensions_mut().insert(ConnectInfo(
         "192.0.2.5:12345".parse::<SocketAddr>().unwrap(),
     ));
-    req.headers_mut()
+    http_request
+        .headers_mut()
         .insert("x-real-ip", HeaderValue::from_static("127.0.0.1"));
     assert_problem(
-        api.router().oneshot(req).await.unwrap(),
+        api.router().oneshot(http_request).await.unwrap(),
         StatusCode::FORBIDDEN,
         "service-forbidden",
     )
     .await;
 }
 
-struct TemporaryFiles(PathBuf);
+struct TemporaryFiles(TemporaryDirectory);
 impl TemporaryFiles {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("sonimbus-auth-4b-{}", Uuid::new_v4()));
-        std::fs::create_dir(&path).unwrap();
-        Self(path)
+        Self(TemporaryDirectory::new("sonimbus-auth-4b-"))
     }
     fn write(&self, name: &str, bytes: impl AsRef<[u8]>) -> PathBuf {
-        let path = self.0.join(name);
+        let path = self.0.path().join(name);
         std::fs::write(&path, bytes).unwrap();
         #[cfg(unix)]
         {
@@ -569,8 +599,8 @@ impl TemporaryFiles {
         path
     }
     fn certificate(&self, name: &str) -> (PathBuf, PathBuf) {
-        let cert = self.0.join(format!("{name}.pem"));
-        let key = self.0.join(format!("{name}.key"));
+        let cert = self.0.path().join(format!("{name}.pem"));
+        let key = self.0.path().join(format!("{name}.key"));
         let status = std::process::Command::new("openssl")
             .args([
                 "req",
@@ -613,11 +643,6 @@ impl TemporaryFiles {
         (cert, key)
     }
 }
-impl Drop for TemporaryFiles {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated Redis; use --include-ignored"]
@@ -639,6 +664,7 @@ async fn real_https_requires_trust_correct_hostname_and_never_accepts_plain_http
         .await
         .unwrap();
     let task = tokio::spawn(server.run());
+    let _server_task_guard = AbortOnDrop::new(&task);
     let root = reqwest::Certificate::from_pem(&cert_pem).unwrap();
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -700,7 +726,6 @@ async fn real_https_requires_trust_correct_hostname_and_never_accepts_plain_http
     if let Ok(count) = received {
         assert!(!buffer[..count].starts_with(b"HTTP/"));
     }
-    // A stalled TLS handshake is also closed within its own budget.
     let mut stalled = tokio::net::TcpStream::connect(addr).await.unwrap();
     let received = timeout(Duration::from_secs(1), stalled.read(&mut buffer))
         .await
@@ -767,12 +792,15 @@ async fn public_router_never_exposes_internal_routes() {
     )
     .unwrap();
     let public = crate::routes::router(crate::state::AppState {
+        password_service: None,
         login_enabled: false,
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
-            Arc::new(crate::security::password_hasher::Argon2PasswordHasher),
+            crate::services::password_processor::PasswordProcessor::new(
+                Arc::new(crate::security::password_hasher::Argon2PasswordHasher),
+                1,
+            ),
             verification.clone(),
-            1,
         ),
         email_verification_service: verification,
         token_issuer: crate::tests::token_support::issuer(),
