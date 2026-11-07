@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 #[sqlx::test(migrations = "./migrations")]
 async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
-    let account: Uuid = sqlx::query_scalar(
+    let account_id: Uuid = sqlx::query_scalar(
         "
         INSERT INTO auth.accounts(
             email
@@ -14,17 +14,17 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let sid: Uuid = sqlx::query_scalar(
+    let session_id: Uuid = sqlx::query_scalar(
         "
-        SELECT auth.open_session($1,'desktop',interval '20 days')
+        SELECT auth.open_session($1,'desktop', interval '20 days')
         ",
     )
-    .bind(account)
+    .bind(account_id)
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    let mut tx = pool.begin().await.unwrap();
+    let mut transaction = pool.begin().await.unwrap();
 
     sqlx::query(
         "
@@ -33,8 +33,8 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
             revoke_reason='logout'
         WHERE id=$1",
     )
-    .bind(sid)
-    .execute(&mut *tx)
+    .bind(session_id)
+    .execute(&mut *transaction)
     .await
     .unwrap();
 
@@ -43,11 +43,11 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
         SELECT count(*) FROM auth.session_revocation_outbox
         ",
     )
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *transaction)
     .await
     .unwrap();
     assert_eq!(count, 1);
-    tx.rollback().await.unwrap();
+    transaction.rollback().await.unwrap();
     let count: i64 = sqlx::query_scalar(
         "
         SELECT count(*) FROM auth.session_revocation_outbox
@@ -65,7 +65,7 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
             revoke_reason='logout'
         WHERE id=$1 AND revoked_at IS NULL",
     )
-    .bind(sid)
+    .bind(session_id)
     .execute(&pool)
     .await
     .unwrap();
@@ -75,7 +75,7 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
         SET last_seen_at=clock_timestamp()
         WHERE id=$1",
     )
-    .bind(sid)
+    .bind(session_id)
     .execute(&pool)
     .await
     .unwrap();
@@ -96,8 +96,8 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
     assert_eq!(event["type"], "session.revoked");
     assert_eq!(event["version"], 1);
     assert_eq!(event["payload"]["reason"], "logout");
-    assert_eq!(event["payload"]["sid"], sid.to_string());
-    assert_eq!(event["payload"]["account_id"], account.to_string());
+    assert_eq!(event["payload"]["sid"], session_id.to_string());
+    assert_eq!(event["payload"]["account_id"], account_id.to_string());
     assert_eq!(event["payload"].as_object().unwrap().len(), 6);
     assert!(Uuid::parse_str(event["event_id"].as_str().unwrap()).is_ok());
 }
