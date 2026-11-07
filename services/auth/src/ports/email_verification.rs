@@ -5,11 +5,14 @@ pub enum EmailDeliveryError {
 }
 
 impl std::fmt::Display for EmailDeliveryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Transport => f.write_str("email provider transport failed"),
-            Self::Rejected(status) => {
-                write!(f, "email provider rejected request with HTTP {status}")
+            Self::Transport => formatter.write_str("email provider transport failed"),
+            Self::Rejected(status_code) => {
+                write!(
+                    formatter,
+                    "email provider rejected request with HTTP {status_code}"
+                )
             }
         }
     }
@@ -17,19 +20,32 @@ impl std::fmt::Display for EmailDeliveryError {
 
 #[async_trait::async_trait]
 pub trait VerificationEmailSender: Send + Sync {
-    async fn send(&self, email: &str, code: &str, locale: &str) -> Result<(), EmailDeliveryError>;
+    async fn send(
+        &self,
+        recipient_email: &str,
+        code: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError>;
+
+    async fn send_recovery(
+        &self,
+        _recipient_email: &str,
+        _code: &str,
+        _locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        Err(EmailDeliveryError::Transport)
+    }
 }
 
 #[async_trait::async_trait]
 pub trait RecipientBudget: Send + Sync {
-    // true: allowed;
-    // false: budget exhausted.
-    // Err: could not be checked.
-    async fn consume(&self, email: &str) -> Result<bool, ()>;
+    /// Returns true when allowed, false when exhausted, and an error when unavailable.
+    async fn consume(&self, recipient_email: &str) -> Result<bool, ()>;
 }
 
 #[cfg(test)]
 pub struct TestBudget;
+
 #[cfg(test)]
 #[async_trait::async_trait]
 impl RecipientBudget for TestBudget {
