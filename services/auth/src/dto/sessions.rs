@@ -23,12 +23,14 @@ pub struct LoginRequest {
     pub email: String,
     pub password: String,
     pub client_type: ClientType,
-    #[serde(default, deserialize_with = "present_device")]
+    #[serde(default, deserialize_with = "deserialize_present_device_name")]
     pub device_name: Option<String>,
 }
 
-fn present_device<'de, D: serde::Deserializer<'de>>(value: D) -> Result<Option<String>, D::Error> {
-    String::deserialize(value).map(Some)
+fn deserialize_present_device_name<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
 }
 
 #[derive(Deserialize)]
@@ -50,11 +52,48 @@ pub struct TokenResponse {
 
 // Never derive Debug for credentials, including test failure paths.
 macro_rules! redacted_debug {
-    ($($ty:ty),+) => {$(impl std::fmt::Debug for $ty {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str(concat!(stringify!($ty), "([REDACTED])"))
-        }
-    })+};
+    ($($credential_type:ty),+) => {
+        $(
+            impl std::fmt::Debug for $credential_type {
+                fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    formatter.write_str(concat!(stringify!($credential_type), "([REDACTED])"))
+                }
+            }
+        )+
+    };
 }
 
 redacted_debug!(LoginRequest, RefreshRequest, TokenResponse);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_name_may_be_absent_but_must_be_a_string_when_present() {
+        let base = serde_json::json!({"email": "user@example.com", "password": "secret", "client_type": "desktop"});
+        let absent: LoginRequest = serde_json::from_value(base.clone()).unwrap();
+        assert!(absent.device_name.is_none());
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!(42),
+            serde_json::json!([]),
+        ] {
+            let mut request = base.clone();
+            request["device_name"] = invalid;
+            assert!(serde_json::from_value::<LoginRequest>(request).is_err());
+        }
+        let mut request = base;
+        request["device_name"] = serde_json::json!("Work laptop");
+        let present: LoginRequest = serde_json::from_value(request).unwrap();
+        assert_eq!(present.device_name.as_deref(), Some("Work laptop"));
+    }
+
+    #[test]
+    fn credential_debug_output_is_redacted() {
+        let request = RefreshRequest {
+            refresh_token: "private-refresh-token".into(),
+        };
+        assert_eq!(format!("{request:?}"), "RefreshRequest([REDACTED])");
+    }
+}

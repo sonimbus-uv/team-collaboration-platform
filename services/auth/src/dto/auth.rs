@@ -24,6 +24,7 @@ pub struct RegisterResponse {
     pub status: String,
     pub verification_email_sent: bool,
 }
+
 impl From<Account> for RegisterResponse {
     fn from(account: Account) -> Self {
         Self {
