@@ -11,12 +11,7 @@ pub fn verification_email_content(locale: &str, code: &str) -> VerificationEmail
     } else {
         ("Completa tu registro en Sonimbus", "Introduce este código en la aplicación para completar tu registro en Sonimbus. Vence a los 10 minutos de solicitar el registro; reenviarlo no amplía ese plazo. No lo compartas. Si no solicitaste el registro, ignora este mensaje.")
     };
-    let safe_code = code
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;");
+    let safe_code = super::html::escape_html(code);
     VerificationEmailContent {
         subject,
         text: format!("{message}\n\n{code}"),
