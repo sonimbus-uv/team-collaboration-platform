@@ -1,29 +1,51 @@
 -- Atomic weighted quota + optional expiring concurrency reservation.
 -- One Redis primary and consistent settings are required across all Auth replicas.
-local capacity, rate, cost = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
-local maximum, ttl = tonumber(ARGV[4]), tonumber(ARGV[5])
-local clock = redis.call('TIME')
-local now = tonumber(clock[1]) * 1000 + math.floor(tonumber(clock[2]) / 1000)
-local stored = redis.call('HMGET', KEYS[1], 'tokens', 'updated_ms')
-local tokens = tonumber(stored[1]) or capacity
-local updated = tonumber(stored[2]) or now
-local effective = math.max(now, updated)
-tokens = math.min(capacity, tokens + (effective - updated) * rate / 1000)
-if maximum > 0 then
-    redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now)
-    if redis.call('ZCARD', KEYS[2]) >= maximum then
-        local earliest = redis.call('ZRANGE', KEYS[2], 0, 0, 'WITHSCORES')
-        return {0, math.max(1, math.ceil((tonumber(earliest[2]) - now) / 1000))}
+local capacity = tonumber(ARGV[1])
+local refill_per_second = tonumber(ARGV[2])
+local pair_cost = tonumber(ARGV[3])
+local concurrent_limit = tonumber(ARGV[4])
+local lease_ttl_ms = tonumber(ARGV[5])
+
+local redis_time = redis.call("TIME")
+local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
+
+local stored_bucket = redis.call("HMGET", KEYS[1], "tokens", "updated_ms")
+local available_tokens = tonumber(stored_bucket[1]) or capacity
+local updated_ms = tonumber(stored_bucket[2]) or now_ms
+local effective_now_ms = math.max(now_ms, updated_ms)
+
+local refilled_tokens = (effective_now_ms - updated_ms) * refill_per_second / 1000
+available_tokens = math.min(capacity, available_tokens + refilled_tokens)
+
+if concurrent_limit > 0 then
+    redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", now_ms)
+    if redis.call("ZCARD", KEYS[2]) >= concurrent_limit then
+        local oldest_lease = redis.call("ZRANGE", KEYS[2], 0, 0, "WITHSCORES")
+        local retry_after_secs = math.max(1, math.ceil((tonumber(oldest_lease[2]) - now_ms) / 1000))
+        return { 0, retry_after_secs }
     end
 end
-if tokens < cost then
-    return {0, math.max(1, math.ceil(((cost - tokens) * 1000 / rate + effective - now) / 1000))}
+
+if available_tokens < pair_cost then
+    local retry_after_secs = math.max(
+        1,
+        math.ceil(((pair_cost - available_tokens) * 1000 / refill_per_second + effective_now_ms - now_ms) / 1000)
+    )
+    return { 0, retry_after_secs }
 end
-tokens = tokens - cost
-redis.call('HSET', KEYS[1], 'tokens', tokens, 'updated_ms', effective)
-redis.call('PEXPIRE', KEYS[1], math.max(1, math.ceil(capacity * 1000 / rate + effective - now)))
-if maximum > 0 then
-    redis.call('ZADD', KEYS[2], now + ttl, ARGV[6])
-    redis.call('PEXPIRE', KEYS[2], ttl)
+
+available_tokens = available_tokens - pair_cost
+
+redis.call("HSET", KEYS[1], "tokens", available_tokens, "updated_ms", effective_now_ms)
+local quota_ttl_ms = math.max(
+    1,
+    math.ceil(capacity * 1000 / refill_per_second + effective_now_ms - now_ms)
+)
+redis.call("PEXPIRE", KEYS[1], quota_ttl_ms)
+
+if concurrent_limit > 0 then
+    redis.call("ZADD", KEYS[2], now_ms + lease_ttl_ms, ARGV[6])
+    redis.call("PEXPIRE", KEYS[2], lease_ttl_ms)
 end
-return {1, 0}
+
+return { 1, 0 }

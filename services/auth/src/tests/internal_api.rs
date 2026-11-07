@@ -1067,3 +1067,45 @@ async fn http_rotation_accepts_overlap_and_rejects_expired_or_removed_credential
     )
     .await;
 }
+
+#[tokio::test]
+async fn invalid_pair_costs_are_rejected_without_connecting_to_redis() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let redis_url = format!("redis://{}/0", listener.local_addr().unwrap());
+    let limits = InternalLimits::new(settings(), redis_url).unwrap();
+    let mut invalid_costs = vec![0];
+    if let Ok(overflowing_cost) = usize::try_from(u64::from(u32::MAX) + 1) {
+        invalid_costs.push(overflowing_cost);
+    }
+    for cost in invalid_costs {
+        let result = timeout(
+            Duration::from_millis(50),
+            limits.reserve(Identity::Core, cost),
+        )
+        .await
+        .expect("Invalid costs must be rejected without dependency I/O");
+        assert!(matches!(result, Err(AdmissionError::Unavailable)));
+    }
+    assert!(timeout(Duration::from_millis(25), listener.accept())
+        .await
+        .is_err());
+}
+
+#[test]
+#[ignore = "requires isolated Redis; use --include-ignored"]
+fn reservation_can_be_dropped_after_its_runtime_has_stopped() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let reservation = runtime.block_on(async {
+        let limits = InternalLimits::new(settings(), redis_url()).unwrap();
+        limits.reserve(Identity::Core, 1).await.unwrap()
+    });
+    drop(runtime);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(reservation)));
+    assert!(
+        result.is_ok(),
+        "Dropping a reservation must not require a live runtime"
+    );
+}
