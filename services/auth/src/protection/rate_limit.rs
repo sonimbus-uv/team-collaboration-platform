@@ -9,11 +9,17 @@ pub enum AuthOperation {
     Login,
     Refresh,
     Logout,
+    ChangePassword,
+    ForgotPassword,
+    ResetPassword,
 }
 
 impl AuthOperation {
     pub fn from_request(method: &Method, path: &str) -> Option<Self> {
         match (method.as_str(), path) {
+            ("POST", "/api/v1/auth/change-password") => Some(Self::ChangePassword),
+            ("POST", "/api/v1/auth/forgot-password") => Some(Self::ForgotPassword),
+            ("POST", "/api/v1/auth/reset-password") => Some(Self::ResetPassword),
             ("POST", "/api/v1/auth/login") => Some(Self::Login),
             ("POST", "/api/v1/auth/refresh") => Some(Self::Refresh),
             ("POST", "/api/v1/auth/logout") => Some(Self::Logout),
@@ -24,8 +30,11 @@ impl AuthOperation {
         }
     }
 
-    pub fn ip_key(self, ip: IpAddr) -> String {
-        let operation = match self {
+    pub fn ip_key(self, client_ip: IpAddr) -> String {
+        let operation_name = match self {
+            Self::ChangePassword => "change-password",
+            Self::ForgotPassword => "forgot-password",
+            Self::ResetPassword => "reset-password",
             Self::Login => "login",
             Self::Refresh => "refresh",
             Self::Logout => "logout",
@@ -34,11 +43,19 @@ impl AuthOperation {
             Self::Verify => "verify",
         };
 
-        format!("auth:rl:v1:{operation}:ip:{ip}")
+        format!("auth:rl:v1:{operation_name}:ip:{client_ip}")
     }
 
     pub fn is_session(self) -> bool {
-        matches!(self, Self::Login | Self::Refresh | Self::Logout)
+        matches!(
+            self,
+            Self::Login
+                | Self::Refresh
+                | Self::Logout
+                | Self::ChangePassword
+                | Self::ForgotPassword
+                | Self::ResetPassword
+        )
     }
 }
 
@@ -129,7 +146,7 @@ mod tests {
 
     #[test]
     fn get_and_post_verification_share_the_same_key() {
-        let ip = "192.0.2.10".parse().unwrap();
+        let client_ip = "192.0.2.10".parse().unwrap();
 
         let get_operation =
             AuthOperation::from_request(&Method::GET, "/api/v1/auth/verify-email").unwrap();
@@ -137,7 +154,10 @@ mod tests {
         let post_operation =
             AuthOperation::from_request(&Method::POST, "/api/v1/auth/verify-email").unwrap();
 
-        assert_eq!(get_operation.ip_key(ip), post_operation.ip_key(ip));
+        assert_eq!(
+            get_operation.ip_key(client_ip),
+            post_operation.ip_key(client_ip)
+        );
     }
 
     #[test]
