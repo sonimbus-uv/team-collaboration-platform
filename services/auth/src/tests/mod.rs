@@ -1,3 +1,4 @@
+mod passwords;
 mod registration;
 mod sessions;
 pub(crate) mod support;
