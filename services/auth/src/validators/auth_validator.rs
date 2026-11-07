@@ -16,9 +16,9 @@ pub fn validate_register_input(
     email: String,
     password: String,
 ) -> Result<ValidRegisterInput, RegisterInputValidationError> {
-    let email = email.trim().to_lowercase();
+    let normalized_email = email.trim().to_lowercase();
 
-    if !is_valid_email_format(&email) {
+    if !is_valid_email_format(&normalized_email) {
         return Err(RegisterInputValidationError::InvalidEmailFormat);
     }
 
@@ -36,7 +36,10 @@ pub fn validate_register_input(
         return Err(RegisterInputValidationError::InvalidPasswordFormat);
     }
 
-    Ok(ValidRegisterInput { email, password })
+    Ok(ValidRegisterInput {
+        email: normalized_email,
+        password,
+    })
 }
 
 pub fn is_valid_email_format(email: &str) -> bool {
@@ -48,33 +51,34 @@ pub fn is_valid_email_format(email: &str) -> bool {
         return false;
     }
 
-    let Some((local, domain)) = email.split_once('@') else {
+    let Some((local_part, domain_part)) = email.split_once('@') else {
         return false;
     };
 
-    !local.is_empty()
-        && local.len() <= 64
-        && !local.starts_with('.')
-        && !local.ends_with('.')
-        && !local.contains("..")
-        && local
+    !local_part.is_empty()
+        && local_part.len() <= 64
+        && !local_part.starts_with('.')
+        && !local_part.ends_with('.')
+        && !local_part.contains("..")
+        && local_part
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b".!#$%&'*+-/=?^_`{|}~".contains(&b))
-        && domain.contains('.')
-        && domain.split('.').all(|label| {
-            !label.is_empty()
-                && label.len() <= 63
-                && !label.starts_with('-')
-                && !label.ends_with('-')
-                && label
+            .all(|byte| byte.is_ascii_alphanumeric() || b".!#$%&'*+-/=?^_`{|}~".contains(&byte))
+        && domain_part.contains('.')
+        && domain_part.split('.').all(|domain_label| {
+            !domain_label.is_empty()
+                && domain_label.len() <= 63
+                && !domain_label.starts_with('-')
+                && !domain_label.ends_with('-')
+                && domain_label
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         })
 }
 
 impl std::fmt::Debug for ValidRegisterInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ValidRegisterInput")
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ValidRegisterInput")
             .field("email", &self.email)
             .field("password", &"[REDACTED]")
             .finish()
@@ -82,12 +86,14 @@ impl std::fmt::Debug for ValidRegisterInput {
 }
 
 fn is_valid_password_format(password: &str) -> bool {
-    let has_uppercase = password.chars().any(|c| c.is_uppercase());
-    let has_lowercase = password.chars().any(|c| c.is_lowercase());
-    let has_digit = password.chars().any(|c| c.is_ascii_digit());
-    let has_special_char = password.chars().any(|c| !c.is_alphanumeric());
+    let has_uppercase = password.chars().any(|character| character.is_uppercase());
+    let has_lowercase = password.chars().any(|character| character.is_lowercase());
+    let has_digit = password.chars().any(|character| character.is_ascii_digit());
+    let has_special_character = password
+        .chars()
+        .any(|character| !character.is_alphanumeric());
 
-    has_uppercase && has_lowercase && has_digit && has_special_char
+    has_uppercase && has_lowercase && has_digit && has_special_character
 }
 
 #[cfg(test)]
@@ -107,6 +113,7 @@ mod tests {
         ] {
             assert!(!super::is_valid_email_format(email), "{email:?}");
         }
+
         assert!(super::is_valid_email_format("name+tag@sub.example.com"));
     }
 
