@@ -1,9 +1,9 @@
 # Perfil de tokens y JWKS v1
 
-Diseño de [D-16 / ADR-007](../docs/decisions/ADR-007-auth-sessions.md), Refs #35.
-Estado de la tercera entrega: emisor/JWKS y sesiones públicas implementados;
+Diseño de [D-16 / ADR-007](../../docs/decisions/ADR-007-auth-sessions.md), Refs #35.
+El backend implementa emisor/JWKS y sesiones públicas;
 login deshabilitado por defecto por #17. Integración de consumidores pendiente. Ver
-[operación y validación](../services/auth/TOKENS.md). Afecta Auth, Core, Files
+[operación y validación](../../services/auth/docs/operations.md#claves-jwt-y-jwks). Afecta Auth, Core, Files
 y ambos clientes. Los identificadores y tiempos de ejemplo son ficticios;
 no hay firmas ni secretos utilizables.
 
@@ -13,7 +13,7 @@ no hay firmas ni secretos utilizables.
 |---|---|---|
 | Access JWT | Auth / APIs protegidas y conexión WS | Memoria del cliente |
 | Refresh opaco | Auth / refresh y logout de su sesión | Llavero SO; solo hash en Auth |
-| Token de verificación | Auth / confirmar correo, propósito único | Hash en `one_time_tokens`; no es refresh |
+| Código de registro | Auth / confirmar el intento indicado por el cliente | MAC ligada al intento; nunca el código en texto plano |
 | Bearer interno de servicio | Operación / consultar sesiones desde Core o Files | Solo backend, permisos de consulta |
 | Credencial AMQP | Operación / publicar o consumir eventos | Solo backend; independiente de HTTP |
 | JWT LiveKit | Core VoiceService / medios (D-15) | Perfil distinto, nunca aceptado como access |

@@ -1,53 +1,47 @@
 # Comprobación interna de sesiones v1
 
-Se aprobó el 2026-10-27 las rutas/respuestas, Bearer opaco,
-archivo de hashes por servicio, rotación con anterior hasta 15 minutos y reinicio,
-HTTPS directo y límites de [INTERNAL_API.md](../services/auth/INTERNAL_API.md).
-Esa implementación es opt-in y no acredita despliegue ni interoperabilidad.
+Auth es la autoridad de sesiones en PostgreSQL. Core y Files consultan mediante
+HTTPS y JSON por red privada, sin pasar por Nginx público ni acceder al esquema
+`auth`. El cliente verifica la cadena TLS y el hostname del destino.
 
-Los párrafos históricos de propuestas siguientes quedan precisados por ese modelo:
-Redis 200 ms de conexión/100 ms de operación, 500 ms para adquisición+SQL, 1 s por
-solicitud, 100 par/es con burst 100 y 20 reservas por identidad compartidos;
-10 solicitudes/s por IP compartidas y 50 conexiones/solicitudes **locales** por
-proceso. Estos 50 locales sustituyen la propuesta histórica de 50 globales.
-Circuit breaker, clientes y parámetros de sus microcachés siguen fuera de este avance.
-
-Refs #35. Consulta interna de dominio implementada en
-[entrega](../services/auth/SESSION_CHECKS.md), sin exposición por red. El
-solicitante aprobó el 2026-10-26 las reglas de actividad, eco y orden,
-fallo completo y lotes de 1–100 pares distintos: vacío, duplicado o elemento
-inválido rechazan toda la entrada. Esa aprobación no incluye parámetros HTTP,
-credenciales ni despliegue. La exposición se implementa según la aprobación
-indicada arriba, ligada al
-[OpenAPI](openapi/auth-internal.yaml) y [ADR](../docs/decisions/ADR-007-auth-sessions.md).
-Auth es autoridad en PostgreSQL. Solo Core y Files, por HTTPS + JSON en red
-privada sin Nginx público; verificación de hostname y cadena del certificado.
-Nunca consultar almacenamiento interno de Auth desde consumidores.
+El [OpenAPI interno](../openapi/auth-internal.yaml) define rutas, estructuras y errores.
+La implementación requiere activación explícita y no acredita despliegue ni
+interoperabilidad. La [arquitectura](../../services/auth/docs/architecture.md#consulta-autoritativa-de-sesiones)
+describe la consulta de dominio; la [operación](../../services/auth/docs/operations.md#api-interna-https),
+los procedimientos de red y credenciales.
 
 ## Autenticación y límites
 
-Propuesta: `Authorization: Bearer <service-credential>`, secreto aleatorio opaco
-por servicio, asociado en Auth a identidad `core` o `files` y permiso
-`sessions:check`. No es JWT de usuario, refresh ni credencial de RabbitMQ.
-Rotación con solapamiento acotado y revocación independiente por identidad;
-duración exacta y distribución de secretos pendientes. No aceptar identidad
-declarada en el cuerpo ni guardar secreto en URLs, repositorio o logs.
+`Authorization: Bearer svc_<secreto>` contiene un token opaco de 32 bytes aleatorios
+codificados en base64url sin padding, prefijado por `svc_`. Tiene 47 caracteres y
+se asocia a `core` o `files` con permiso `sessions:check`. No es JWT, refresh ni
+credencial AMQP. La identidad no procede del cuerpo. La rotación admite una
+credencial anterior durante hasta 15 minutos y requiere reinicio de todas las
+réplicas; la distribución corresponde al canal protegido de secretos.
 
-Valores propuestos para revisar con mediciones: timeout total 1 s (conexión
-300 ms incluida), sin reintento automático; lote 1–100 pares distintos,
-64 KiB por petición; 100 consultas/s y 20 en vuelo por identidad, agregadas
-entre réplicas de Auth (cada par cuenta como consulta). 429 con Retry-After
-en segundos; 413 para tamaño y 400 para lote inválido/duplicado. Control de
-concurrencia y cuotas antes de acceso DB. Protección sin autenticar: 10 req/s
-por origen privado, cuerpo acotado y presupuesto global de 50 conexiones en
-autenticación; no sustituye verificar credencial. Cuotas independientes del
-rate limiting público por IP. Elegidas para acotar carga, no como capacidad demostrada.
+Los límites iniciales requieren medición antes de atribuirles capacidad productiva:
 
-Circuit breaker propuesto por consumidor/destino: cinco fallos de transporte,
-timeouts o 5xx consecutivos abren 5 s; half-open permite una prueba; éxito cierra,
-fallo reabre. 401/403 internos indican configuración/credencial y generan alerta;
-429 respeta Retry-After. Ninguno equivale a revocación de usuario. Circuito
-abierto no invalida un positivo aún vigente, ni permite usar uno vencido.
+| Control | Alcance | Predeterminado |
+|---|---|---|
+| Pares consultados | Redis, por identidad entre réplicas | Capacidad 100 y recarga de 100 pares/s |
+| Consultas simultáneas autenticadas | Reservas Redis por identidad | 20 |
+| Vida de reserva | Reloj Redis | 2 s; al menos doble del presupuesto HTTP |
+| Solicitudes previas a autenticar | Redis por IP del socket | Capacidad 10 y recarga de 10 solicitudes/s |
+| Conexiones y solicitudes HTTP | Dos semáforos locales por proceso | 50 cada uno |
+| Cuerpo | Por solicitud | 64 KiB |
+| Lote | Por solicitud | 1–100 pares distintos |
+| Solicitud HTTP | Local, incluye autenticación, Redis, SQL y liberación | 1 s |
+| Adquisición y consulta SQL | Local | 500 ms |
+| Redis conexión / operación | Local | 200 / 100 ms |
+| TLS / cabeceras | Por conexión | 300 / 1000 ms |
+
+La cuota cuenta pares, no lotes. Los token buckets admiten ráfagas hasta su
+capacidad; no son máximos de ventana deslizante. Las cuotas son independientes
+del límite público. Su agotamiento devuelve 429 con Retry-After; los fallos de
+infraestructura o reserva devuelven 503, nunca una autorización fabricada.
+No existe reintento automático. Los semáforos locales no constituyen un límite
+global entre réplicas. Un rechazo previo a HTTP puede cerrar el transporte sin
+una respuesta de sesión. La liberación de una reserva no devuelve cuota consumida.
 
 ## Consulta y errores
 
@@ -90,7 +84,17 @@ Errores `application/problem+json`: 400 `/problems/malformed-request`,
 Respuestas HTTP internas `Cache-Control: no-store`; la microcaché es explícita
 en el consumidor, no una caché HTTP intermediaria.
 
-## Semántica temporal y carreras
+## Propuestas pendientes para consumidores
+
+Las reglas siguientes describen el diseño previsto de microcaché, difusión y
+WebSocket en Core/Files. No acreditan una implementación de esos consumidores.
+El circuit breaker propuesto abre cinco segundos tras cinco fallos consecutivos
+de transporte, timeout o 5xx; permite una prueba en half-open y vuelve a abrir
+ante fallo. Los errores 401/403 requieren revisión de credenciales, y 429 respeta
+Retry-After; ninguno equivale a revocación de usuario.
+
+### Semántica temporal y carreras
+
 
 Al iniciar consulta, capturar `t0` monotónico y generación local por sid. Al
 recibir positivo a `t1`, deadline monotónico como máximo `t0 + 10 s`, acotado
