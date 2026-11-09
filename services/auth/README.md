@@ -30,8 +30,11 @@ aprovisiona una API interna limitada a loopback. La existencia de código no
 acredita despliegue ni habilitación para producción. La revisión de cuentas
 heredadas y de enumeración sigue siendo una condición operativa.
 
-OAuth/Google, vinculación de cuentas y gestión de perfil no forman parte de los
-flujos implementados descritos aquí. Los requisitos generales se encuentran en
+El [contrato Google y correo de contacto v1.0](../../contracts/auth/public-api.md#google-y-correo-de-contacto)
+define el diseño aprobado, sin implementación ni migraciones todavía. Google,
+vinculación y verificación general de contacto no deben presentarse como funciones
+habilitadas. La gestión general de perfil tampoco forma parte de los flujos
+implementados descritos aquí. Los requisitos generales se encuentran en
 [requisitos](../../docs/requirements/README.md#auth-service).
 
 ## Mantenimiento documental

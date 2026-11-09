@@ -7,6 +7,12 @@ login deshabilitado por defecto por #17. Integración de consumidores pendiente.
 y ambos clientes. Los identificadores y tiempos de ejemplo son ficticios;
 no hay firmas ni secretos utilizables.
 
+La [integración Google aprobada](public-api.md#google-y-correo-de-contacto), todavía
+sin implementar, utiliza el ID token de Google únicamente como prueba externa.
+Después Auth emite este mismo perfil de access y refresh Sonimbus. Los consumidores
+no aceptan un token Google en lugar de un access Sonimbus ni deducen la verificación
+de contacto de la validez de la firma. No se añade email al JWT de acceso.
+
 ## Credenciales separadas
 
 | Credencial | Emisor / uso | Persistencia |

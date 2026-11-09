@@ -120,6 +120,31 @@ El resultado describe el instante observado y no reserva autorización. La
 verificación JWT y los permisos de grupos o archivos pertenecen al consumidor.
 Los consumidores no acceden directamente al esquema `auth`.
 
+## Evolución aprobada: Google y correo de contacto
+
+El [contrato técnico v1.0](../../../contracts/auth/public-api.md#google-y-correo-de-contacto)
+centraliza rutas, identidad, contacto, vinculación, errores y condiciones de
+aceptación. Es diseño pendiente: la implementación descrita en los apartados
+anteriores conserva su requisito actual de correo verificado.
+
+La evolución separará autenticación del contacto, permitirá cuentas Google sin
+correo principal acreditado y reutilizará la apertura transaccional de sesiones.
+La confirmación de registro, la de contacto y la asignación automática competirán
+por una sola exclusividad de dirección verificada. Los contactos pendientes no
+reservarán correos y nunca aportarán credenciales de otra cuenta.
+
+Antes de implementar se diseñarán migraciones para el contacto opcional, la
+exclusividad común, la evidencia de autenticación reciente, el consumo durable de
+intentos y los eventos de seguridad. No se prescribe aquí un DDL ni se reescriben
+migraciones aplicadas. La elegibilidad de sesión y su comprobación privada deberán
+cambiar conjuntamente, conservando el rechazo de cuentas locales pendientes.
+
+Las responsabilidades se mantendrán: handlers HTTP, un servicio de coordinación
+Google, un puerto/adaptador OIDC, repositorios SQL y un recorrido común de sesión.
+No se ampliará el servicio de registro con todas las responsabilidades del proveedor.
+La criptografía, expiración y envío podrán compartirse entre verificaciones,
+con propósitos separados para registro y contacto.
+
 ## Protección y límites de confianza
 
 El router privado nunca se fusiona con el público. Su listener valida CIDR desde

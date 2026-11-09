@@ -1,6 +1,6 @@
 # API pública de Auth
 
-Esta guía reúne los acuerdos de registro, sesiones y contraseñas para móvil,
+Esta guía reúne los acuerdos de registro, sesiones, contraseñas y autenticación federada para móvil,
 escritorio y otros consumidores públicos. El [OpenAPI público](../openapi/auth.yaml)
 define rutas, esquemas y estados HTTP. Las secciones siguientes explican su
 semántica sin acreditar un despliegue disponible ni habilitación de producción.
@@ -18,6 +18,11 @@ Las operaciones públicas usan `/api/v1/auth`; JWKS conserva
 usa un listener separado y no distribuye credenciales a clientes nativos.
 Las URL de ejemplo de OpenAPI son ficticias; cada integración requiere acordar
 el entorno real y las credenciales de prueba.
+
+La [especificación Google y correo de contacto](#google-y-correo-de-contacto) es
+el diseño aprobado v1.0, pendiente de migraciones, OpenAPI e implementación.
+Los archivos OpenAPI actuales describen las operaciones ya incorporadas; esta
+sección no acredita endpoints Google disponibles ni modifica su comportamiento.
 
 ## Reglas para los clientes nativos
 
@@ -459,6 +464,347 @@ es-MX; no se incorpora un campo nuevo de idioma al contrato HTTP.
 7. Mailpit real, mocks de clientes y Postman; pruebas de SQL y Redis complementarias.
 8. Revisión de anti-enumeración temporal/envío, cuotas y parámetros; sin sustituir
    la auditoría pendiente de cuentas heredadas ni habilitar login por este documento.
+
+## Google y correo de contacto
+
+**Versión 1.0. Diseño aprobado el 2026-11-09; implementación pendiente.** Esta
+sección es la fuente normativa de CU-04, la vinculación de Google y CU-02 Verificar
+correo de contacto. Sustituye las propuestas de verificación obligatoria después
+de Google, contraseña obligatoria en cada vinculación y vinculación automática
+por coincidencia de correo. Las migraciones y el contrato OpenAPI ejecutable se
+abordarán antes de habilitar estos endpoints. No existe aprobación de despliegue.
+
+### Alcance y conceptos
+
+Google acredita una identidad mediante OpenID Connect; Auth emite las sesiones,
+access y refresh de Sonimbus con el perfil existente. El inicio de sesión y el
+registro Google no exigen un código de correo de Sonimbus. Google decide sus
+propias comprobaciones, incluidas passkeys o coincidencia de números; Sonimbus
+no exige ni reproduce un método concreto de segundo factor de Google.
+
+| Concepto | Significado y autoridad |
+|---|---|
+| Cuenta | Identificador interno de Sonimbus y estado administrativo |
+| Identidad Google | Emisor validado y `sub` estable, representados como proveedor Google y su subject |
+| Correo del proveedor | Atributo informado por Google; no cambia por sí solo el contacto de Sonimbus |
+| Contacto pendiente | Dirección propuesta, sin propiedad acreditada ni reserva exclusiva |
+| Contacto verificado | Dirección acreditada y asociada de forma exclusiva a una cuenta |
+| Autenticación reciente | Evidencia del servidor de una comprobación efectiva de credenciales, independiente del refresh |
+
+La identidad externa, el estado administrativo y la verificación de contacto
+son condiciones distintas. Una cuenta activa autenticada mediante Google puede
+carecer de contacto verificado. No se genera una contraseña artificial. El
+correo principal es opcional en el modelo objetivo y no identifica la cuenta.
+
+No forman parte de esta versión la fusión de cuentas, sustitución o desvinculación
+de Google, sincronización automática de perfil, acceso a Drive/Gmail, cambio de
+un contacto ya verificado ni recuperación asistida por soporte. Añadir contraseña
+local requiere un flujo separado: verificar contacto no lo ejecuta implícitamente.
+
+### Exclusividad y resolución de cuentas
+
+La identidad Google se busca por emisor y `sub`, nunca únicamente por correo.
+Las variantes de emisor admitidas de Google se normalizan a un único proveedor
+confiable, sin permitir proveedores o URL de claves enviados por el cliente.
+
+| Situación | Resultado |
+|---|---|
+| Identidad ya vinculada a cuenta activa | Inicia sesión, aunque no tenga contacto verificado |
+| Cuenta vinculada bloqueada, suspendida o eliminada | Acceso denegado; no se crea otra cuenta |
+| Identidad nueva y correo Gmail/Workspace acreditado y disponible | Crea cuenta e identidad, asigna contacto verificado y abre sesión en una transacción |
+| Identidad nueva con dirección externa sobre la que Google no es autoridad | Crea cuenta e identidad y abre sesión; la dirección queda como propuesta no exclusiva |
+| Correo acreditado por Google ya verificado en otra cuenta | Devuelve `account-link-required`; exige entrar en esa cuenta antes de conectar Google |
+| Dirección externa informada coincide con contacto de otra cuenta | No autoriza asociación ni recuperación de esa cuenta; la nueva identidad solo puede tener contacto pendiente |
+| Correo de una identidad ya vinculada cambia en Google | Conserva la vinculación por `sub`; no modifica el contacto de Sonimbus |
+
+Para aceptar automáticamente un contacto se exige `email_verified=true` y que
+Google sea autoridad sobre él: Gmail, o Workspace con `hd` validado. Una dirección
+externa puede aparecer verificada por Google sin acreditar su propiedad actual;
+por ello permanece pendiente en Sonimbus. Los atributos ausentes o no acreditados
+no autorizan contacto automático. Un token válido con correo no acreditado no
+obliga a introducir un código para iniciar sesión.
+
+La confirmación de registro con contraseña, la confirmación de contacto y la
+asignación automática de Gmail/Workspace compiten por el mismo recurso exclusivo
+y la misma restricción única en PostgreSQL. La asignación y los cambios de cuenta,
+identidad o intento se confirman juntos. Una comprobación previa no sustituye
+esa restricción. Gana la transacción que confirma la asignación; la otra devuelve
+conflicto y revierte sus cambios parciales. Para la misma cuenta y dirección,
+una confirmación repetida puede responder de forma idempotente.
+
+Las direcciones pendientes no reservan ni bloquean el registro de su propietario.
+La confirmación nunca copia una contraseña o una identidad desde otra cuenta.
+Una cuenta heredada pendiente no se activa automáticamente mediante Google ni
+aporta sus credenciales a una cuenta nueva; su revisión se realizará en el diseño
+de migraciones, conservando el estado administrativo y evitando apropiaciones.
+
+### Contrato HTTP y recorrido Google
+
+Las rutas siguientes son objetivo aprobado, no endpoints disponibles actualmente.
+La integración permanecerá deshabilitada por defecto hasta su aprovisionamiento:
+cliente OAuth confidencial del backend, callback HTTPS fijo, audiencias, destinos
+de retorno permitidos y claves de propósito. Ningún secreto confidencial se
+distribuye a las aplicaciones. Los valores reales pertenecen al entorno protegido,
+no al contrato ni a sus ejemplos. La activación conserva las revisiones operativas
+existentes; habilitar Google no habilita automáticamente login por contraseña.
+Las solicitudes JSON rechazan campos desconocidos y usan nombres en inglés.
+`client_type` conserva `desktop` o `mobile`; `device_name` es opcional, no nulo
+cuando aparece y de hasta 120 caracteres. Los cuerpos tienen máximo 4096 bytes.
+
+| Método y ruta bajo `/api/v1/auth` | Autorización | Entrada y resultado |
+|---|---|---|
+| `POST /google/attempts` | Pública, con protección de solicitudes | `{client_type, device_name?, redirect_target, code_challenge}`; `201` con intento de login |
+| `GET /google/authorize` | Ticket de navegador de un uso | Inicia correlación del navegador y responde `302` hacia Google |
+| `GET /google/callback` | Respuesta Google correlacionada | Valida respuesta y redirige al destino autorizado con un código temporal |
+| `POST /google/exchange` | Secreto del intento y prueba PKCE | `{attempt_id, completion_code, code_verifier}`; `200 TokenResponse` para login o `204` para vinculación |
+| `POST /google/link-attempts` | Access Sonimbus, sesión activa y autenticación reciente | `{redirect_target, code_challenge}`; `201` con intento ligado a cuenta y sesión |
+| `POST /reauthenticate` | Access y sesión activa | `{password}` para una cuenta con contraseña local; `204`, actualiza evidencia del servidor sin crear sesión |
+| `GET /connections` | Access y sesión activa | Lista el proveedor y correo informado de las conexiones propias, sin tokens, hashes ni subject externo |
+
+La respuesta `201` de creación contiene `attempt_id` UUID, `attempt_secret`,
+`authorization_url` y `expires_at` UTC RFC 3339. El secreto es aleatorio de al
+menos 256 bits y solo se entrega por HTTPS. El navegador recibe un ticket de
+lanzamiento distinto; nunca recibe el secreto del intento o el verificador PKCE.
+`GET /connections` responde `{connections:[{provider:"google",provider_email,
+linked_at}]}`; `provider_email` puede ser nulo. No expone conexiones de otra cuenta.
+
+El cliente conserva en memoria un verificador aleatorio de al menos 256 bits.
+`code_challenge` es base64url sin padding de SHA-256 del verificador; solo se admite
+S256. En exchange envía el secreto mediante `X-Auth-Attempt-Secret`. La prueba PKCE
+protege el código de finalización de Sonimbus y es distinta del código OAuth que
+Google entrega exclusivamente al callback del backend.
+
+`redirect_target` es un identificador registrado de cliente, no una URL arbitraria.
+Cada destino configura esquemas, host y ruta admitidos. El loopback de escritorio,
+si se utiliza, solo admite la dirección local y el puerto validado de ese intento;
+móvil usa destinos de aplicación registrados y verificables. La activación de un
+cliente requiere completar ese registro, sin comodines de redirección externos.
+
+El recorrido es navegador del sistema → Auth authorize → Google → callback HTTPS
+fijo de Auth → destino del cliente → exchange. El callback comprueba `state`,
+correlación del navegador y `nonce`; rechaza parámetros de seguridad duplicados,
+combinaciones inconsistentes y callbacks repetidos. Los parámetros informativos
+adicionales de Google se ignoran sin reflejarlos. La cookie de correlación es
+Secure, HttpOnly y SameSite=Lax; no es una sesión de usuario ni autoriza exchange.
+
+El backend intercambia el código por el ID token, fuera de transacciones SQL,
+y valida firma, algoritmo permitido, emisor, audiencia configurada, vencimiento,
+`nonce` e identidad autorizada del cliente cuando corresponda. Las claves solo
+proceden de configuración/discovery confiables de Google, con caché acotada y
+actualización limitada ante `kid` desconocido. No se usa el verificador Ed25519
+de Sonimbus para aceptar tokens Google. Solo se solicitan `openid email`; no se
+persisten access ni refresh de Google ni el ID token completo.
+
+El callback no crea sesión ni vinculación. Entrega un código de finalización de
+un solo uso ligado a intento y desafío. El código no es un access ni un refresh.
+Exchange verifica las pruebas, revalida cuenta, sesión y versión de credencial
+cuando corresponda y realiza el cambio definitivo. En login crea cuenta/identidad
+si es necesario, abre sesión mediante el recorrido común, genera refresh y firma
+access antes de commit. Conserva duración, reemplazo por tipo de cliente y outbox
+existentes. Una respuesta perdida no autoriza repetir automáticamente exchange.
+
+Un intento cancelado o inválido no crea cuenta, sesión ni vinculación. El callback
+solo redirige a un destino previamente validado; ante un estado no reconocible
+presenta un error genérico sin usar destinos proporcionados por esa solicitud.
+Los errores de Google no se reflejan literalmente. La aplicación puede recibir
+un resultado finito de cancelación o fallo, nunca credenciales en la URL.
+
+### Vinculación y autenticación reciente
+
+La vinculación se inicia desde Configuración → Cuentas conectadas, con acción
+explícita. El backend obtiene `account_id` y `sid` de la sesión autoritativa;
+no acepta esos identificadores como selección de cuenta en el cuerpo.
+
+Se permite conectar una cuenta Google cuyo correo difiera del contacto Sonimbus.
+No modifica ese contacto, su verificación, la contraseña o las sesiones existentes,
+ni emite un nuevo par de tokens. El usuario ve qué cuenta Google se va a conectar.
+
+Una autenticación es reciente durante diez minutos desde una comprobación efectiva
+de credenciales, según tiempo del servidor. Un login con contraseña puede aportar
+esa evidencia; refresh, actividad y `iat` de un nuevo JWT no la renuevan. Si falta
+o venció, la cuenta local utiliza reautenticación con contraseña antes de iniciar.
+El backend limita intentos y liga la evidencia a cuenta, sesión, método y versión.
+La reautenticación con un proveedor ya vinculado debe acreditar esa misma identidad;
+un token Google silenciosamente renovado no demuestra por sí solo presencia reciente.
+Su adaptación para operaciones futuras se diseñará antes de habilitarlas.
+
+El intento de vinculación conserva propósito, cuenta, sesión y versión de
+credencial. Al finalizar, la sesión debe seguir activa y la evidencia conservar
+su vigencia. Logout, bloqueo, cambio de credenciales o vencimiento impiden completar
+la operación; se exige un intento nuevo después de reautenticar.
+
+| Conflicto | Resultado |
+|---|---|
+| La misma identidad ya está en esa cuenta | `204` idempotente, sin otro aviso de vinculación |
+| La identidad está asociada a otra cuenta | `409 identity-already-linked` |
+| La cuenta ya tiene otra identidad Google | `409 provider-already-linked`; no se sustituye |
+| El correo Google coincide con contacto verificado de otra cuenta | `409 account-link-conflict`; no se fusionan cuentas |
+
+La coincidencia entre correos no es requisito de vinculación y tampoco acredita
+control de una cuenta distinta. La restricción de identidad se comprueba de nuevo
+al confirmar la transacción para resolver carreras entre intentos.
+
+### Verificar correo de contacto
+
+CU-02 es general e independiente del proveedor. Su actor es un usuario autenticado
+con cuenta activa y sin contacto verificado. Puede iniciarse desde el perfil o
+al intentar una operación que necesite acreditar esa dirección. No se ejecuta
+obligatoriamente después de Google ni presenta avisos en cada inicio de sesión.
+
+| Método y ruta bajo `/api/v1/auth` | Entrada y resultado |
+|---|---|
+| `GET /contact-email` | `200 {contact_email, contact_email_verified, pending_contact_email}`; las direcciones ausentes son nulas |
+| `POST /contact-email/verification-attempts` | `{email}`; `202 {verification_attempt_id, expires_at}` |
+| `POST /contact-email/verification-resends` | `{verification_attempt_id}`; `202` con el mismo identificador y vencimiento |
+| `POST /contact-email/verify` | `{verification_attempt_id, code}`; `204` al asignar el contacto |
+
+Todas requieren access y sesión activa. El correo se normaliza con la política
+actual, sin reglas específicas que eliminen puntos o sufijos de Gmail. La
+solicitud no acepta un `account_id` de destino. Una dirección distinta sustituye
+la propuesta pendiente e invalida sus códigos. Un contacto ya verificado para la
+misma cuenta no requiere otro código; la confirmación es idempotente. Cambiar un
+contacto ya verificado queda fuera del alcance y devuelve conflicto.
+
+El código tiene ocho dígitos CSPRNG y se trata como texto. La vigencia es de diez
+minutos; el quinto fallo bloquea el intento. El reenvío requiere 60 segundos,
+admite como máximo tres sustituciones y no amplía vencimiento ni reinicia fallos.
+La MAC liga propósito `contact-email-verification`, cuenta, dirección normalizada,
+identificador y versión. La confirmación exige la misma cuenta autenticada y
+asigna la dirección bajo la restricción común de exclusividad.
+
+Un código con formato incorrecto cuenta como fallo cuando el intento válido está
+identificado y autorizado; un cuerpo mal formado no revela ni modifica intentos
+de otras cuentas. Los fallos persistidos no se revierten al devolver el error.
+El envío sucede fuera de la transacción. `202` acredita aceptación de la solicitud,
+no entrega del correo. Un fallo de proveedor conserva un estado reintentable,
+sin activar contacto. Las políticas de abuso comparten el presupuesto de envío
+por destinatario e incorporan límites por cuenta e IP; no dependen solo del código.
+
+Registro con contraseña y verificación de contacto reutilizan el mecanismo de
+códigos, MAC, expiración, consumo, envío y fallos, pero mantienen contextos y
+propósitos diferentes. El visitante confirma el registro ligado a su intento y
+contraseña; el usuario autenticado verifica contacto sin cambiar credenciales.
+CU-01 no incluye un CU cuya precondición exija una sesión inexistente. La
+verificación de contacto no activa cuentas heredadas ni añade identidades.
+
+### Operaciones que requieren contacto verificado
+
+La lista inicial es cerrada; una ampliación exige cambio explícito del contrato.
+
+| Operación | Condición adicional |
+|---|---|
+| Reclamar una invitación dirigida a una dirección | El contacto verificado debe coincidir con la dirección invitada |
+| Añadir contraseña local | Contacto verificado y autenticación reciente con el método existente; flujo separado |
+| Recuperar contraseña por correo | Contacto verificado y contraseña local previamente existente |
+| Elegir destinatario de avisos de seguridad por correo | Debe ser un contacto verificado de esa cuenta |
+
+No se exige contacto verificado para iniciar o renovar una sesión Google, cerrar
+sesión, consultar la cuenta, conectar Google con las pruebas exigidas ni solicitar
+verificación. Tampoco se añade como requisito global a grupos, mensajes, voz,
+archivos o proyectos: esos recursos conservan sus permisos y reglas de dominio.
+Los consumidores no deducen requisitos adicionales del correo informado por Google.
+
+La consulta interna de sesiones debe aceptar una sesión obtenida mediante Google
+validado aunque no exista contacto verificado. El requisito de verificación del
+registro con contraseña se conserva; no se elimina globalmente para admitir
+cuentas locales pendientes. La evidencia del método de autenticación es del
+servidor. Los resultados internos mantienen sus campos actuales y no convierten
+el estado de contacto en una autorización de recursos.
+
+### Notificaciones y recuperación
+
+La interfaz distingue «Google conectado» de «Correo de contacto». Puede mostrar
+el correo informado por Google como referencia, con el contacto pendiente marcado
+como no verificado, sin afirmar que la identidad Google esté sin autenticar.
+La lectura `GET /contact-email` no expone direcciones de otra cuenta.
+
+Después del commit de una vinculación nueva se registra un evento de seguridad
+y se presenta aviso en la aplicación. Si existe contacto verificado, se envía
+además un correo informativo, sin código de confirmación. No se usa como fallback
+una dirección externa informada por Google. El fallo del envío no revierte una
+vinculación ya confirmada; los eventos necesarios para seguimiento se conservan
+sin incluir secretos. La persistencia y entrega de esos avisos se diseñarán con
+las migraciones, sin afirmar que exista actualmente una infraestructura de avisos.
+
+Una cuenta exclusivamente Google sin otro método de acceso depende de Google
+para recuperarse. Verificar contacto no crea una contraseña ni habilita por sí
+solo recuperación local. Perder Google antes de configurar otro método puede
+impedir recuperar el acceso a Sonimbus; soporte no promete una restitución fuera
+de un procedimiento aprobado. El perfil informa esta dependencia y permite
+iniciar voluntariamente la verificación, sin bloquear el uso ordinario.
+
+### Límites, estados y errores
+
+| Control | Valor o regla |
+|---|---|
+| Intento Google | Diez minutos |
+| Autenticación reciente para vincular | Diez minutos, revalidada al finalizar |
+| Código de finalización | 60 segundos y nunca posterior al vencimiento del intento |
+| Ticket de navegador y callback | Uso único y ligado al intento |
+| Finalización correcta | Un solo commit; consume durablemente la autorización |
+| Dependencias externas | Fuera de transacciones; sin reintento ciego del canje de códigos |
+
+Redis puede conservar estado efímero, pero PostgreSQL debe coordinar el consumo
+final durable con la creación de cuenta, identidad o sesión. Borrar una clave
+Redis antes o después del commit no basta para garantizar consumo único. Una
+caída o pérdida de estado no permite reconstruir una autorización favorable ni
+fabricar una finalización. Los límites concretos de Nginx, intentos, conexiones,
+llamadas Google y tareas de correo se definirán antes de habilitar el despliegue,
+sin relajar expiración, consumo único o consistencia transaccional.
+
+Los errores HTTP usan `application/problem+json` con `type`, `title`, `status`
+y `detail` genérico, sin incluir tokens, direcciones ajenas ni diagnósticos del
+proveedor. Las respuestas sensibles llevan `Cache-Control: no-store`,
+`Pragma: no-cache` y `X-Content-Type-Options: nosniff`.
+
+| HTTP | `type` bajo `/problems/` | Aplicación |
+|---|---|---|
+| 400 | `malformed-request` | JSON, tipos o campos no admitidos |
+| 400 | `invalid-verification-code` | Código incorrecto, bloqueado, vencido o intento no utilizable |
+| 401 | `invalid-google-credentials` | Prueba Google, intento, secreto o prueba PKCE inválidos |
+| 401 | `invalid-access-token` | Sesión Sonimbus ausente, inválida o revocada; añade Bearer challenge |
+| 401 | `invalid-credentials` | Contraseña incorrecta al reautenticar; sin revelar datos de la credencial |
+| 401 | `reauthentication-required` | Falta evidencia reciente para vincular o finalizar |
+| 403 | `account-not-allowed` | Cuenta autenticada no habilitada; sin revelar detalles administrativos |
+| 409 | `account-link-required` | Contacto Google acreditado ya pertenece a una cuenta existente |
+| 409 | `identity-already-linked` / `provider-already-linked` / `account-link-conflict` | Conflicto de vinculación |
+| 409 | `contact-email-in-use` / `contact-email-change-not-supported` | Exclusividad de contacto o cambio fuera de alcance |
+| 413 | `request-too-large` | Cuerpo mayor que el máximo |
+| 429 | `too-many-requests` | Cuota agotada; incluye `Retry-After` positivo |
+| 503 | `auth-unavailable` | Google, Redis, PostgreSQL u otra dependencia impide completar sin cambio confirmado |
+| 500 | `internal-error` | Fallo interno o commit incierto; no afirma ausencia de cambios |
+
+Las acciones autenticadas sobre contacto aceptan que un conflicto indique que la
+dirección no está disponible, sin revelar su propietario. No existe una consulta
+pública de cuentas por correo. Un cliente no borra refresh ni deduce revocación
+por una indisponibilidad. Ante exchange o commit de resultado incierto inicia
+un flujo nuevo, sin repetir automáticamente el código anterior.
+
+### Condiciones de aceptación
+
+1. Crear o recuperar la misma identidad Google no produce cuentas duplicadas;
+   correos externos no bloquean direcciones mediante propuestas pendientes.
+2. El ID token de otro cliente, emisor, nonce, algoritmo o clave no permite sesión;
+   cancelar o repetir callback/exchange no crea cambios adicionales.
+3. Una cuenta Google sin contacto verificado puede operar y renovar sesión; una
+   cuenta local pendiente no obtiene acceso por esa excepción.
+4. Registro, contacto y Gmail/Workspace concurrentes chocan con la misma
+   exclusividad; no hay dos propietarios verificados ni efectos parciales.
+5. Vincular correos distintos conserva el contacto original; no fusiona cuentas,
+   reemplaza otra identidad ni acepta una sesión revocada durante el recorrido.
+6. Refresh no renueva la autenticación reciente y las carreras con cambio de
+   contraseña, logout o bloqueo se revalidan antes de confirmar.
+7. Los códigos de contacto no sirven para registro, recuperación, login o enlace
+   de identidades; cambiar la dirección pendiente invalida códigos anteriores.
+8. Los correos informativos solo salen a contactos verificados tras el commit;
+   su fallo no revierte la vinculación y no expone credenciales en logs.
+9. La conservación y entrega de avisos, la caché de claves y los límites externos
+   se validan en entorno aislado antes de habilitar Google.
+
+Referencias técnicas: [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect),
+[validación e identidad de correo](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token),
+[vinculación segura OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#secure-federated-account-linking)
+y [navegador externo en aplicaciones nativas](https://www.rfc-editor.org/rfc/rfc8252.html).
 
 ## Correo de recuperación
 

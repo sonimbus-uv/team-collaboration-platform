@@ -9,7 +9,7 @@ propio documento identifica como pendientes.
 
 | Documento | Fuente principal de información |
 |---|---|
-| [API pública](auth/public-api.md) | Registro, sesiones, contraseñas, reglas de integración y contenido del correo de recuperación |
+| [API pública](auth/public-api.md) | Registro, sesiones, contraseñas, diseño Google/contacto y contenido del correo de recuperación |
 | [Tokens](auth/tokens.md) | Credenciales, claims, JWKS y obligaciones de validación |
 | [API interna](auth/internal-api.md) | Consulta privada de sesiones para Core y Files |
 | [Evento session.revoked](events/session.revoked.md) | Envelope, entrega e idempotencia del evento de revocación |
@@ -18,6 +18,11 @@ La [documentación del servicio](../services/auth/README.md) concentra arquitect
 configuración, desarrollo, operación y pruebas. Las decisiones y alternativas se
 conservan en [ADR](../docs/decisions/README.md); los resultados de ejecuciones y
 planes históricos no forman parte del contrato vigente.
+
+El [contrato Google y contacto v1.0](auth/public-api.md#google-y-correo-de-contacto)
+está aprobado como diseño y pendiente de implementación. Su semántica se mantiene
+en ese documento único; los OpenAPI siguientes todavía no incluyen sus rutas
+objetivo ni la nueva elegibilidad de sesión.
 
 ## OpenAPI
 

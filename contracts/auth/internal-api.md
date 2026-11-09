@@ -10,6 +10,13 @@ interoperabilidad. La [arquitectura](../../services/auth/docs/architecture.md#co
 describe la consulta de dominio; la [operación](../../services/auth/docs/operations.md#api-interna-https),
 los procedimientos de red y credenciales.
 
+El [diseño Google/contacto aprobado](public-api.md#google-y-correo-de-contacto)
+prevé sesiones Google válidas sin contacto verificado. La regla de actividad
+actual descrita abajo todavía exige correo verificado. La implementación futura
+deberá actualizar conjuntamente creación, renovación y consulta autoritativa,
+sin admitir por ello cuentas locales pendientes ni alterar el formato de respuesta.
+Este documento y OpenAPI describen hoy el comportamiento anterior a esa migración.
+
 ## Autenticación y límites
 
 `Authorization: Bearer svc_<secreto>` contiene un token opaco de 32 bytes aleatorios
