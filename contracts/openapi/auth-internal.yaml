@@ -3,7 +3,7 @@
   "info": {
     "title": "Sonimbus Auth: comprobación privada de sesiones",
     "version": "0.1.0",
-    "description": "Refs #35. Contrato HTTP 4B aprobado por el solicitante el 2026-10-27 e implementado con activación explícita; no acredita despliegue ni interoperabilidad. HTTPS privado directo, sin gateway público. Bearer svc_ opaco independiente por Core/Files con sessions:check. Cuerpo 64 KiB, lotes 1-100 pares distintos; cuota ponderada y concurrencia por identidad compartidas mediante Redis. Modelo, límites aprobados y operación en ../../services/auth/INTERNAL_API.md; semántica temporal y consumidores pendientes en ../session-checks.md."
+    "description": "Refs #35. Contrato HTTP 4B aprobado el 2026-10-27 e implementado con activación explícita; no acredita despliegue ni interoperabilidad. HTTPS privado directo, sin gateway público. Bearer svc_ opaco independiente por Core/Files con sessions:check. Cuerpo 64 KiB, lotes 1-100 pares distintos; cuota ponderada y concurrencia por identidad compartidas mediante Redis. Modelo, límites aprobados y operación en ../../services/auth/docs/operations.md#api-interna-https; semántica temporal y consumidores pendientes en ../auth/internal-api.md."
   },
   "servers": [
     {
@@ -271,7 +271,7 @@
             }
           }
         },
-        "description": "Semántica normativa: ../session-checks.md"
+        "description": "Semántica normativa: ../auth/internal-api.md"
       }
     },
     "/internal/v1/sessions/check-batch": {
@@ -529,7 +529,7 @@
             }
           }
         },
-        "description": "Semántica normativa: ../session-checks.md"
+        "description": "Semántica normativa: ../auth/internal-api.md"
       }
     }
   },
