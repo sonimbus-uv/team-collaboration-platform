@@ -11,7 +11,7 @@ pendiente de revisión del equipo y aprobación del ADR. Este ADR registra el di
 original; su contexto de inspección es histórico. Actualmente existen firma/JWKS,
 sesiones transaccionales, login deshabilitado por defecto, refresh, logout y outbox
 persistida. API privada, publicación y consumidores siguen pendientes. Ver el
-[estado implementado](../../services/auth/SESSIONS.md).
+[estado implementado](../../services/auth/docs/architecture.md#sesiones-y-transacciones).
 Registro D-16; desarrolla D-02, D-04, D-07, D-12 y D-13.
 
 ## Fecha
@@ -66,7 +66,7 @@ por este diseño. Su texto se conserva como propuesta histórica, no normativa.
   TTL al leerla. Validación JWT individual en cada solicitud. Vencidos no se
   reutilizan ante errores. Los eventos invalidan anticipadamente; una respuesta
   tardía no puede resucitar una revocación conocida. El presupuesto incluye la
-  latencia; ver [semántica temporal](../../contracts/session-checks.md).
+  latencia; ver [semántica temporal](../../contracts/auth/internal-api.md).
 - Sin Auth, solo se continúa con JWT válido y comprobación positiva vigente.
   Si se requiere una nueva y falla: 503, no revocación, sin borrar refresh.
   No se promete cancelar retroactivamente operaciones ya autorizadas.
@@ -85,7 +85,7 @@ por este diseño. Su texto se conserva como propuesta histórica, no normativa.
   `/.well-known/jwks.json` por gateway; caché cinco minutos independiente de sesión.
   Rotación cada 90 días y convivencia de públicas hasta vencer tokens anteriores
   más tolerancia de reloj y margen operativo. Compromiso y fallos de actualización
-  requieren política separada; ver [perfil](../../contracts/token-profile.md).
+  requieren política separada; ver [perfil](../../contracts/auth/tokens.md).
 
 ## Alternativas consideradas
 

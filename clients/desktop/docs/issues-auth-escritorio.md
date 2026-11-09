@@ -1,5 +1,9 @@
 # Issues de Auth que afectan al cliente de escritorio: propuestas
 
+> Este análisis conserva propuestas históricas. El flujo vigente utiliza
+> [intento y código](../../../contracts/auth/public-api.md#registro-y-verificación), no enlaces de activación.
+> Las rutas públicas usan `/api/v1/auth`.
+
 Propuestas del cliente de escritorio para los issues abiertos de Auth Service. **No modifican `services/auth/` ni `contracts/`**: son insumos para que @tuzc0 decida y para el PR de contrato que corresponda.
 
 - **Fuente:** issues #14 a #36 de `sonimbus-uv/team-collaboration-platform`, leídos el 2026-10-15, y el código de `services/auth/src` en `feature/desktop-navigation`.

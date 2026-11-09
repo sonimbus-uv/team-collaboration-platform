@@ -20,7 +20,7 @@ Punto único de entrada para los clientes: enruta las peticiones REST y las cone
 La tercera entrega agrega POST `/api/v1/auth/login`, `/api/v1/auth/refresh` y
 `/api/v1/auth/logout`, con presupuestos edge separados y Problem Details estable.
 El login permanece deshabilitado por defecto en Auth mientras #17 siga abierto.
-Ver [configuración y límites propuestos](../../services/auth/SESSIONS.md).
+Ver [configuración y límites propuestos](../../services/auth/docs/architecture.md#sesiones-y-transacciones).
 
 La configuración actual enruta registro, verificación, reenvío y health de Auth,
 con presupuestos públicos por IP y registros sin credenciales ni query sensible.
@@ -39,4 +39,4 @@ python3 scripts/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
 
 Ejecutar desde la raíz. Usa configuración temporal, backend stub y loopback;
 comprueba GET/HEAD, caché, límites existentes y 404. No demuestra integración
-con un Auth conectado a PostgreSQL/Redis. Ver [operación de claves](../../services/auth/TOKENS.md).
+con un Auth conectado a PostgreSQL/Redis. Ver [operación de claves](../../services/auth/docs/operations.md#claves-jwt-y-jwks).
