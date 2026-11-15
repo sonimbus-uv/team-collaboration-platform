@@ -16,7 +16,7 @@ async fn create_session_fixture(
 ) -> SessionCheckRequest {
     let account_id: Uuid = sqlx::query_scalar(
         "INSERT INTO auth.accounts(email,status,email_verified_at)
-         VALUES($1,$2,CASE WHEN $3 THEN statement_timestamp() END) RETURNING id",
+         VALUES(CASE WHEN $3 THEN $1::text END,$2,CASE WHEN $3 THEN statement_timestamp() END) RETURNING id",
     )
     .bind(format!("{}@example.invalid", Uuid::new_v4()))
     .bind(status)
@@ -24,6 +24,8 @@ async fn create_session_fixture(
     .fetch_one(pool)
     .await
     .unwrap();
+    sqlx::query("INSERT INTO auth.password_credentials(account_id, password_hash) VALUES ($1, 'fixture-only-hash')")
+        .bind(account_id).execute(pool).await.unwrap();
     let sid = sqlx::query_scalar(
         "INSERT INTO auth.sessions(account_id,client_type,created_at,expires_at)
          VALUES($1,'desktop',statement_timestamp()-interval '2 days',
@@ -131,11 +133,13 @@ async fn allowed_account_state_is_rechecked_on_every_query(pool: PgPool) {
         .await
         .unwrap();
     assert!(!service.check(request).await.unwrap().active);
-    sqlx::query("UPDATE auth.accounts SET status='active',email_verified_at=NULL WHERE id=$1")
-        .bind(request.account_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE auth.accounts SET status='active',email=NULL,email_verified_at=NULL WHERE id=$1",
+    )
+    .bind(request.account_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(!service.check(request).await.unwrap().active);
 }
 
@@ -210,10 +214,12 @@ async fn pool_timeout_and_sql_errors_fail_entire_operation(pool: PgPool) {
     drop(held_connection);
     constrained_pool.close().await;
     // sqlx::test isolates this schema change from other tests.
-    sqlx::query("ALTER TABLE auth.sessions RENAME TO unavailable_sessions")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "ALTER VIEW auth.session_account_status RENAME TO unavailable_session_account_status",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let service = SessionCheckService::new(pool);
     assert!(matches!(
         service.check(active).await,

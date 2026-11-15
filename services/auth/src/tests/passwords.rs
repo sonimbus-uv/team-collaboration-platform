@@ -105,6 +105,9 @@ fn fixture(pool: &PgPool) -> (AppState, Arc<Mail>) {
     .unwrap();
     (
         AppState {
+            google_service: None,
+            contact_email_service: None,
+            security_notifications: None,
             password_service: Some(service),
             login_enabled: true,
             token_issuer: super::token_support::issuer(),
@@ -420,7 +423,7 @@ async fn ineligible_accounts_have_generic_acceptance_without_real_attempts(pool:
                 .unwrap();
         }
         if email.starts_with("unverified") {
-            sqlx::query("UPDATE auth.accounts SET email_verified_at=NULL WHERE id=$1")
+            sqlx::query("UPDATE auth.accounts SET email=NULL,email_verified_at=NULL WHERE id=$1")
                 .bind(id)
                 .execute(&pool)
                 .await

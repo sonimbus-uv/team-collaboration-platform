@@ -54,7 +54,7 @@ fn auth(pool: &PgPool, hasher: Arc<dyn PasswordHasher>) -> AuthService {
     )
 }
 
-fn service(pool: &PgPool) -> SessionService {
+pub(super) fn service(pool: &PgPool) -> SessionService {
     SessionService::new(
         SessionsRepository::new(pool.clone()),
         auth(pool, Arc::new(TestHasher)).password_processor(),
@@ -180,7 +180,7 @@ async fn wrong_credentials_and_account_states_are_generic(pool: PgPool) {
     sqlx::query(
         r#"
         UPDATE auth.accounts
-        SET status = 'active', email_verified_at = NULL
+        SET status = 'active', email = NULL, email_verified_at = NULL
         WHERE id = $1
         "#,
     )
@@ -636,8 +636,11 @@ async fn expiration_is_checked_without_waiting_and_lifetime_cannot_extend(pool: 
     ));
 }
 
-fn test_router(pool: &PgPool, enabled: bool) -> axum::Router {
-    crate::routes::router(AppState {
+pub(super) fn test_state(pool: &PgPool, enabled: bool) -> AppState {
+    AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
         password_service: None,
         login_enabled: enabled,
         pool: pool.clone(),
@@ -655,7 +658,11 @@ fn test_router(pool: &PgPool, enabled: bool) -> axum::Router {
             )
             .without_redis_for_tests(),
         ),
-    })
+    }
+}
+
+fn test_router(pool: &PgPool, enabled: bool) -> axum::Router {
+    crate::routes::router(test_state(pool, enabled))
 }
 
 fn protected_app(
@@ -663,6 +670,9 @@ fn protected_app(
     limiter: crate::protection::auth_rate_limiter::AuthRateLimiter,
 ) -> axum::Router {
     crate::routes::router(AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
         password_service: None,
         login_enabled: true,
         pool: pool.clone(),
@@ -845,4 +855,103 @@ async fn http_contract_headers_gate_and_redaction(pool: PgPool) {
         account_id: Uuid::new_v4(),
     };
     assert!(!format!("{response:?}").contains("secret"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn google_session_without_contact_refreshes_and_is_authoritative_without_enabling_local_login(
+    pool: PgPool,
+) {
+    use base64::Engine;
+    let account_id: Uuid =
+        sqlx::query_scalar("INSERT INTO auth.accounts DEFAULT VALUES RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let identity_id: Uuid = sqlx::query_scalar("INSERT INTO auth.oauth_identities(account_id, provider, provider_subject, provider_email) VALUES ($1, 'google', $2, 'unaccredited@example.invalid') RETURNING id")
+        .bind(account_id).bind(Uuid::new_v4().to_string()).fetch_one(&pool).await.unwrap();
+    let session_id: Uuid = sqlx::query_scalar("SELECT auth.open_authenticated_session($1, 'desktop', interval '1 day', ROW('google', $2, NULL, NULL)::auth.session_authentication_context)")
+        .bind(account_id).bind(identity_id).fetch_one(&pool).await.unwrap();
+    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x55u8; 32]);
+    sqlx::query("INSERT INTO auth.refresh_tokens(session_id, token_hash, expires_at) SELECT id, $2, expires_at FROM auth.sessions WHERE id = $1")
+        .bind(session_id).bind(refresh_hash(&secret).unwrap().to_vec()).execute(&pool).await.unwrap();
+    let sessions = service(&pool);
+    let tokens = sessions.refresh(&secret).await.unwrap();
+    assert_eq!(tokens.sid, session_id);
+    assert_eq!(tokens.account_id, account_id);
+    let checks = auth_service::session_check_service::SessionCheckService::new(pool.clone());
+    let pair = auth_service::session_check_types::SessionCheckRequest {
+        sid: session_id,
+        account_id,
+    };
+    assert!(checks.check(pair).await.unwrap().active);
+    let mut password_request = request(ClientType::Desktop);
+    password_request.email = "unaccredited@example.invalid".into();
+    assert!(matches!(
+        sessions.login(password_request).await,
+        Err(SessionError::InvalidCredentials)
+    ));
+    let evidence: (
+        String,
+        Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
+    ) = sqlx::query_as(
+        "SELECT authentication_method, last_authenticated_at FROM auth.sessions WHERE id = $1",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(evidence.0, "google");
+    assert!(evidence.1.is_none());
+    sqlx::query("UPDATE auth.accounts SET status = 'locked' WHERE id = $1")
+        .bind(account_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!checks.check(pair).await.unwrap().active);
+    assert!(matches!(
+        sessions.refresh(&tokens.refresh_token).await,
+        Err(SessionError::InvalidRefresh)
+    ));
+    let unconsumed: bool = sqlx::query_scalar(
+        "SELECT revoked_at IS NULL FROM auth.refresh_tokens WHERE token_hash = $1",
+    )
+    .bind(refresh_hash(&tokens.refresh_token).unwrap().to_vec())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(unconsumed);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn password_login_records_proof_without_refresh_renewing_it(pool: PgPool) {
+    create_account(&pool).await;
+    let sessions = service(&pool);
+    let tokens = sessions.login(request(ClientType::Desktop)).await.unwrap();
+    let evidence_sql = "SELECT authentication_method, password_credential_version, last_authenticated_at, reauthentication_method, reauthentication_password_version FROM auth.sessions WHERE id = $1";
+    type Evidence = (
+        String,
+        i64,
+        sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+        String,
+        i64,
+    );
+    let before: Evidence = sqlx::query_as(evidence_sql)
+        .bind(tokens.sid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before.0, "password");
+    assert_eq!(before.3, "password");
+    assert_eq!(before.1, before.4);
+    let credential_version: i64 = sqlx::query_scalar("SELECT (extract(epoch FROM password_changed_at) * 1000000)::bigint FROM auth.password_credentials WHERE account_id = $1")
+        .bind(tokens.account_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(before.1, credential_version);
+    let next = sessions.refresh(&tokens.refresh_token).await.unwrap();
+    assert_eq!(next.sid, tokens.sid);
+    let after: Evidence = sqlx::query_as(evidence_sql)
+        .bind(tokens.sid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
 }

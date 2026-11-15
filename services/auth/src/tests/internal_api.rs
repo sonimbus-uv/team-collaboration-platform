@@ -104,6 +104,8 @@ async fn fixture(pool: &PgPool) -> serde_json::Value {
     .fetch_one(pool)
     .await
     .unwrap();
+    sqlx::query("INSERT INTO auth.password_credentials(account_id, password_hash) VALUES ($1, 'fixture-only-hash')")
+        .bind(account).execute(pool).await.unwrap();
     let sid: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO auth.sessions (account_id, client_type, created_at, expires_at)
@@ -792,6 +794,9 @@ async fn public_router_never_exposes_internal_routes() {
     )
     .unwrap();
     let public = crate::routes::router(crate::state::AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
         password_service: None,
         login_enabled: false,
         auth_service: AuthService::new(

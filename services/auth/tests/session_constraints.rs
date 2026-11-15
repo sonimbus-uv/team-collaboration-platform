@@ -15,9 +15,9 @@ fn assert_database_rejection(result: Result<PgQueryResult, sqlx::Error>, expecte
 async fn session_lifetime_identity_and_final_revocation_are_enforced(pool: PgPool) {
     let account_id: Uuid = sqlx::query_scalar(
         "INSERT INTO auth.accounts(
-            email
+            email, email_verified_at
         ) VALUES(
-            'constraints@example.invalid'
+            'constraints@example.invalid', statement_timestamp()
         ) RETURNING id",
     )
     .fetch_one(&pool)
@@ -74,9 +74,9 @@ async fn session_lifetime_identity_and_final_revocation_are_enforced(pool: PgPoo
 async fn absolute_lifetime_rejects_calendar_days_that_add_an_extra_dst_hour(pool: PgPool) {
     let account_id: Uuid = sqlx::query_scalar(
         "INSERT INTO auth.accounts(
-            email
+            email, email_verified_at
         ) VALUES(
-            'dst@example.invalid'
+            'dst@example.invalid', statement_timestamp()
         ) RETURNING id",
     )
     .fetch_one(&pool)

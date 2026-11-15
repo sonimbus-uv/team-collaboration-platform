@@ -6,9 +6,9 @@ async fn revocation_intent_is_atomic_public_and_once_per_session(pool: PgPool) {
     let account_id: Uuid = sqlx::query_scalar(
         "
         INSERT INTO auth.accounts(
-            email
+            email, email_verified_at
         ) VALUES(
-            'outbox@example.invalid'
+            'outbox@example.invalid', statement_timestamp()
         ) RETURNING id",
     )
     .fetch_one(&pool)

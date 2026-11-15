@@ -57,6 +57,9 @@ fn state(pool: &PgPool, mail: Arc<Mail>) -> AppState {
     )
     .unwrap();
     AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
         password_service: None,
         login_enabled: true,
         token_issuer: crate::tests::token_support::issuer(),
@@ -479,19 +482,20 @@ async fn concurrent_same_attempt_and_distinct_attempts_have_only_one_winner(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn verified_accounts_cannot_be_changed_and_legacy_pending_can_be_claimed(pool: PgPool) {
+async fn registration_does_not_claim_another_accounts_pending_contact_or_credentials(pool: PgPool) {
     let mail = Arc::new(Mail::default());
     let state = state(&pool, mail.clone());
     let account: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO auth.accounts (email)
-        VALUES ('legacy@example.com')
+        INSERT INTO auth.accounts DEFAULT VALUES
         RETURNING id
         "#,
     )
     .fetch_one(&pool)
     .await
     .unwrap();
+    sqlx::query("INSERT INTO auth.account_email_proposals(account_id, email) VALUES ($1, 'legacy@example.com')")
+        .bind(account).execute(&pool).await.unwrap();
     sqlx::query(
         r#"
         INSERT INTO auth.password_credentials (account_id, password_hash)
@@ -515,15 +519,12 @@ async fn verified_accounts_cannot_be_changed_and_legacy_pending_can_be_claimed(p
     .unwrap();
     let id = start(&state, "legacy@example.com", "OwnerPass456!").await;
     let code = mail.last();
-    assert_eq!(
-        state
-            .email_verification_service
-            .confirm(id, &code)
-            .await
-            .unwrap()
-            .id,
-        account
-    );
+    let confirmed = state
+        .email_verification_service
+        .confirm(id, &code)
+        .await
+        .unwrap();
+    assert_ne!(confirmed.id, account);
     assert!(state
         .auth_service
         .register(
@@ -545,14 +546,22 @@ async fn verified_accounts_cannot_be_changed_and_legacy_pending_can_be_claimed(p
         WHERE account_id = $1
         "#,
     )
-    .bind(account)
+    .bind(confirmed.id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert!(Argon2PasswordHasher
         .verify_password("OwnerPass456!", &hash)
         .unwrap());
-    assert!(sqlx::query_scalar::<_, bool>(
+    let old_hash: String = sqlx::query_scalar(
+        "SELECT password_hash FROM auth.password_credentials WHERE account_id = $1",
+    )
+    .bind(account)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(old_hash, "legacy-attacker-hash");
+    assert!(!sqlx::query_scalar::<_, bool>(
         r#"
         SELECT invalidated_at IS NOT NULL
         FROM auth.one_time_tokens
