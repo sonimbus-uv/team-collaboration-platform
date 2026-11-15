@@ -8,9 +8,13 @@ pub enum EmailProvider {
 }
 
 pub struct Config {
+    pub contact_email_secret: Option<String>,
+    pub security_notifications_enabled: bool,
+    pub google: Option<crate::services::google_auth_config::GoogleAuthConfig>,
     pub password_recovery_secret: Option<String>,
     pub internal: Option<crate::internal::config::InternalConfig>,
     pub login_enabled: bool,
+    pub google_ip_policy: BucketPolicy,
     pub login_ip_policy: BucketPolicy,
     pub refresh_ip_policy: BucketPolicy,
     pub logout_ip_policy: BucketPolicy,
@@ -88,10 +92,40 @@ impl Config {
         } else {
             None
         };
+        let contact_email_secret = if optional_bool_env("AUTH_CONTACT_EMAIL_ENABLED")? {
+            let secret = required_secret("AUTH_CONTACT_EMAIL_HMAC_SECRET")?;
+            anyhow::ensure!(
+                secret != registration_code_hmac_secret
+                    && secret != recipient_hmac_secret
+                    && password_recovery_secret
+                        .as_ref()
+                        .is_none_or(|other| other != &secret),
+                "Contact email HMAC secret must be independent"
+            );
+            Some(secret)
+        } else {
+            None
+        };
+        let google = if optional_bool_env("AUTH_GOOGLE_ENABLED")? {
+            Some(crate::services::google_auth_config::GoogleAuthConfig::new(
+                required_env("AUTH_GOOGLE_CLIENT_ID")?,
+                required_env("AUTH_GOOGLE_CLIENT_SECRET")?,
+                &required_env("AUTH_GOOGLE_CALLBACK_URL")?,
+                &required_env("AUTH_GOOGLE_RETURN_TARGETS")?,
+            )?)
+        } else {
+            None
+        };
         Ok(Self {
+            contact_email_secret,
+            security_notifications_enabled: optional_bool_env(
+                "AUTH_SECURITY_NOTIFICATIONS_ENABLED",
+            )?,
+            google,
             password_recovery_secret,
             internal: crate::internal::config::InternalConfig::from_env()?,
             login_enabled: optional_bool_env("AUTH_LOGIN_ENABLED")?,
+            google_ip_policy: bucket_policy_from_env("AUTH_GOOGLE_IP", 20, 60)?,
             login_ip_policy: bucket_policy_from_env("AUTH_LOGIN_IP", 6, 60)?,
             refresh_ip_policy: bucket_policy_from_env("AUTH_REFRESH_IP", 30, 60)?,
             logout_ip_policy: bucket_policy_from_env("AUTH_LOGOUT_IP", 30, 60)?,

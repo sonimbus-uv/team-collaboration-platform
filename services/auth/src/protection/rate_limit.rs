@@ -3,9 +3,14 @@ use std::net::IpAddr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthOperation {
+    ContactRead,
+    ContactSend,
+    ContactVerify,
     Register,
     Resend,
     Verify,
+    Google,
+    Reauthenticate,
     Login,
     Refresh,
     Logout,
@@ -17,6 +22,26 @@ pub enum AuthOperation {
 impl AuthOperation {
     pub fn from_request(method: &Method, path: &str) -> Option<Self> {
         match (method.as_str(), path) {
+            ("GET", "/api/v1/auth/contact-email") => Some(Self::ContactRead),
+            (
+                "POST",
+                "/api/v1/auth/contact-email/verification-attempts"
+                | "/api/v1/auth/contact-email/verification-resends",
+            ) => Some(Self::ContactSend),
+            ("POST", "/api/v1/auth/contact-email/verify") => Some(Self::ContactVerify),
+            (
+                "POST",
+                "/api/v1/auth/google/attempts"
+                | "/api/v1/auth/google/link-attempts"
+                | "/api/v1/auth/google/exchange",
+            )
+            | (
+                "GET",
+                "/api/v1/auth/google/authorize"
+                | "/api/v1/auth/google/callback"
+                | "/api/v1/auth/connections",
+            ) => Some(Self::Google),
+            ("POST", "/api/v1/auth/reauthenticate") => Some(Self::Reauthenticate),
             ("POST", "/api/v1/auth/change-password") => Some(Self::ChangePassword),
             ("POST", "/api/v1/auth/forgot-password") => Some(Self::ForgotPassword),
             ("POST", "/api/v1/auth/reset-password") => Some(Self::ResetPassword),
@@ -35,9 +60,14 @@ impl AuthOperation {
             Self::ChangePassword => "change-password",
             Self::ForgotPassword => "forgot-password",
             Self::ResetPassword => "reset-password",
+            Self::Google => "google",
+            Self::Reauthenticate => "reauthenticate",
             Self::Login => "login",
             Self::Refresh => "refresh",
             Self::Logout => "logout",
+            Self::ContactRead => "contact-read",
+            Self::ContactSend => "contact-send",
+            Self::ContactVerify => "contact-verify",
             Self::Register => "register",
             Self::Resend => "resend",
             Self::Verify => "verify",
@@ -49,7 +79,12 @@ impl AuthOperation {
     pub fn is_session(self) -> bool {
         matches!(
             self,
-            Self::Login
+            Self::ContactRead
+                | Self::ContactSend
+                | Self::ContactVerify
+                | Self::Google
+                | Self::Reauthenticate
+                | Self::Login
                 | Self::Refresh
                 | Self::Logout
                 | Self::ChangePassword
@@ -96,6 +131,12 @@ impl BucketPolicy {
     pub fn refill_period_secs(&self) -> u32 {
         self.refill_period_secs
     }
+}
+
+#[derive(Clone, Copy)]
+pub enum ContactAccountOperation {
+    Send,
+    Verify,
 }
 
 #[cfg(test)]
@@ -157,6 +198,27 @@ mod tests {
         assert_eq!(
             get_operation.ip_key(client_ip),
             post_operation.ip_key(client_ip)
+        );
+    }
+
+    #[test]
+    fn google_steps_share_a_budget_independent_of_password_login() {
+        let ip = "192.0.2.10".parse().unwrap();
+        for (method, route) in [
+            (Method::POST, "attempts"),
+            (Method::GET, "authorize"),
+            (Method::GET, "callback"),
+            (Method::POST, "exchange"),
+        ] {
+            let operation =
+                AuthOperation::from_request(&method, &format!("/api/v1/auth/google/{route}"))
+                    .unwrap();
+            assert_eq!(operation, AuthOperation::Google);
+            assert_eq!(operation.ip_key(ip), AuthOperation::Google.ip_key(ip));
+            assert_ne!(operation.ip_key(ip), AuthOperation::Login.ip_key(ip));
+        }
+        assert!(
+            AuthOperation::from_request(&Method::HEAD, "/api/v1/auth/google/callback").is_none()
         );
     }
 
