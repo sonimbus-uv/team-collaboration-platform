@@ -45,10 +45,7 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/auth/reset-password",
             post(crate::handlers::passwords::reset),
         )
-        .route(
-            "/api/v1/auth/login",
-            post(crate::handlers::sessions::login),
-        )
+        .route("/api/v1/auth/login", post(crate::handlers::sessions::login))
         .route(
             "/api/v1/auth/refresh",
             post(crate::handlers::sessions::refresh),
@@ -63,11 +60,72 @@ pub fn router(state: AppState) -> Router {
             limit_auth_requests,
         ));
 
-    let registration_routes = Router::new()
+    let google_routes = Router::new()
         .route(
-            "/api/v1/auth/register",
-            post(auth::register)
+            "/api/v1/auth/google/link-attempts",
+            post(crate::handlers::google::create_link),
         )
+        .route(
+            "/api/v1/auth/connections",
+            get(crate::handlers::google::connections)
+                .head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
+        .route(
+            "/api/v1/auth/reauthenticate",
+            post(crate::handlers::google::reauthenticate),
+        )
+        .route(
+            "/api/v1/auth/google/attempts",
+            post(crate::handlers::google::create),
+        )
+        .route(
+            "/api/v1/auth/google/authorize",
+            get(crate::handlers::google::authorize)
+                .head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
+        .route(
+            "/api/v1/auth/google/callback",
+            get(crate::handlers::google::callback)
+                .head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
+        .route(
+            "/api/v1/auth/google/exchange",
+            post(crate::handlers::google::exchange),
+        )
+        .layer(axum::extract::DefaultBodyLimit::max(4096))
+        .route_layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            limit_auth_requests,
+        ))
+        .layer(middleware::from_fn(crate::handlers::secure_headers));
+
+    let contact_routes = Router::new()
+        .route(
+            "/api/v1/auth/contact-email",
+            get(crate::handlers::contact_email::read)
+                .head(|| async { StatusCode::METHOD_NOT_ALLOWED }),
+        )
+        .route(
+            "/api/v1/auth/contact-email/verification-attempts",
+            post(crate::handlers::contact_email::start),
+        )
+        .route(
+            "/api/v1/auth/contact-email/verification-resends",
+            post(crate::handlers::contact_email::resend),
+        )
+        .route(
+            "/api/v1/auth/contact-email/verify",
+            post(crate::handlers::contact_email::verify),
+        )
+        .layer(axum::extract::DefaultBodyLimit::max(4096))
+        .route_layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            limit_auth_requests,
+        ))
+        .layer(middleware::from_fn(crate::handlers::secure_headers));
+
+    let registration_routes = Router::new()
+        .route("/api/v1/auth/register", post(auth::register))
         .route(
             "/api/v1/auth/verify-email",
             get(auth::verify_email_page)
@@ -91,6 +149,8 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/health/db", get(health_db))
         .route("/health/redis", get(health_redis))
+        .merge(contact_routes)
+        .merge(google_routes)
         .merge(registration_routes)
         .merge(session_and_password_routes)
         .merge(jwks_routes)

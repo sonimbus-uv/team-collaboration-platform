@@ -20,7 +20,9 @@ mod validators;
 
 use std::sync::Arc;
 
-use repositories::accounts_repository::AccountsRepository;
+use repositories::{
+    accounts_repository::AccountsRepository, sessions_repository::SessionsRepository,
+};
 use security::password_hasher::Argon2PasswordHasher;
 use services::account_service::AuthService;
 use state::AppState;
@@ -76,15 +78,20 @@ async fn main() -> anyhow::Result<()> {
 
     let server_addr = config.server_addr.clone();
     let state = build_state(config, pool, token_issuer, auth_rate_limiter)?;
-    let cleanup_service = state.password_service.clone();
-
+    let cleanup_services = services::maintenance::CleanupServices {
+        passwords: state.password_service.clone(),
+        google: state.google_service.clone(),
+        contact_email: state.contact_email_service.clone(),
+    };
+    let notification_service = state.security_notifications.clone();
     let app = routes::router(state);
     let listener = tokio::net::TcpListener::bind(server_addr).await?;
     let public = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     );
-    let cleanup_task = cleanup_service.map(spawn_password_cleanup);
+    let cleanup_task = services::maintenance::spawn_cleanup(cleanup_services);
+    let notification_task = notification_service.map(|service| service.spawn());
     let result = if let Some(internal) = internal {
         tokio::select! {
             result = public => result.map_err(anyhow::Error::from),
@@ -93,7 +100,9 @@ async fn main() -> anyhow::Result<()> {
     } else {
         public.await.map_err(anyhow::Error::from)
     };
-    if let Some(task) = cleanup_task {
+    cleanup_task.abort();
+    let _ = cleanup_task.await;
+    if let Some(task) = notification_task {
         task.abort();
         let _ = task.await;
     }
@@ -144,14 +153,55 @@ fn build_state(
                 crate::services::password_service::PasswordServiceDependencies {
                     pool: pool.clone(),
                     passwords: password_processor.clone(),
-                    sender,
+                    sender: sender.clone(),
                     limiter: auth_rate_limiter.clone(),
                 },
                 secret.as_bytes(),
             )
         })
         .transpose()?;
+    let google_service = config
+        .google
+        .map(|google| {
+            services::google_auth_service::GoogleAuthService::new(
+                repositories::federated_auth_repository::FederatedAuthRepository {
+                    pool: pool.clone(),
+                },
+                services::session_service::SessionService::new(
+                    SessionsRepository::new(pool.clone()),
+                    password_processor.clone(),
+                    token_issuer.clone(),
+                ),
+                google,
+            )
+        })
+        .transpose()?;
+    let contact_email_service = config
+        .contact_email_secret
+        .as_ref()
+        .map(|secret| {
+            services::contact_email_service::ContactEmailService::new(
+                repositories::contact_email_repository::ContactEmailRepository {
+                    pool: pool.clone(),
+                },
+                sender.clone(),
+                auth_rate_limiter.clone(),
+                secret.as_bytes(),
+            )
+        })
+        .transpose()?;
+    let security_notifications = config.security_notifications_enabled.then(|| {
+        services::security_notification_service::SecurityNotificationService::new(
+            repositories::security_notifications_repository::SecurityNotificationsRepository {
+                pool: pool.clone(),
+            },
+            sender,
+        )
+    });
     Ok(AppState {
+        contact_email_service,
+        security_notifications,
+        google_service,
         password_service,
         login_enabled: config.login_enabled,
         token_issuer,
@@ -159,20 +209,5 @@ fn build_state(
         auth_service,
         email_verification_service,
         auth_rate_limiter,
-    })
-}
-
-fn spawn_password_cleanup(
-    service: services::password_service::PasswordService,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3_600));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-            if service.cleanup().await.is_err() {
-                tracing::warn!("Password recovery cleanup unavailable");
-            }
-        }
     })
 }

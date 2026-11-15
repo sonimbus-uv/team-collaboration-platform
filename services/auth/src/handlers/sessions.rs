@@ -1,5 +1,5 @@
 pub(crate) use super::response::protection;
-use super::response::{problem, protected};
+use super::response::{database_error, problem, protected, rate_limited};
 use crate::{
     dto::sessions::{LoginRequest, RefreshRequest},
     error::ApiError,
@@ -13,6 +13,8 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+
+const MAX_REFRESH_TOKEN_CHARACTERS: usize = 512;
 
 pub async fn login(
     State(state): State<AppState>,
@@ -33,7 +35,7 @@ pub async fn login(
     {
         Ok(RateLimitDecision::Allowed) => {}
         Ok(RateLimitDecision::Limited { retry_after_secs }) => {
-            return protection(ApiError::RateLimited { retry_after_secs })
+            return rate_limited(retry_after_secs)
         }
         Err(_) => return problem(StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
     }
@@ -48,7 +50,7 @@ pub async fn refresh(
     State(state): State<AppState>,
     request: Result<Json<RefreshRequest>, JsonRejection>,
 ) -> Response {
-    let request = match token_request(request) {
+    let request = match parse_refresh_request(request) {
         Ok(request) => request,
         Err(error) => return from_error(error),
     };
@@ -63,7 +65,7 @@ pub async fn logout(
     State(state): State<AppState>,
     request: Result<Json<RefreshRequest>, JsonRejection>,
 ) -> Response {
-    let request = match token_request(request) {
+    let request = match parse_refresh_request(request) {
         Ok(request) => request,
         Err(error) => return from_error(error),
     };
@@ -74,13 +76,13 @@ pub async fn logout(
     }
 }
 
-fn token_request(
+fn parse_refresh_request(
     request: Result<Json<RefreshRequest>, JsonRejection>,
 ) -> Result<RefreshRequest, SessionError> {
     match request {
         Ok(Json(request))
             if !request.refresh_token.is_empty()
-                && request.refresh_token.chars().count() <= 512 =>
+                && request.refresh_token.chars().count() <= MAX_REFRESH_TOKEN_CHARACTERS =>
         {
             Ok(request)
         }
@@ -91,24 +93,13 @@ fn token_request(
 pub fn from_error(error: SessionError) -> Response {
     let (status, kind) = match error {
         SessionError::Malformed => (StatusCode::BAD_REQUEST, "malformed-request"),
+        SessionError::InvalidAccess => (StatusCode::UNAUTHORIZED, "invalid-access-token"),
         SessionError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid-credentials"),
         SessionError::InvalidRefresh => (StatusCode::UNAUTHORIZED, "invalid-refresh-token"),
         SessionError::Busy => return protection(ApiError::Busy),
         SessionError::CommitUncertain => (StatusCode::INTERNAL_SERVER_ERROR, "internal-error"),
         SessionError::Signing => (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable"),
-        SessionError::Database(error) => {
-            if matches!(
-                error,
-                sqlx::Error::PoolTimedOut
-                    | sqlx::Error::PoolClosed
-                    | sqlx::Error::Io(_)
-                    | sqlx::Error::Tls(_)
-            ) {
-                (StatusCode::SERVICE_UNAVAILABLE, "auth-unavailable")
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal-error")
-            }
-        }
+        SessionError::Database(error) => return database_error(error),
     };
     problem(status, kind)
 }

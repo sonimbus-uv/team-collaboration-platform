@@ -12,6 +12,10 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub contact_email_service: Option<crate::services::contact_email_service::ContactEmailService>,
+    pub security_notifications:
+        Option<crate::services::security_notification_service::SecurityNotificationService>,
+    pub google_service: Option<crate::services::google_auth_service::GoogleAuthService>,
     pub password_service: Option<PasswordService>,
     pub login_enabled: bool,
     pub token_issuer: Arc<AccessTokenIssuer>,
