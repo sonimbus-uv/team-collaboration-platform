@@ -36,6 +36,8 @@ jobs:
           --health-retries 10
       mailpit:
         image: axllent/mailpit:v1.29.7
+        env:
+          MP_SMTP_DISABLE_RDNS: "true"
         ports:
           - 1025:1025
           - 8025:8025
@@ -69,3 +71,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nginx
       - name: Check public JWKS routing and existing budgets
         run: python3 scripts/auth/tests/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx
+      - name: Check development certificates and HTTPS gateway
+        run: |
+          python3 scripts/auth/tests/test-gateway-tls-setup.py
+          python3 scripts/auth/tests/test-auth-jwks-gateway.py --nginx /usr/sbin/nginx --tls
