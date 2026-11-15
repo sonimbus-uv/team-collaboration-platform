@@ -143,6 +143,9 @@ validar la sintaxis de sus scripts no equivale a ejecutar las colecciones.
 
 ## Evidencia de validación
 
+La [validación de integración del 2026-11-14](validation-2026-11-14.md) registra
+el entorno, los comandos, Postman y los límites de esa ejecución concreta.
+
 Cada PR registra alcance, comandos ejecutados, dependencias, resultados y pruebas
 omitidas con su motivo. Un resultado local no acredita CI remoto, despliegue,
 consumidores ni compatibilidad multinodo. Los informes antiguos se conservan
