@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sonimbus Auth: API pública",
-    "version": "0.2.0",
-    "description": "Contrato público compuesto de registro, sesiones, contraseñas y JWKS. Las operaciones funcionales se definen una sola vez en auth-registration.yaml, auth-sessions.yaml y auth-passwords.yaml. Semántica: ../auth/public-api.md y ../auth/tokens.md. Login y contraseñas requieren activación explícita; la integración de consumidores y el despliegue permanecen sujetos a revisión."
+    "version": "0.5.0",
+    "description": "Contrato público compuesto de registro, sesiones, contraseñas y JWKS. Las operaciones funcionales se definen una sola vez en auth-registration.yaml, auth-sessions.yaml y auth-passwords.yaml. Semántica: ../auth/public-api.md y ../auth/tokens.md. Login y contraseñas requieren activación explícita; la integración de consumidores y el despliegue permanecen sujetos a revisión. Login Google se define en auth-google.yaml y requiere activación independiente. La verificación de contacto se define en auth-contact-email.yaml y tiene activación propia."
   },
   "servers": [
     {
@@ -118,6 +118,39 @@
     },
     "/api/v1/auth/reset-password": {
       "$ref": "./auth-passwords.yaml#/paths/~1api~1v1~1auth~1reset-password"
+    },
+    "/api/v1/auth/google/attempts": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1google~1attempts"
+    },
+    "/api/v1/auth/google/authorize": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1google~1authorize"
+    },
+    "/api/v1/auth/google/callback": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1google~1callback"
+    },
+    "/api/v1/auth/google/exchange": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1google~1exchange"
+    },
+    "/api/v1/auth/google/link-attempts": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1google~1link-attempts"
+    },
+    "/api/v1/auth/reauthenticate": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1reauthenticate"
+    },
+    "/api/v1/auth/connections": {
+      "$ref": "./auth-google.yaml#/paths/~1api~1v1~1auth~1connections"
+    },
+    "/api/v1/auth/contact-email": {
+      "$ref": "./auth-contact-email.yaml#/paths/~1api~1v1~1auth~1contact-email"
+    },
+    "/api/v1/auth/contact-email/verification-attempts": {
+      "$ref": "./auth-contact-email.yaml#/paths/~1api~1v1~1auth~1contact-email~1verification-attempts"
+    },
+    "/api/v1/auth/contact-email/verification-resends": {
+      "$ref": "./auth-contact-email.yaml#/paths/~1api~1v1~1auth~1contact-email~1verification-resends"
+    },
+    "/api/v1/auth/contact-email/verify": {
+      "$ref": "./auth-contact-email.yaml#/paths/~1api~1v1~1auth~1contact-email~1verify"
     }
   },
   "components": {
