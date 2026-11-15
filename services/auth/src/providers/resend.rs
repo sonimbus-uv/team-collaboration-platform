@@ -1,7 +1,9 @@
 use crate::{
     email::{
+        contact_template::google_link_notice,
+        content::EmailContent,
         recovery_template::recovery_email_content,
-        verification_template::{verification_email_content, VerificationEmailContent},
+        verification_template::verification_email_content,
     },
     ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
 };
@@ -31,7 +33,7 @@ impl ResendEmailSender {
     async fn deliver(
         &self,
         recipient_email: &str,
-        email_content: VerificationEmailContent,
+        email_content: EmailContent,
     ) -> Result<(), EmailDeliveryError> {
         let provider_response = self
             .http_client
@@ -67,6 +69,24 @@ impl VerificationEmailSender for ResendEmailSender {
         locale: &str,
     ) -> Result<(), EmailDeliveryError> {
         self.deliver(recipient_email, verification_email_content(locale, code))
+            .await
+    }
+
+    async fn send_contact_verification(
+        &self,
+        recipient_email: &str,
+        code: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, verification_email_content(locale, code))
+            .await
+    }
+    async fn send_security_notice(
+        &self,
+        recipient_email: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, google_link_notice(locale))
             .await
     }
 

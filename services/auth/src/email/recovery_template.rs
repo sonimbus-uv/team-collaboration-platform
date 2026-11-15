@@ -1,6 +1,6 @@
-use super::verification_template::VerificationEmailContent;
+use super::content::EmailContent;
 
-pub fn recovery_email_content(locale: &str, code: &str) -> VerificationEmailContent {
+pub fn recovery_email_content(locale: &str, code: &str) -> EmailContent {
     let (subject, before, after) = if matches!(locale, "en" | "en-US") {
         ("Reset your Sonimbus password",
          "Hello,\n\nWe received a request to reset your Sonimbus account password.\n\nYour recovery code is:",
@@ -24,7 +24,8 @@ pub fn recovery_email_content(locale: &str, code: &str) -> VerificationEmailCont
             "Equipo Sonimbus",
         ))
     };
-    VerificationEmailContent {
+    
+    EmailContent {
         subject,
         text: format!("{before}\n\n{code}\n\n{after}"),
         html: format!("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><h1>{subject}</h1><p>{}</p><p style=\"font-size:28px;letter-spacing:4px\">{}</p><p>{}</p></body></html>", super::html::escape_html(before).replace('\n', "<br>"), super::html::escape_html(code), super::html::escape_html(after).replace('\n', "<br>")),

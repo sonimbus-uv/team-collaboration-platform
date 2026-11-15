@@ -27,6 +27,23 @@ pub trait VerificationEmailSender: Send + Sync {
         locale: &str,
     ) -> Result<(), EmailDeliveryError>;
 
+    async fn send_contact_verification(
+        &self,
+        _recipient_email: &str,
+        _code: &str,
+        _locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        Err(EmailDeliveryError::Transport)
+    }
+
+    async fn send_security_notice(
+        &self,
+        _recipient_email: &str,
+        _locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        Err(EmailDeliveryError::Transport)
+    }
+
     async fn send_recovery(
         &self,
         _recipient_email: &str,
