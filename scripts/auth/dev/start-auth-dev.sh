@@ -21,7 +21,7 @@ done
 if [[ -f "$HOME/.cargo/env" ]]; then
   source "$HOME/.cargo/env"
 fi
-for tool in cargo docker systemctl sudo; do
+for tool in cargo docker systemctl sudo python3 openssl; do
   command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
 done
 if [[ $EUID -eq 0 ]]; then
@@ -34,9 +34,13 @@ sudo systemctl start auth-firewall.service
 sudo nft list table inet auth_guard >/dev/null
 
 echo "Starting dependencies and gateway..."
-docker compose --env-file "$PROJECT_DIR/infrastructure/.env" \
-  -f "$PROJECT_DIR/infrastructure/compose.yaml" \
-  up -d --wait --wait-timeout 120 postgres redis mailpit nginx
+python3 "$PROJECT_DIR/scripts/auth/dev/setup-gateway-tls.py"
+export GATEWAY_TLS_DIR="$HOME/.local/share/sonimbus-gateway-dev"
+COMPOSE=(docker compose --env-file "$PROJECT_DIR/infrastructure/.env"
+  -f "$PROJECT_DIR/infrastructure/compose.yaml"
+  -f "$PROJECT_DIR/infrastructure/compose.auth-tls.yaml")
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres redis mailpit
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 nginx
 
 echo "Starting Auth; development login enabled: $LOGIN_ENABLED"
 echo "Ctrl+C stops Auth. Containers and firewall remain running."
