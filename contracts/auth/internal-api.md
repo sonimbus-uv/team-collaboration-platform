@@ -11,11 +11,10 @@ describe la consulta de dominio; la [operación](../../services/auth/docs/operat
 los procedimientos de red y credenciales.
 
 El [diseño Google/contacto aprobado](public-api.md#google-y-correo-de-contacto)
-prevé sesiones Google válidas sin contacto verificado. La regla de actividad
-actual descrita abajo todavía exige correo verificado. La implementación futura
-deberá actualizar conjuntamente creación, renovación y consulta autoritativa,
-sin admitir por ello cuentas locales pendientes ni alterar el formato de respuesta.
-Este documento y OpenAPI describen hoy el comportamiento anterior a esa migración.
+se refleja en la elegibilidad por método incorporada con `0011`: las sesiones
+Google asociadas a una identidad de la misma cuenta pueden carecer de contacto
+verificado. Las sesiones locales pendientes siguen rechazadas. El formato de
+respuesta se conserva y el login Google requiere activación explícita e independiente.
 
 ## Autenticación y límites
 
@@ -55,7 +54,10 @@ una respuesta de sesión. La liberación de una reserva no devuelve cuota consum
 POST individual y lote reciben pares `sid`, `account_id` UUID tomados del JWT
 ya validado (`sub` → `account_id`). Respuesta 200: `active`, identificadores
 eco y `session_expires_at` UTC (null si inactivo). `active=true` exige coincidencia
-cuenta/sesión, cuenta activa y verificada, sesión no revocada y no vencida.
+cuenta/sesión, cuenta activa, sesión no revocada y no vencida, además de
+elegibilidad por método: `password` y `legacy` requieren contacto verificado y
+credencial local; `google` requiere su identidad Google asociada a esa cuenta.
+Una identidad externa de la cuenta no habilita sus sesiones locales pendientes.
 Sesión inexistente, cuenta distinta, estado bloqueado o revocado: `active=false`
 sin revelar motivo ni datos de la cuenta real. No cachear negativos en esta etapa.
 El lote devuelve exactamente un resultado por par, mismo orden; una evaluación

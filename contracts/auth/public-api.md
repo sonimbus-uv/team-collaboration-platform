@@ -20,7 +20,9 @@ Las URL de ejemplo de OpenAPI son ficticias; cada integración requiere acordar
 el entorno real y las credenciales de prueba.
 
 La [especificación Google y correo de contacto](#google-y-correo-de-contacto) es
-el diseño aprobado v1.0, pendiente de migraciones, OpenAPI e implementación.
+el diseño aprobado v1.0. El esquema y la transición de contacto están implementados;
+el login Google y su OpenAPI están implementados; vinculación y contacto siguen
+pendientes.
 Los archivos OpenAPI actuales describen las operaciones ya incorporadas; esta
 sección no acredita endpoints Google disponibles ni modifica su comportamiento.
 
@@ -64,7 +66,7 @@ intento junto al flujo de registro, no lo sustituye por el correo.
 La contraseña queda ligada solo a ese intento, no a otros para el mismo correo.
 Hasta cinco intentos pendientes utilizables pueden coexistir diez minutos, sin
 expulsión. Una cuenta antigua no verificada no impide iniciar un intento nuevo.
-Una cuenta verificada/bloqueada mantiene 409; esto conserva enumeración conocida.
+Un contacto canónico existente, incluso en cuenta bloqueada, mantiene 409; esto conserva enumeración conocida.
 
 ### Confirmación
 
@@ -126,9 +128,10 @@ No interpretar un enlace antiguo ni el ID solo como prueba de verificación.
 GET `/api/v1/auth/verify-email` responde 410 informativo, ignorando query/token y sin
 cambiar datos; HEAD 405. POST `{"token":...}` y reenvío `{"email":...}` ya no
 son admitidos. Los enlaces anteriores no activan nada. La migración no purga
-cuentas ni tokens reales. Una confirmación nueva válida puede reclamar una
-cuenta antigua no verificada con su propio hash; cuentas verificadas por el
-flujo anterior requieren auditoría aparte, sin corrección automática.
+cuentas ni tokens reales. Una confirmación nueva válida crea su propia cuenta y
+credencial; no reclama cuentas heredadas ni sus sesiones. Las direcciones antiguas
+no verificadas pasan a propuestas sin exclusividad. Las cuentas verificadas por
+el flujo anterior requieren auditoría aparte, sin corrección automática.
 
 Antes de habilitar login: revisión técnica y de enumeración, auditoría de
 cuentas heredadas, aprovisionamiento/rotación del secreto en todas las réplicas,
@@ -467,12 +470,22 @@ es-MX; no se incorpora un campo nuevo de idioma al contrato HTTP.
 
 ## Google y correo de contacto
 
-**Versión 1.0. Diseño aprobado el 2026-11-09; implementación pendiente.** Esta
+**Versión 1.0. Diseño aprobado el 2026-11-09; login implementado con activación explícita.** Esta
 sección es la fuente normativa de CU-04, la vinculación de Google y CU-02 Verificar
 correo de contacto. Sustituye las propuestas de verificación obligatoria después
 de Google, contraseña obligatoria en cada vinculación y vinculación automática
-por coincidencia de correo. Las migraciones y el contrato OpenAPI ejecutable se
-abordarán antes de habilitar estos endpoints. No existe aprobación de despliegue.
+por coincidencia de correo. El [OpenAPI Google](../openapi/auth-google.yaml)
+describe login, vinculación explícita, conexiones y reautenticación por contraseña.
+La [verificación general de contacto](../openapi/auth-contact-email.yaml) y el worker
+de avisos están implementados con banderas independientes. No existe aprobación de despliegue.
+
+El [diseño de migraciones](../../services/auth/docs/architecture.md#diseño-de-migraciones-google-y-contacto)
+concreta el modelo y la transición segura. Las migraciones `0007`–`0013`, el
+contacto opcional y la elegibilidad de sesión por método están implementados.
+El adaptador OIDC y el login Google ya están disponibles con activación explícita;
+la vinculación, reautenticación por contraseña, verificación de contacto y avisos
+están incorporados con activación explícita. El cambio no acredita direcciones
+antiguas ni habilita acceso mediante Google.
 
 ### Alcance y conceptos
 
@@ -540,8 +553,10 @@ de migraciones, conservando el estado administrativo y evitando apropiaciones.
 
 ### Contrato HTTP y recorrido Google
 
-Las rutas siguientes son objetivo aprobado, no endpoints disponibles actualmente.
-La integración permanecerá deshabilitada por defecto hasta su aprovisionamiento:
+Las rutas `google/attempts`, `google/authorize`, `google/callback` y
+`google/exchange` implementan login. `google/link-attempts`, `reauthenticate` y
+`connections` también están implementadas. Los endpoints de contacto tienen
+su propio OpenAPI y activación independiente. La integración permanece deshabilitada por defecto hasta su aprovisionamiento:
 cliente OAuth confidencial del backend, callback HTTPS fijo, audiencias, destinos
 de retorno permitidos y claves de propósito. Ningún secreto confidencial se
 distribuye a las aplicaciones. Los valores reales pertenecen al entorno protegido,
@@ -585,7 +600,7 @@ fijo de Auth → destino del cliente → exchange. El callback comprueba `state`
 correlación del navegador y `nonce`; rechaza parámetros de seguridad duplicados,
 combinaciones inconsistentes y callbacks repetidos. Los parámetros informativos
 adicionales de Google se ignoran sin reflejarlos. La cookie de correlación es
-Secure, HttpOnly y SameSite=Lax; no es una sesión de usuario ni autoriza exchange.
+por intento, usa prefijo `__Host-`, Path=/, Secure, HttpOnly y SameSite=Lax; no es una sesión de usuario ni autoriza exchange.
 
 El backend intercambia el código por el ID token, fuera de transacciones SQL,
 y valida firma, algoritmo permitido, emisor, audiencia configurada, vencimiento,
@@ -594,6 +609,11 @@ proceden de configuración/discovery confiables de Google, con caché acotada y
 actualización limitada ante `kid` desconocido. No se usa el verificador Ed25519
 de Sonimbus para aceptar tokens Google. Solo se solicitan `openid email`; no se
 persisten access ni refresh de Google ni el ID token completo.
+
+El retorno implementado incluye `attempt_id` y `completion_code`; en cancelación
+o fallo incluye `attempt_id` y `error=cancelled|failed`. HEAD responde 405 sin
+consumir el intento. Una reserva durable evita canjes Google concurrentes del
+mismo callback; una caída después de reservar requiere iniciar otro flujo.
 
 El callback no crea sesión ni vinculación. Entrega un código de finalización de
 un solo uso ligado a intento y desafío. El código no es un access ni un refresh.
@@ -644,6 +664,20 @@ La coincidencia entre correos no es requisito de vinculación y tampoco acredita
 control de una cuenta distinta. La restricción de identidad se comprueba de nuevo
 al confirmar la transacción para resolver carreras entre intentos.
 
+La implementación registra el evento y encola el aviso al contacto verificado
+junto con el vínculo. No usa como destinatario el correo informado por Google
+cuando falta ese contacto. El worker requiere `AUTH_SECURITY_NOTIFICATIONS_ENABLED`
+y reintenta de forma acotada, sin mantener transacciones durante SMTP/HTTP.
+Una fila en outbox no acredita entrega; `delivered_at` registra aceptación del
+proveedor. Una caída entre envío y confirmación puede repetir el mismo aviso:
+la entrega externa tiene semántica de al menos una vez, sin crear otro evento.
+La presentación de eventos en la interfaz sigue pendiente de integración del cliente.
+
+La reautenticación por contraseña admite seis solicitudes por IP y seis por
+cuenta cada 60 segundos mediante presupuestos Redis independientes. Los límites
+se comparten entre réplicas y los fallos de Redis rechazan la operación. En esta
+etapa, las tres operaciones autenticadas requieren `AUTH_GOOGLE_ENABLED`.
+
 ### Verificar correo de contacto
 
 CU-02 es general e independiente del proveedor. Su actor es un usuario autenticado
@@ -654,7 +688,7 @@ obligatoriamente después de Google ni presenta avisos en cada inicio de sesión
 | Método y ruta bajo `/api/v1/auth` | Entrada y resultado |
 |---|---|
 | `GET /contact-email` | `200 {contact_email, contact_email_verified, pending_contact_email}`; las direcciones ausentes son nulas |
-| `POST /contact-email/verification-attempts` | `{email}`; `202 {verification_attempt_id, expires_at}` |
+| `POST /contact-email/verification-attempts` | `{email}`; `202 {verification_attempt_id, expires_at}`; `204` si ya es el contacto verificado de esa cuenta |
 | `POST /contact-email/verification-resends` | `{verification_attempt_id}`; `202` con el mismo identificador y vencimiento |
 | `POST /contact-email/verify` | `{verification_attempt_id, code}`; `204` al asignar el contacto |
 
@@ -664,6 +698,14 @@ solicitud no acepta un `account_id` de destino. Una dirección distinta sustituy
 la propuesta pendiente e invalida sus códigos. Un contacto ya verificado para la
 misma cuenta no requiere otro código; la confirmación es idempotente. Cambiar un
 contacto ya verificado queda fuera del alcance y devuelve conflicto.
+
+Las cuatro operaciones requieren `AUTH_CONTACT_EMAIL_ENABLED`, independiente de
+Google. Repetir la misma propuesta vigente conserva identificador y vencimiento,
+sin generar otro código ni reenviar correo. Un reintento de confirmación con el
+código consumido válido sobre ese mismo contacto responde 204 durante la retención.
+La verificación no renueva evidencia de autenticación reciente ni crea contraseñas
+o sesiones. Las solicitudes conocidas de un registro que pierde la exclusividad
+frente a contacto o Google responden conflicto, conservando sus garantías de consumo.
 
 El código tiene ocho dígitos CSPRNG y se trata como texto. La vigencia es de diez
 minutos; el quinto fallo bloquea el intento. El reenvío requiere 60 segundos,
@@ -679,6 +721,13 @@ El envío sucede fuera de la transacción. `202` acredita aceptación de la soli
 no entrega del correo. Un fallo de proveedor conserva un estado reintentable,
 sin activar contacto. Las políticas de abuso comparten el presupuesto de envío
 por destinatario e incorporan límites por cuenta e IP; no dependen solo del código.
+
+Redis usa presupuestos de IP separados: lectura (capacidad 30), envío (6) y
+confirmación (20), con recarga completa de 60 segundos. Por cuenta, envío y
+confirmación tienen capacidades 6 y 20, con recarga de 600 segundos; crear y
+reenviar comparten envío. El presupuesto por destinatario se comparte con registro.
+Una reserva de presupuesto puede consumirse aunque una carrera impida el envío.
+Los fallos de Redis rechazan la operación. Estos valores iniciales requieren medición.
 
 Registro con contraseña y verificación de contacto reutilizan el mecanismo de
 códigos, MAC, expiración, consumo, envío y fallos, pero mantienen contextos y

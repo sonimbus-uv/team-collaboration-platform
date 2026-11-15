@@ -20,9 +20,10 @@ conservan en [ADR](../docs/decisions/README.md); los resultados de ejecuciones y
 planes históricos no forman parte del contrato vigente.
 
 El [contrato Google y contacto v1.0](auth/public-api.md#google-y-correo-de-contacto)
-está aprobado como diseño y pendiente de implementación. Su semántica se mantiene
-en ese documento único; los OpenAPI siguientes todavía no incluyen sus rutas
-objetivo ni la nueva elegibilidad de sesión.
+centraliza su semántica. El esquema, el adaptador, login, vinculación, conexiones
+y reautenticación por contraseña están implementados con activación explícita.
+La verificación general de contacto y el worker de avisos también están implementados
+con banderas independientes; la integración de clientes y el despliegue requieren validación.
 
 ## OpenAPI
 
@@ -34,6 +35,8 @@ Los archivos usan OpenAPI 3.1 en sintaxis JSON compatible con YAML:
 | [auth-registration.yaml](openapi/auth-registration.yaml) | Registro, verificación y reenvío |
 | [auth-sessions.yaml](openapi/auth-sessions.yaml) | Login, refresh y logout |
 | [auth-passwords.yaml](openapi/auth-passwords.yaml) | Cambio y recuperación de contraseña |
+| [auth-google.yaml](openapi/auth-google.yaml) | Login Google, vinculación, conexiones y reautenticación |
+| [auth-contact-email.yaml](openapi/auth-contact-email.yaml) | Contacto propio, solicitud, reenvío y confirmación de correo |
 | [auth-internal.yaml](openapi/auth-internal.yaml) | Consulta privada por HTTPS, independiente del contrato público |
 
 Cada operación tiene una única definición en su archivo funcional. `auth.yaml`
