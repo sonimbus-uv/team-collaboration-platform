@@ -181,3 +181,24 @@ Con el firewall público instalado, el primer curl debe fallar. Si el acceso
 directo funciona y el gateway responde 502, corresponde revisar upstream, bridge
 y reglas. Ningún health check aislado acredita readiness conjunta. `cargo test`
 no mantiene un servidor Auth en ejecución.
+
+## Worker de avisos de vinculación
+
+La activación requiere proveedor de correo aprovisionado y
+`AUTH_SECURITY_NOTIFICATIONS_ENABLED=true`. Una fila en
+`auth.security_notification_outbox` indica trabajo pendiente; `delivered_at`
+registra aceptación del proveedor, no lectura del buzón. El worker revisa el
+contacto verificado al reservar y nunca sustituye el destinatario por el correo Google.
+
+El contador permite hasta diez reservas. Las filas con contador agotado y sin
+confirmación requieren investigación del proveedor y de conectividad antes de una
+recuperación controlada; no se borra el evento ni se disminuye el contador.
+`last_error_kind` conserva únicamente `timeout` o `provider_failed`. Los intentos
+interrumpidos pueden no tener categoría y vuelven a ser elegibles tras 60 segundos,
+si todavía queda presupuesto. Los reintentos usan espera exponencial de hasta una hora.
+
+El reinicio puede ocurrir después de que el proveedor acepte el aviso y antes del
+ack SQL. La recuperación puede repetirlo; no debe presentarse esta entrega como
+exactamente una vez. El índice `0013` excluye del recorrido normal las filas
+entregadas o agotadas. El correo no contiene códigos ni enlaces de autenticación.
+No se deben incluir direcciones, cuerpos ni respuestas del proveedor en diagnósticos.
