@@ -25,15 +25,24 @@ pub struct RegisterResponse {
     pub verification_email_sent: bool,
 }
 
-impl From<Account> for RegisterResponse {
-    fn from(account: Account) -> Self {
-        Self {
+#[derive(Debug)]
+pub struct UnverifiedRegistrationAccount;
+
+impl TryFrom<Account> for RegisterResponse {
+    type Error = UnverifiedRegistrationAccount;
+
+    fn try_from(account: Account) -> Result<Self, Self::Error> {
+        let email = account
+            .email
+            .filter(|_| account.email_verified)
+            .ok_or(UnverifiedRegistrationAccount)?;
+        Ok(Self {
             user_id: account.id.to_string(),
-            email: account.email,
+            email,
             email_verified: account.email_verified,
             status: account.status,
             verification_email_sent: false,
-        }
+        })
     }
 }
 
@@ -48,4 +57,34 @@ pub struct VerifyEmailRequest {
 #[serde(deny_unknown_fields)]
 pub struct ResendVerificationRequest {
     pub registration_attempt_id: Uuid,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registration_responses_require_an_accredited_contact() {
+        for (email, email_verified) in [
+            (None, false),
+            (Some("person@example.invalid".to_owned()), false),
+        ] {
+            let account = Account {
+                id: Uuid::new_v4(),
+                email,
+                status: "active".into(),
+                email_verified,
+            };
+            assert!(RegisterResponse::try_from(account).is_err());
+        }
+        let account = Account {
+            id: Uuid::new_v4(),
+            email: Some("person@example.invalid".into()),
+            status: "active".into(),
+            email_verified: true,
+        };
+        let response = RegisterResponse::try_from(account).unwrap();
+        assert_eq!(response.email, "person@example.invalid");
+        assert!(response.email_verified);
+    }
 }

@@ -99,7 +99,6 @@ impl RegistrationAttemptsRepository {
                 SELECT 1
                 FROM auth.accounts
                 WHERE email = $1
-                  AND (email_verified_at IS NOT NULL OR status <> 'active')
             )
             "#,
         )
@@ -186,7 +185,6 @@ impl RegistrationAttemptsRepository {
                         SELECT 1
                         FROM auth.accounts a
                         WHERE a.email = t.email
-                          AND (a.email_verified_at IS NOT NULL OR a.status <> 'active')
                     ),
                 code_version,
                 GREATEST(
@@ -255,8 +253,11 @@ impl RegistrationAttemptsRepository {
         let mut tx = self.pool.begin().await?;
         Self::lock_email(&mut tx, &attempt.email).await?;
         let row = Self::lock_attempt(&mut tx, id).await?;
-        if !row.usable || Self::registered(&mut tx, &attempt.email).await? {
+        if !row.usable {
             return Err(RegistrationError::Invalid);
+        }
+        if Self::registered(&mut tx, &attempt.email).await? {
+            return Err(RegistrationError::AlreadyRegistered);
         }
         if !key.verify(id, row.code_version, code, &row.code_mac) {
             sqlx::query(
@@ -278,9 +279,7 @@ impl RegistrationAttemptsRepository {
             INSERT INTO auth.accounts(email, email_verified_at)
             VALUES ($1, clock_timestamp())
             ON CONFLICT (email)
-            DO UPDATE SET email_verified_at = clock_timestamp()
-            WHERE auth.accounts.email_verified_at IS NULL
-              AND auth.accounts.status = 'active'
+            DO NOTHING
             RETURNING
                 id,
                 email::text AS email,
@@ -291,31 +290,15 @@ impl RegistrationAttemptsRepository {
         .bind(&attempt.email)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or(RegistrationError::Invalid)?;
+        .ok_or(RegistrationError::AlreadyRegistered)?;
         sqlx::query(
             r#"
             INSERT INTO auth.password_credentials(account_id, password_hash)
             VALUES ($1, $2)
-            ON CONFLICT (account_id)
-            DO UPDATE SET
-                password_hash = EXCLUDED.password_hash,
-                password_changed_at = clock_timestamp()
             "#,
         )
         .bind(account.id)
         .bind(&row.password_hash)
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            r#"
-            UPDATE auth.sessions
-            SET revoked_at = clock_timestamp(), revoke_reason = 'password_changed'
-            WHERE account_id = $1
-              AND revoked_at IS NULL
-            "#,
-        )
-        .bind(account.id)
         .execute(&mut *tx)
         .await?;
 
@@ -337,20 +320,6 @@ impl RegistrationAttemptsRepository {
         )
         .bind(id)
         .bind(&attempt.email)
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query(
-            r#"
-            UPDATE auth.one_time_tokens
-            SET invalidated_at = clock_timestamp()
-            WHERE account_id = $1
-              AND purpose = 'email_verification'
-              AND used_at IS NULL
-              AND invalidated_at IS NULL
-            "#,
-        )
-        .bind(account.id)
         .execute(&mut *tx)
         .await?;
 

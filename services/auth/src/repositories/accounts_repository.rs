@@ -8,7 +8,7 @@ pub struct AccountsRepository {
 #[derive(Debug, sqlx::FromRow)]
 pub struct Account {
     pub id: Uuid,
-    pub email: String,
+    pub email: Option<String>,
     pub status: String,
     pub email_verified: bool,
 }
@@ -32,17 +32,13 @@ impl AccountsRepository {
         Self { pool }
     }
 
-    pub async fn is_registered(
-        &self,
-        email: &str
-    ) -> Result<bool, sqlx::Error> {
+    pub async fn is_registered(&self, email: &str) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar(
             r#"
             SELECT EXISTS (
                 SELECT 1
                 FROM auth.accounts
                 WHERE email = $1
-                  AND (email_verified_at IS NOT NULL OR status <> 'active')
             )
             "#,
         )
