@@ -66,7 +66,7 @@ class AuthApiTest {
         Account account = api.register("ana@uv.mx", PASSWORD);
 
         assertEquals("POST", requestMethod);
-        assertEquals("/auth/register", requestPath);
+        assertEquals("/api/v1/auth/register", requestPath);
         assertEquals("application/json", requestContentType);
         assertEquals(Map.of("email", "ana@uv.mx", "password", PASSWORD), sentJson());
         assertEquals("7b0c", account.userId());
@@ -96,7 +96,7 @@ class AuthApiTest {
 
         Account account = api.verifyEmail("abc123");
 
-        assertEquals("/auth/verify-email", requestPath);
+        assertEquals("/api/v1/auth/verify-email", requestPath);
         assertEquals(Map.of("token", "abc123"), sentJson());
         assertTrue(account.emailVerified());
     }
@@ -107,7 +107,7 @@ class AuthApiTest {
 
         api.resendVerification("ana@uv.mx");
 
-        assertEquals("/auth/resend-verification", requestPath);
+        assertEquals("/api/v1/auth/resend-verification", requestPath);
         assertEquals(Map.of("email", "ana@uv.mx"), sentJson());
     }
 

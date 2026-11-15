@@ -1,0 +1,586 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sonimbus Auth: registration",
+    "version": "0.2.0",
+    "description": "Contrato público modular. Entrada completa: auth.yaml. Semántica: ../auth/public-api.md. Implementación local con activación y revisión operativa independientes."
+  },
+  "servers": [
+    {
+      "url": "https://api.example.invalid"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register",
+        "security": [],
+        "description": "Ver ../registration.md para l?mites, atomicidad y compatibilidad. C?digo de 8 d?gitos, 10 min absolutos, 5 fallos persistidos. Reenv?o no renueva plazos ni fallos.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Registration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registro pendiente, cuenta confirmada o reenv?o seg?n operaci?n; no emite sesiones.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationAttempt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada o intento/c?digo no utilizable; gen?rico.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON supera 4096 bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "L?mite por IP, destinatario, intento o cooldown.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Segundos enteros antes de volver a intentar."
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Fallo de procesamiento de contrase?a.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible; no significa revocaci?n.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Correo ya verificado o cuenta no activa; enumeraci?n existente expl?cita.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "operationId": "confirmRegistration",
+        "security": [],
+        "description": "Ver ../registration.md para l?mites, atomicidad y compatibilidad. C?digo de 8 d?gitos, 10 min absolutos, 5 fallos persistidos. Reenv?o no renueva plazos ni fallos.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationConfirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registro pendiente, cuenta confirmada o reenv?o seg?n operaci?n; no emite sesiones.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifiedAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada o intento/c?digo no utilizable; gen?rico.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON supera 4096 bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "L?mite por IP, destinatario, intento o cooldown.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Segundos enteros antes de volver a intentar."
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Fallo de procesamiento de contrase?a.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible; no significa revocaci?n.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "legacyVerificationInformation",
+        "security": [],
+        "description": "Ignora token y query. No consulta ni activa cuentas.",
+        "responses": {
+          "410": {
+            "description": "Enlace anterior retirado; continuar registro con c?digo en la aplicaci?n.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "operationId": "rejectLegacyVerificationHead",
+        "security": [],
+        "responses": {
+          "405": {
+            "description": "No consume ni activa."
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "operationId": "resendRegistrationCode",
+        "security": [],
+        "description": "Ver ../registration.md para l?mites, atomicidad y compatibilidad. C?digo de 8 d?gitos, 10 min absolutos, 5 fallos persistidos. Reenv?o no renueva plazos ni fallos.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationResend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Registro pendiente, cuenta confirmada o reenv?o seg?n operaci?n; no emite sesiones.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationAttempt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada o intento/c?digo no utilizable; gen?rico.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON supera 4096 bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "L?mite por IP, destinatario, intento o cooldown.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Segundos enteros antes de volver a intentar."
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Fallo de procesamiento de contrase?a.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible; no significa revocaci?n.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Registration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "writeOnly": true,
+            "description": "Pol?tica actual: may?scula, min?scula, d?gito y car?cter especial; sin normalizar."
+          }
+        }
+      },
+      "RegistrationAttempt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registration_attempt_id",
+          "expires_at",
+          "verification_email_sent"
+        ],
+        "properties": {
+          "registration_attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "verification_email_sent": {
+            "type": "boolean",
+            "description": "Aceptado por proveedor, no garant?a de entrega. False conserva intento para reenv?o acotado."
+          }
+        }
+      },
+      "RegistrationConfirmation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registration_attempt_id",
+          "code"
+        ],
+        "properties": {
+          "registration_attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "writeOnly": true,
+            "pattern": "^[0-9]{8}$",
+            "description": "Formato inv?lido para un intento existente tambi?n consume un fallo. No enviar en URL."
+          }
+        }
+      },
+      "RegistrationResend": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registration_attempt_id"
+        ],
+        "properties": {
+          "registration_attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "VerifiedAccount": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "email",
+          "email_verified",
+          "status",
+          "verification_email_sent"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "const": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "verification_email_sent": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      },
+      "Problem": {
+        "$ref": "./auth.yaml#/components/schemas/Problem"
+      }
+    }
+  }
+}

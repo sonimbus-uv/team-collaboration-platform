@@ -1,45 +1,97 @@
-use crate::email::verification_template::verification_email_content;
-use crate::ports::email_verification::{EmailDeliveryError, VerificationEmailSender};
+use crate::{
+    email::{
+        contact_template::google_link_notice,
+        content::EmailContent,
+        recovery_template::recovery_email_content,
+        verification_template::verification_email_content,
+    },
+    ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
+};
 use lettre::{
     message::{Mailbox, MultiPart},
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 
 pub struct MailpitEmailSender {
-    transport: AsyncSmtpTransport<Tokio1Executor>,
-    from: Mailbox,
+    smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
+    sender_address: Mailbox,
 }
 
 impl MailpitEmailSender {
-    pub fn new(host: String, port: u16, from: String) -> anyhow::Result<Self> {
+    pub fn new(host: String, port: u16, sender_address: String) -> anyhow::Result<Self> {
         Ok(Self {
-            transport: AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            smtp_transport: AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
                 .port(port)
                 .timeout(Some(std::time::Duration::from_secs(10)))
                 .build(),
-            from: from.parse()?,
+            sender_address: sender_address.parse()?,
         })
+    }
+
+    async fn deliver(
+        &self,
+        recipient_email: &str,
+        email_content: EmailContent,
+    ) -> Result<(), EmailDeliveryError> {
+        let smtp_message = Message::builder()
+            .from(self.sender_address.clone())
+            .to(recipient_email
+                .parse()
+                .map_err(|_| EmailDeliveryError::Transport)?)
+            .subject(email_content.subject)
+            .multipart(MultiPart::alternative_plain_html(
+                email_content.text,
+                email_content.html,
+            ))
+            .map_err(|_| EmailDeliveryError::Transport)?;
+
+        self.smtp_transport
+            .send(smtp_message)
+            .await
+            .map_err(|_| EmailDeliveryError::Transport)?;
+
+        Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl VerificationEmailSender for MailpitEmailSender {
-    async fn send(&self, email: &str, code: &str, locale: &str) -> Result<(), EmailDeliveryError> {
-        let content = verification_email_content(locale, code);
-        let message = Message::builder()
-            .from(self.from.clone())
-            .to(email.parse().map_err(|_| EmailDeliveryError::Transport)?)
-            .subject(content.subject)
-            .multipart(MultiPart::alternative_plain_html(
-                content.text,
-                content.html,
-            ))
-            .map_err(|_| EmailDeliveryError::Transport)?;
-        self.transport
-            .send(message)
+    async fn send(
+        &self,
+        recipient_email: &str,
+        code: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, verification_email_content(locale, code))
             .await
-            .map_err(|_| EmailDeliveryError::Transport)?;
-        Ok(())
+    }
+
+    async fn send_contact_verification(
+        &self,
+        recipient_email: &str,
+        code: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, verification_email_content(locale, code))
+            .await
+    }
+    async fn send_security_notice(
+        &self,
+        recipient_email: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, google_link_notice(locale))
+            .await
+    }
+
+    async fn send_recovery(
+        &self,
+        recipient_email: &str,
+        code: &str,
+        locale: &str,
+    ) -> Result<(), EmailDeliveryError> {
+        self.deliver(recipient_email, recovery_email_content(locale, code))
+            .await
     }
 }
 
@@ -47,13 +99,14 @@ impl VerificationEmailSender for MailpitEmailSender {
 mod tests {
     use super::*;
 
-    fn sender(from: &str) -> anyhow::Result<MailpitEmailSender> {
-        MailpitEmailSender::new("localhost".into(), 1025, from.into())
+    fn sender(sender_address: &str) -> anyhow::Result<MailpitEmailSender> {
+        MailpitEmailSender::new("localhost".into(), 1025, sender_address.into())
     }
 
     #[tokio::test]
     async fn rejects_invalid_recipient_before_connecting() {
         let sender = sender("Team <team@example.com>").unwrap();
+
         assert!(matches!(
             sender.send("invalid-address", "token", "es-MX").await,
             Err(EmailDeliveryError::Transport)

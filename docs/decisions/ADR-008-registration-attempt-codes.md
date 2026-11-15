@@ -64,7 +64,7 @@ sin modificar credenciales de cuentas verificadas y sujeto a los cupos.
 
 ## Contrato y alternativas
 
-Ver [contrato de registro](../../contracts/registration.md). Se conserva 409 para
+Ver [contrato de registro](../../contracts/auth/public-api.md#registro-y-verificación). Se conserva 409 para
 cuentas ya verificadas, una señal de enumeración existente y explícitamente
 aprobada; no se promete tiempo de respuesta uniforme ni anonimato de existencia.
 No se eligió establecer de nuevo la contraseña en una página, purgar cuentas

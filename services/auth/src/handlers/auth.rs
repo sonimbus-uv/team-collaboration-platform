@@ -6,8 +6,10 @@ use crate::{
     email::verification_page::{verification_legacy_page, verification_page_response},
     error::ApiError,
     repositories::accounts_repository::CreateAccountError,
+    security::password_hasher::PasswordHashingError,
     services::{account_service::RegisterError, email_verification_service::VerificationError},
     state::AppState,
+    validators::auth_validator::RegisterInputValidationError,
 };
 use axum::{
     extract::{rejection::JsonRejection, State},
@@ -16,7 +18,7 @@ use axum::{
     Json,
 };
 
-fn input<T>(request: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
+fn parse_registration_request<T>(request: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     request.map(|Json(value)| value).map_err(|error| {
         if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
             ApiError::RequestTooLarge
@@ -26,7 +28,7 @@ fn input<T>(request: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     })
 }
 
-fn response(
+fn registration_response(
     attempt: crate::repositories::registration_attempts_repository::RegistrationAttempt,
     sent: bool,
 ) -> RegistrationResponse {
@@ -44,41 +46,36 @@ pub async fn register(
     State(state): State<AppState>,
     request: Result<Json<RegisterRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<RegistrationResponse>), ApiError> {
-    let request = input(request)?;
-    let (attempt, sent) = state.auth_service.register(request.email, request.password, state.auth_rate_limiter.as_ref()).await.map_err(|error| match error {
-        RegisterError::InvalidInput(error) => ApiError::Validation(match error {
-            crate::validators::auth_validator::RegisterInputValidationError::InvalidEmailFormat => "Invalid email format",
-            crate::validators::auth_validator::RegisterInputValidationError::PasswordTooShort => "Password is too short",
-            crate::validators::auth_validator::RegisterInputValidationError::PasswordTooLong => "Password is too long",
-            crate::validators::auth_validator::RegisterInputValidationError::InvalidPasswordFormat => "Invalid password format",
-        }.into()),
-        RegisterError::CreateAccount(CreateAccountError::EmailAlreadyExists) => ApiError::Conflict("Email already registered".into()),
-        RegisterError::CreateAccount(CreateAccountError::Database(error)) => database_error(error),
-        RegisterError::Verification(error) => map_verification_error(error),
-        RegisterError::Busy => ApiError::Busy,
-        RegisterError::PasswordHashing(error) => {
-            tracing::error!(invalid_hash = matches!(error, crate::security::password_hasher::PasswordHashingError::InvalidHash), "Registration password processing failed");
-            ApiError::InternalServerError("Password processing failed".into())
-        },
-        RegisterError::Worker(error) => {
-            tracing::error!(panicked = error.is_panic(), "Registration password worker failed");
-            ApiError::InternalServerError("Password processing failed".into())
-        },
-    })?;
-    Ok((StatusCode::CREATED, Json(response(attempt, sent))))
+    let request = parse_registration_request(request)?;
+    let (attempt, sent) = state
+        .auth_service
+        .register(
+            request.email,
+            request.password,
+            state.auth_rate_limiter.as_ref(),
+        )
+        .await
+        .map_err(map_registration_error)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(registration_response(attempt, sent)),
+    ))
 }
 
 pub async fn verify_email(
     State(state): State<AppState>,
     request: Result<Json<VerifyEmailRequest>, JsonRejection>,
 ) -> Result<Json<RegisterResponse>, ApiError> {
-    let request = input(request)?;
+    let request = parse_registration_request(request)?;
     let account = state
         .email_verification_service
         .confirm(request.registration_attempt_id, &request.code)
         .await
         .map_err(map_verification_error)?;
-    Ok(Json(RegisterResponse::from(account)))
+        
+    RegisterResponse::try_from(account).map(Json).map_err(|_| {
+        ApiError::InternalServerError("Registration returned an unverified contact".into())
+    })
 }
 
 pub async fn verify_email_page() -> Response {
@@ -90,7 +87,7 @@ pub async fn resend_verification(
     State(state): State<AppState>,
     request: Result<Json<ResendVerificationRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<RegistrationResponse>), ApiError> {
-    let request = input(request)?;
+    let request = parse_registration_request(request)?;
     let (attempt, sent) = state
         .email_verification_service
         .resend(
@@ -99,7 +96,44 @@ pub async fn resend_verification(
         )
         .await
         .map_err(map_verification_error)?;
-    Ok((StatusCode::ACCEPTED, Json(response(attempt, sent))))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(registration_response(attempt, sent)),
+    ))
+}
+
+fn map_registration_error(error: RegisterError) -> ApiError {
+    match error {
+        RegisterError::InvalidInput(error) => {
+            let message = match error {
+                RegisterInputValidationError::InvalidEmailFormat => "Invalid email format",
+                RegisterInputValidationError::PasswordTooShort => "Password is too short",
+                RegisterInputValidationError::PasswordTooLong => "Password is too long",
+                RegisterInputValidationError::InvalidPasswordFormat => "Invalid password format",
+            };
+            ApiError::Validation(message.into())
+        }
+        RegisterError::CreateAccount(CreateAccountError::EmailAlreadyExists) => {
+            ApiError::Conflict("Email already registered".into())
+        }
+        RegisterError::CreateAccount(CreateAccountError::Database(error)) => database_error(error),
+        RegisterError::Verification(error) => map_verification_error(error),
+        RegisterError::Busy => ApiError::Busy,
+        RegisterError::PasswordHashing(error) => {
+            tracing::error!(
+                invalid_hash = matches!(error, PasswordHashingError::InvalidHash),
+                "Registration password processing failed"
+            );
+            ApiError::InternalServerError("Password processing failed".into())
+        }
+        RegisterError::Worker(error) => {
+            tracing::error!(
+                panicked = error.is_panic(),
+                "Registration password worker failed"
+            );
+            ApiError::InternalServerError("Password processing failed".into())
+        }
+    }
 }
 
 fn map_verification_error(error: VerificationError) -> ApiError {
@@ -129,15 +163,5 @@ pub async fn registration_headers(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .insert("cache-control", "no-store".parse().unwrap());
-    response
-        .headers_mut()
-        .insert("pragma", "no-cache".parse().unwrap());
-    response
-        .headers_mut()
-        .insert("x-content-type-options", "nosniff".parse().unwrap());
-    response
+    super::response::protected(next.run(request).await)
 }

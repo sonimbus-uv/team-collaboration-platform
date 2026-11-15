@@ -13,7 +13,6 @@ use sqlx::PgPool;
 pub enum SessionCheckError {
     InvalidInput(SessionCheckInputError),
     Database(sqlx::Error),
-    /// A repository result cannot be associated with every requested pair.
     IncompleteResult,
 }
 
@@ -70,9 +69,12 @@ fn validate_batch(requests: &[SessionCheckRequest]) -> Result<(), SessionCheckIn
         return Err(SessionCheckInputError::BatchTooLarge);
     }
 
-    let mut pairs = HashSet::with_capacity(requests.len());
+    let mut requested_pairs = HashSet::with_capacity(requests.len());
 
-    if requests.iter().any(|request| !pairs.insert(*request)) {
+    if requests
+        .iter()
+        .any(|request| !requested_pairs.insert(*request))
+    {
         return Err(SessionCheckInputError::DuplicatePair);
     }
 
@@ -91,27 +93,28 @@ fn interpret(
     {
         return Err(SessionCheckError::IncompleteResult);
     }
-    Ok(rows
-        .into_iter()
-        .map(|row| {
-            let active = row.account_allowed
-                && row.unrevoked
-                && row
-                    .expires_at
-                    .is_some_and(|expires| expires > row.observed_at);
-            SessionCheckResult {
-                sid: row.sid,
-                account_id: row.account_id,
-                active,
-                session_expires_at: if active {
-                    row.expires_at
-                        .map(|expires| expires.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
-                } else {
-                    None
-                },
-            }
-        })
-        .collect())
+    Ok(rows.into_iter().map(interpret_row).collect())
+}
+
+fn interpret_row(row: SessionCheckRow) -> SessionCheckResult {
+    let active = row.account_allowed
+        && row.unrevoked
+        && row
+            .expires_at
+            .is_some_and(|expires| expires > row.observed_at);
+    let session_expires_at = if active {
+        row.expires_at
+            .map(|expires| expires.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
+    } else {
+        None
+    };
+
+    SessionCheckResult {
+        sid: row.sid,
+        account_id: row.account_id,
+        active,
+        session_expires_at,
+    }
 }
 
 #[cfg(test)]

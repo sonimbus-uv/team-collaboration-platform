@@ -58,7 +58,7 @@ Errores transitorios reintentan con backoff acotado y recuperación de conexión
 Idempotencia por event_id y, además, por sid revocado: duplicados o eventos fuera
 de orden nunca reactivan sesión. Instalar tombstone, invalidar microcaché y estado
 de sockets, cerrar conexiones. Mantener barrera frente a consultas HTTP en vuelo
-según [comprobación](../session-checks.md). Dedupe y tombstones deben cubrir al
+según [comprobación](../auth/internal-api.md). Dedupe y tombstones deben cubrir al
 menos vida restante de sesión más margen operativo; no depender solo de timestamp.
 
 Core propone cola durable `core.session-revoked.v1`, trabajadores recuperables y

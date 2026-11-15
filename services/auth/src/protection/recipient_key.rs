@@ -4,44 +4,51 @@ use sha2::Sha256;
 type HmacSha256 = Hmac<Sha256>;
 
 pub struct RecipientKey {
-    template: HmacSha256,
+    mac_template: HmacSha256,
 }
 
 impl RecipientKey {
     pub fn login_key(&self, email: &str) -> String {
-        let mut mac = self.template.clone();
+        let mut recipient_mac = self.mac_template.clone();
 
-        mac.update(b"auth:login-account:v1\0");
-        mac.update(email.trim().to_lowercase().as_bytes());
+        recipient_mac.update(b"auth:login-account:v1\0");
+        recipient_mac.update(email.trim().to_lowercase().as_bytes());
 
-        let digest = mac.finalize().into_bytes();
-        let id: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        let mac_digest = recipient_mac.finalize().into_bytes();
+        let digest_identifier: String = mac_digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
 
-        format!("auth:rl:v1:login:account:{id}")
+        format!("auth:rl:v1:login:account:{digest_identifier}")
     }
+
     pub fn new(secret: &[u8]) -> anyhow::Result<Self> {
         anyhow::ensure!(
             secret.len() >= 32,
             "Recipient HMAC secret must contain at least 32 bytes"
         );
 
-        let template = HmacSha256::new_from_slice(secret)
+        let mac_template = HmacSha256::new_from_slice(secret)
             .map_err(|_| anyhow::anyhow!("Invalid recipient HMAC secret"))?;
 
-        Ok(Self { template })
+        Ok(Self { mac_template })
     }
 
     pub fn redis_key(&self, email: &str) -> String {
         let normalized_email = email.trim().to_lowercase();
-        let mut mac = self.template.clone();
+        let mut recipient_mac = self.mac_template.clone();
 
-        mac.update(b"auth:email-verification:recipient:v1\0");
-        mac.update(normalized_email.as_bytes());
+        recipient_mac.update(b"auth:email-verification:recipient:v1\0");
+        recipient_mac.update(normalized_email.as_bytes());
 
-        let digest = mac.finalize().into_bytes();
-        let identifier: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        let mac_digest = recipient_mac.finalize().into_bytes();
+        let digest_identifier: String = mac_digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
 
-        format!("auth:rl:v1:email-send:recipient:{identifier}")
+        format!("auth:rl:v1:email-send:recipient:{digest_identifier}")
     }
 }
 
@@ -82,12 +89,12 @@ mod tests {
 
     #[test]
     fn different_secrets_produce_different_keys() {
-        let first = RecipientKey::new(&[0x11; 32]).unwrap();
-        let second = RecipientKey::new(&[0x22; 32]).unwrap();
+        let first_secret_key = RecipientKey::new(&[0x11; 32]).unwrap();
+        let second_secret_key = RecipientKey::new(&[0x22; 32]).unwrap();
 
         assert_ne!(
-            first.redis_key("person@example.com"),
-            second.redis_key("person@example.com")
+            first_secret_key.redis_key("person@example.com"),
+            second_secret_key.redis_key("person@example.com")
         );
     }
 

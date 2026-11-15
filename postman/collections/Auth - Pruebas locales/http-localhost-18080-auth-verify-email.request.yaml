@@ -1,7 +1,7 @@
 $kind: http-request
-name: http://localhost:18080/auth/verify-email
+name: http://localhost:18080/api/v1/auth/verify-email
 description: 04-Registro
-url: http://localhost:18080/auth/verify-email
+url: http://localhost:18080/api/v1/auth/verify-email
 method: POST
 body:
   type: json

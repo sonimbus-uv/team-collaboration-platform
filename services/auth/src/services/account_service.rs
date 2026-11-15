@@ -1,21 +1,20 @@
-use super::email_verification_service::{EmailVerificationService, VerificationError};
-use std::sync::Arc;
-use tokio::sync::Semaphore;
-
+use super::{
+    email_verification_service::{EmailVerificationService, VerificationError},
+    password_processor::{PasswordProcessingError, PasswordProcessor},
+};
 use crate::{
     repositories::{
         accounts_repository::{AccountsRepository, CreateAccountError},
         registration_attempts_repository::RegistrationAttempt,
     },
-    security::password_hasher::{PasswordHasher, PasswordHashingError},
+    security::password_hasher::PasswordHashingError,
     validators::auth_validator::{validate_register_input, RegisterInputValidationError},
 };
 
 #[derive(Clone)]
 pub struct AuthService {
     accounts_repository: AccountsRepository,
-    password_hasher: Arc<dyn PasswordHasher>,
-    hash_slots: Arc<Semaphore>,
+    password_processor: PasswordProcessor,
     verification: EmailVerificationService,
 }
 
@@ -29,50 +28,31 @@ pub enum RegisterError {
     Worker(tokio::task::JoinError),
 }
 
-#[derive(Debug)]
-pub enum PasswordCheckError {
-    Busy,
-    Failed,
+impl From<PasswordProcessingError> for RegisterError {
+    fn from(error: PasswordProcessingError) -> Self {
+        match error {
+            PasswordProcessingError::Busy => Self::Busy,
+            PasswordProcessingError::Hashing(error) => Self::PasswordHashing(error),
+            PasswordProcessingError::Worker(error) => Self::Worker(error),
+        }
+    }
 }
 
 impl AuthService {
-    pub async fn check_password(
-        &self,
-        password: String,
-        expected: Option<String>,
-    ) -> Result<bool, PasswordCheckError> {
-        let permit = self
-            .hash_slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| PasswordCheckError::Busy)?;
-        let hasher = self.password_hasher.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            let password = zeroize::Zeroizing::new(password);
-            match expected {
-                Some(hash) => hasher.verify_password(&password, &hash),
-                None => hasher.hash_password(&password).map(|_| false),
-            }
-        })
-        .await
-        .map_err(|_| PasswordCheckError::Failed)?
-        .map_err(|_| PasswordCheckError::Failed)
-    }
-
     pub fn new(
         accounts_repository: AccountsRepository,
-        password_hasher: Arc<dyn PasswordHasher>,
+        password_processor: PasswordProcessor,
         verification: EmailVerificationService,
-        max_concurrent_hashes: usize,
     ) -> Self {
         Self {
             accounts_repository,
-            password_hasher,
+            password_processor,
             verification,
-            hash_slots: Arc::new(Semaphore::new(max_concurrent_hashes)),
         }
+    }
+
+    pub(crate) fn password_processor(&self) -> PasswordProcessor {
+        self.password_processor.clone()
     }
 
     pub async fn register(
@@ -81,28 +61,28 @@ impl AuthService {
         password: String,
         budget: &dyn crate::ports::email_verification::RecipientBudget,
     ) -> Result<(RegistrationAttempt, bool), RegisterError> {
-        let valid_input =
+        let registration_input =
             validate_register_input(email, password).map_err(RegisterError::InvalidInput)?;
 
-        let permit = self
-            .hash_slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| RegisterError::Busy)?;
-        let hasher = self.password_hasher.clone();
+        let password_hash = self
+            .password_processor
+            .hash(registration_input.password)
+            .await
+            .map_err(RegisterError::from)?;
 
-        let password_hash = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            let password = zeroize::Zeroizing::new(valid_input.password);
-            hasher.hash_password(&password)
-        })
-        .await
-        .map_err(RegisterError::Worker)?
-        .map_err(RegisterError::PasswordHashing)?;
+        self.ensure_email_available(&registration_input.email)
+            .await?;
 
+        self.verification
+            .start(&registration_input.email, &password_hash, budget)
+            .await
+            .map_err(RegisterError::Verification)
+    }
+
+    async fn ensure_email_available(&self, email: &str) -> Result<(), RegisterError> {
         if self
             .accounts_repository
-            .is_registered(&valid_input.email)
+            .is_registered(email)
             .await
             .map_err(|error| RegisterError::CreateAccount(CreateAccountError::Database(error)))?
         {
@@ -111,20 +91,19 @@ impl AuthService {
             ));
         }
 
-        self.verification
-            .start(&valid_input.email, &password_hash, budget)
-            .await
-            .map_err(RegisterError::Verification)
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::password_hasher::PasswordHasher;
     use crate::{
         ports::email_verification::{EmailDeliveryError, VerificationEmailSender},
         repositories::registration_attempts_repository::RegistrationAttemptsRepository,
     };
+    use std::sync::Arc;
 
     struct NoopSender;
 
@@ -179,12 +158,14 @@ mod tests {
 
         let service = AuthService::new(
             AccountsRepository::new(pool),
-            Arc::new(BlockingHasher {
-                started: std::sync::Mutex::new(Some(started_tx)),
-                release: std::sync::Mutex::new(release_rx),
-            }),
+            crate::services::password_processor::PasswordProcessor::new(
+                Arc::new(BlockingHasher {
+                    started: std::sync::Mutex::new(Some(started_tx)),
+                    release: std::sync::Mutex::new(release_rx),
+                }),
+                1,
+            ),
             verification,
-            1,
         );
 
         let copy = service.clone();
@@ -217,6 +198,5 @@ mod tests {
             first.await.unwrap(),
             Err(RegisterError::PasswordHashing(_))
         ));
-        assert_eq!(service.hash_slots.available_permits(), 1);
     }
 }

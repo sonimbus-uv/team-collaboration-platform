@@ -14,6 +14,7 @@ pub enum RegistrationError {
     Database(sqlx::Error),
     Unavailable,
 }
+
 impl std::fmt::Debug for RegistrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
@@ -25,6 +26,7 @@ impl std::fmt::Debug for RegistrationError {
         })
     }
 }
+
 impl From<sqlx::Error> for RegistrationError {
     fn from(value: sqlx::Error) -> Self {
         Self::Database(value)
@@ -63,14 +65,27 @@ impl RegistrationAttemptsRepository {
         tx: &mut Transaction<'_, Postgres>,
         email: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 17005))")
-            .bind(email)
-            .execute(&mut **tx)
-            .await?;
-        sqlx::query("SELECT id FROM auth.accounts WHERE email=$1 FOR UPDATE")
-            .bind(email)
-            .fetch_optional(&mut **tx)
-            .await?;
+        sqlx::query(
+            r#"
+            SELECT pg_advisory_xact_lock(hashtextextended($1, 17005))
+            "#,
+        )
+        .bind(email)
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            SELECT id
+            FROM auth.accounts
+            WHERE email = $1
+            FOR UPDATE
+            "#,
+        )
+        .bind(email)
+        .fetch_optional(&mut **tx)
+        .await?;
+
         Ok(())
     }
 
@@ -80,10 +95,11 @@ impl RegistrationAttemptsRepository {
     ) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar(
             r#"
-            SELECT EXISTS(SELECT 1
-            FROM auth.accounts
-            WHERE email=$1
-            AND (email_verified_at IS NOT NULL OR status <> 'active'))
+            SELECT EXISTS (
+                SELECT 1
+                FROM auth.accounts
+                WHERE email = $1
+            )
             "#,
         )
         .bind(email)
@@ -107,11 +123,11 @@ impl RegistrationAttemptsRepository {
             r#"
             SELECT count(*)
             FROM auth.registration_attempts
-            WHERE email=$1
-            AND consumed_at IS NULL
-            AND invalidated_at IS NULL
-            AND expires_at>clock_timestamp()
-            AND failed_attempts<5
+            WHERE email = $1
+              AND consumed_at IS NULL
+              AND invalidated_at IS NULL
+              AND expires_at > clock_timestamp()
+              AND failed_attempts < 5
             "#,
         )
         .bind(email)
@@ -122,9 +138,9 @@ impl RegistrationAttemptsRepository {
         }
         let attempt = sqlx::query_as(
             r#"
-            INSERT INTO auth.registration_attempts(id,email,password_hash,code_mac)
-            VALUES($1,$2,$3,$4)
-            RETURNING id,email::text AS email,expires_at
+            INSERT INTO auth.registration_attempts(id, email, password_hash, code_mac)
+            VALUES($1, $2, $3, $4)
+            RETURNING id, email::text AS email, expires_at
             "#,
         )
         .bind(id)
@@ -133,13 +149,19 @@ impl RegistrationAttemptsRepository {
         .bind(mac)
         .fetch_one(&mut *tx)
         .await?;
+
         tx.commit().await?;
+
         Ok(attempt)
     }
 
     pub async fn find(&self, id: Uuid) -> Result<RegistrationAttempt, RegistrationError> {
         sqlx::query_as(
-            "SELECT id,email::text AS email,expires_at FROM auth.registration_attempts WHERE id=$1",
+            r#"
+            SELECT id, email::text AS email, expires_at
+            FROM auth.registration_attempts
+            WHERE id = $1
+            "#,
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -152,20 +174,30 @@ impl RegistrationAttemptsRepository {
         id: Uuid,
     ) -> Result<RegistrationAttempt, RegistrationError> {
         let attempt = self.find(id).await?;
-        let (usable, version, wait): (bool, i32, i64) = sqlx::query_as(r#"
-            SELECT consumed_at IS NULL
-            AND invalidated_at IS NULL
-            AND expires_at>clock_timestamp()
-            AND failed_attempts<5
-            AND NOT EXISTS(SELECT 1
-            FROM auth.accounts a
-            WHERE a.email=t.email
-            AND (a.email_verified_at IS NOT NULL OR a.status<>'active')), code_version, GREATEST(0,ceil(extract(epoch
-            FROM last_sent_at+interval '60 seconds'-clock_timestamp())))::bigint
+        let (usable, version, wait): (bool, i32, i64) = sqlx::query_as(
+            r#"
+            SELECT
+                consumed_at IS NULL
+                    AND invalidated_at IS NULL
+                    AND expires_at > clock_timestamp()
+                    AND failed_attempts < 5
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM auth.accounts a
+                        WHERE a.email = t.email
+                    ),
+                code_version,
+                GREATEST(
+                    0,
+                    CEIL(EXTRACT(EPOCH FROM last_sent_at + INTERVAL '60 seconds' - clock_timestamp()))
+                )::bigint
             FROM auth.registration_attempts t
-            WHERE id=$1
-            "#)
-            .bind(id).fetch_one(&self.pool).await?;
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
         if !usable {
             return Err(RegistrationError::Invalid);
         }
@@ -185,13 +217,23 @@ impl RegistrationAttemptsRepository {
         sqlx::query_as(
             r#"
             WITH locked AS MATERIALIZED (
-                SELECT * FROM auth.registration_attempts WHERE id=$1 FOR UPDATE
+                SELECT *
+                FROM auth.registration_attempts
+                WHERE id = $1
+                FOR UPDATE
             )
-            SELECT password_hash,code_mac,code_version, consumed_at IS NULL
-            AND invalidated_at IS NULL
-            AND expires_at>clock_timestamp()
-            AND failed_attempts<5 AS usable, GREATEST(0,ceil(extract(epoch
-            FROM last_sent_at+interval '60 seconds'-clock_timestamp())))::bigint AS resend_wait
+            SELECT
+                password_hash,
+                code_mac,
+                code_version,
+                consumed_at IS NULL
+                    AND invalidated_at IS NULL
+                    AND expires_at > clock_timestamp()
+                    AND failed_attempts < 5 AS usable,
+                GREATEST(
+                    0,
+                    CEIL(EXTRACT(EPOCH FROM last_sent_at + INTERVAL '60 seconds' - clock_timestamp()))
+                )::bigint AS resend_wait
             FROM locked
             "#,
         )
@@ -211,73 +253,78 @@ impl RegistrationAttemptsRepository {
         let mut tx = self.pool.begin().await?;
         Self::lock_email(&mut tx, &attempt.email).await?;
         let row = Self::lock_attempt(&mut tx, id).await?;
-        if !row.usable || Self::registered(&mut tx, &attempt.email).await? {
+        if !row.usable {
             return Err(RegistrationError::Invalid);
         }
+        if Self::registered(&mut tx, &attempt.email).await? {
+            return Err(RegistrationError::AlreadyRegistered);
+        }
         if !key.verify(id, row.code_version, code, &row.code_mac) {
-            sqlx::query("UPDATE auth.registration_attempts SET failed_attempts=failed_attempts+1 WHERE id=$1")
-                .bind(id).execute(&mut *tx).await?;
+            sqlx::query(
+                r#"
+                UPDATE auth.registration_attempts
+                SET failed_attempts = failed_attempts + 1
+                WHERE id = $1
+                "#,
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
             // Persist the failed attempt before returning the HTTP-domain error.
             tx.commit().await?;
             return Err(RegistrationError::Invalid);
         }
         let account: Account = sqlx::query_as(
             r#"
-            INSERT INTO auth.accounts(email,email_verified_at)
-            VALUES($1,clock_timestamp())
+            INSERT INTO auth.accounts(email, email_verified_at)
+            VALUES ($1, clock_timestamp())
             ON CONFLICT (email)
-            DO UPDATE SET email_verified_at=clock_timestamp()
-            WHERE auth.accounts.email_verified_at IS NULL
-            AND auth.accounts.status='active'
-            RETURNING id,email::text AS email,status,email_verified_at IS NOT NULL AS email_verified
+            DO NOTHING
+            RETURNING
+                id,
+                email::text AS email,
+                status,
+                email_verified_at IS NOT NULL AS email_verified
             "#,
         )
         .bind(&attempt.email)
         .fetch_optional(&mut *tx)
         .await?
-        .ok_or(RegistrationError::Invalid)?;
+        .ok_or(RegistrationError::AlreadyRegistered)?;
         sqlx::query(
             r#"
-            INSERT INTO auth.password_credentials(account_id,password_hash)
-            VALUES($1,$2)
-            ON CONFLICT(account_id)
-            DO UPDATE SET password_hash=EXCLUDED.password_hash,password_changed_at=clock_timestamp()
+            INSERT INTO auth.password_credentials(account_id, password_hash)
+            VALUES ($1, $2)
             "#,
         )
         .bind(account.id)
         .bind(&row.password_hash)
         .execute(&mut *tx)
         .await?;
+
         sqlx::query(
             r#"
-            UPDATE auth.sessions SET revoked_at=clock_timestamp(),revoke_reason='password_changed'
-            WHERE account_id=$1
-            AND revoked_at IS NULL
+            UPDATE auth.registration_attempts
+            SET consumed_at = CASE
+                    WHEN id = $1 THEN clock_timestamp()
+                    ELSE consumed_at
+                END,
+                invalidated_at = CASE
+                    WHEN id <> $1 THEN clock_timestamp()
+                    ELSE invalidated_at
+                END
+            WHERE email = $2
+              AND consumed_at IS NULL
+              AND invalidated_at IS NULL
             "#,
         )
-        .bind(account.id)
+        .bind(id)
+        .bind(&attempt.email)
         .execute(&mut *tx)
         .await?;
-        sqlx::query(r#"
-            UPDATE auth.registration_attempts SET consumed_at=CASE WHEN id=$1 THEN clock_timestamp() ELSE consumed_at END,invalidated_at=CASE WHEN id<>$1 THEN clock_timestamp() ELSE invalidated_at END
-            WHERE email=$2
-            AND consumed_at IS NULL
-            AND invalidated_at IS NULL
-            "#)
-            .bind(id).bind(&attempt.email).execute(&mut *tx).await?;
-        sqlx::query(
-            r#"
-            UPDATE auth.one_time_tokens SET invalidated_at=clock_timestamp()
-            WHERE account_id=$1
-            AND purpose='email_verification'
-            AND used_at IS NULL
-            AND invalidated_at IS NULL
-            "#,
-        )
-        .bind(account.id)
-        .execute(&mut *tx)
-        .await?;
+
         tx.commit().await?;
+
         Ok(account)
     }
 
@@ -305,12 +352,20 @@ impl RegistrationAttemptsRepository {
             *code = RegistrationCodeKey::generate();
         }
         let mac = key.digest(id, row.code_version + 1, code);
-        sqlx::query(r#"
-            UPDATE auth.registration_attempts SET code_version=code_version+1,code_mac=$2,last_sent_at=clock_timestamp()
-            WHERE id=$1
-            "#)
-            .bind(id).bind(mac).execute(&mut *tx).await?;
+        sqlx::query(
+            r#"
+            UPDATE auth.registration_attempts
+            SET code_version = code_version + 1, code_mac = $2, last_sent_at = clock_timestamp()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(mac)
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
+
         Ok(attempt)
     }
 }
