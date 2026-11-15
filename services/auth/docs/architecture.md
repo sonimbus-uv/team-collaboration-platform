@@ -132,15 +132,15 @@ Los consumidores no acceden directamente al esquema `auth`.
 
 El [contrato técnico v1.0](../../../contracts/auth/public-api.md#google-y-correo-de-contacto)
 centraliza rutas, identidad, contacto, vinculación, errores y condiciones de
-aceptación. El esquema, la elegibilidad por método y el adaptador OIDC están implementados; los
-endpoints de login Google están implementados; vinculación y verificación de
-contacto siguen pendientes.
+aceptación. El esquema, la elegibilidad por método, el adaptador OIDC, el login y
+la vinculación Google, la reautenticación por contraseña, la verificación de
+contacto y el worker de avisos están implementados con activación explícita.
 
-La evolución separará autenticación del contacto, permitirá cuentas Google sin
-correo principal acreditado y reutilizará la apertura transaccional de sesiones.
-La confirmación de registro, la de contacto y la asignación automática competirán
+La evolución separa autenticación del contacto, permite cuentas Google sin
+correo principal acreditado y reutiliza la apertura transaccional de sesiones.
+La confirmación de registro, la de contacto y la asignación automática compiten
 por una sola exclusividad de dirección verificada. Los contactos pendientes no
-reservarán correos y nunca aportarán credenciales de otra cuenta.
+reservan correos y nunca aportan credenciales de otra cuenta.
 
 El [diseño de migraciones](#diseño-de-migraciones-google-y-contacto) concreta la
 transición de datos, las restricciones y los cambios coordinados de consultas.
@@ -316,7 +316,7 @@ mantenimiento y elimina intentos antiguos en lotes acotados.
 
 **Estado: migraciones `0007`–`0013`, login, vinculación, contacto y worker de avisos implementados con activación explícita.** El contrato
 funcional aprobado permanece en [Google y contacto v1.0](../../../contracts/auth/public-api.md#google-y-correo-de-contacto).
-Esta sección distingue el soporte de datos disponible de los flujos HTTP pendientes. Las pruebas aplican las migraciones a bases desechables;
+Esta sección describe el soporte de datos y su relación con los flujos HTTP implementados. Las pruebas aplican las migraciones a bases desechables;
 no acreditan aplicación a la base de desarrollo ni a un despliegue compartido.
 
 ### Esquema actual y decisión de modelado
