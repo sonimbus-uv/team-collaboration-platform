@@ -1,45 +1,26 @@
-use hmac::{Hmac, Mac};
-use rand::{rngs::OsRng, Rng};
-use sha2::Sha256;
+use super::verification_code::VerificationCodeKey;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct RegistrationCodeKey(Hmac<Sha256>);
+pub struct RegistrationCodeKey(VerificationCodeKey);
 
 impl RegistrationCodeKey {
     pub fn new(secret: &[u8]) -> anyhow::Result<Self> {
-        anyhow::ensure!(
-            secret.len() >= 32,
-            "Registration code HMAC secret requires at least 32 bytes"
-        );
-
-        Ok(Self(Hmac::new_from_slice(secret).map_err(|_| {
-            anyhow::anyhow!("Invalid registration code key")
-        })?))
+        Ok(Self(VerificationCodeKey::new(secret)?))
     }
-
     pub fn generate() -> zeroize::Zeroizing<String> {
-        zeroize::Zeroizing::new(format!("{:08}", OsRng.gen_range(0..100_000_000u32)))
+        VerificationCodeKey::generate()
     }
-
-    fn mac(&self, registration_attempt_id: Uuid, code_version: i32, code: &str) -> Hmac<Sha256> {
-        let mut mac = self.0.clone();
-
-        mac.update(b"sonimbus:registration-code:v1\0");
-        mac.update(registration_attempt_id.as_bytes());
-        mac.update(&code_version.to_be_bytes());
-        mac.update(code.as_bytes());
-
-        mac
-    }
-
     pub fn digest(&self, registration_attempt_id: Uuid, code_version: i32, code: &str) -> Vec<u8> {
-        self.mac(registration_attempt_id, code_version, code)
-            .finalize()
-            .into_bytes()
-            .to_vec()
+        self.0.digest(
+            &[
+                b"sonimbus:registration-code:v1\0",
+                registration_attempt_id.as_bytes(),
+                &code_version.to_be_bytes(),
+            ],
+            code,
+        )
     }
-
     pub fn verify(
         &self,
         registration_attempt_id: Uuid,
@@ -47,19 +28,36 @@ impl RegistrationCodeKey {
         code: &str,
         expected_mac: &[u8],
     ) -> bool {
-        // Always verify the MAC, including malformed code submissions.
-        let code_format_valid = code.len() == 8 && code.bytes().all(|byte| byte.is_ascii_digit());
-
-        self.mac(registration_attempt_id, code_version, code)
-            .verify_slice(expected_mac)
-            .is_ok()
-            && code_format_valid
+        self.0.verify(
+            &[
+                b"sonimbus:registration-code:v1\0",
+                registration_attempt_id.as_bytes(),
+                &code_version.to_be_bytes(),
+            ],
+            code,
+            expected_mac,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn existing_registration_mac_format_remains_compatible() {
+        let key = RegistrationCodeKey::new(&[0x11; 32]).unwrap();
+        let id = Uuid::parse_str("12345678-1234-4234-8234-123456789abc").unwrap();
+        let actual: String = key
+            .digest(id, 2, "00123456")
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        assert_eq!(
+            actual,
+            "26c14257a826bf335e1375937a949259dd29aea8cf7bea899d801ebbd43b2e58"
+        );
+    }
 
     #[test]
     fn codes_are_bound_to_attempt_version_purpose_and_secret() {
