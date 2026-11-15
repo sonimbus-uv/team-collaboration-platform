@@ -41,9 +41,10 @@ pub async fn session_active(
         r#"
             SELECT EXISTS (
                 SELECT 1
-                FROM auth.sessions
+                FROM auth.session_account_status
                 WHERE id = $1
                   AND account_id = $2
+                  AND account_allowed
                   AND revoked_at IS NULL
                   AND expires_at > clock_timestamp()
             )
@@ -55,10 +56,7 @@ pub async fn session_active(
     .await
 }
 
-pub async fn recovery(
-    pool: &PgPool,
-    id: Uuid
-) -> Result<Option<RecoveryRow>, sqlx::Error> {
+pub async fn recovery(pool: &PgPool, id: Uuid) -> Result<Option<RecoveryRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
             SELECT
@@ -79,10 +77,7 @@ pub async fn recovery(
     .await
 }
 
-pub async fn lock_recovery(
-    tx: &mut Tx<'_>,
-    id: Uuid
-) -> Result<Option<RecoveryRow>, sqlx::Error> {
+pub async fn lock_recovery(tx: &mut Tx<'_>, id: Uuid) -> Result<Option<RecoveryRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
             SELECT
@@ -104,9 +99,7 @@ pub async fn lock_recovery(
     .await
 }
 
-pub async fn invalidate(
-    tx: &mut Tx<'_>,
-    account_id: Uuid) -> Result<(), sqlx::Error> {
+pub async fn invalidate(tx: &mut Tx<'_>, account_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
             UPDATE auth.password_recovery_attempts
@@ -185,10 +178,7 @@ pub async fn lock_account_by_email(
     .await
 }
 
-pub async fn recovery_eligible(
-    tx: &mut Tx<'_>,
-    account_id: Uuid
-) -> Result<bool, sqlx::Error> {
+pub async fn recovery_eligible(tx: &mut Tx<'_>, account_id: Uuid) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         r#"
         SELECT
@@ -272,10 +262,7 @@ pub async fn create_recovery(
     Ok(())
 }
 
-pub async fn recovery_expiry(
-    tx: &mut Tx<'_>,
-    id: Uuid
-) -> Result<String, sqlx::Error> {
+pub async fn recovery_expiry(tx: &mut Tx<'_>, id: Uuid) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(
         r#"
         SELECT to_char(
@@ -291,9 +278,7 @@ pub async fn recovery_expiry(
     .await
 }
 
-pub async fn synthetic_recovery_expiry(
-    tx: &mut Tx<'_>
-) -> Result<String, sqlx::Error> {
+pub async fn synthetic_recovery_expiry(tx: &mut Tx<'_>) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(
         r#"
         SELECT to_char(
@@ -306,10 +291,7 @@ pub async fn synthetic_recovery_expiry(
     .await
 }
 
-pub async fn record_failed_recovery(
-    tx: &mut Tx<'_>,
-    id: Uuid
-) -> Result<(), sqlx::Error> {
+pub async fn record_failed_recovery(tx: &mut Tx<'_>, id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE auth.password_recovery_attempts
@@ -324,10 +306,7 @@ pub async fn record_failed_recovery(
     Ok(())
 }
 
-pub async fn consume_recovery(
-    tx: &mut Tx<'_>,
-    id: Uuid
-) -> Result<(), sqlx::Error> {
+pub async fn consume_recovery(tx: &mut Tx<'_>, id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE auth.password_recovery_attempts
@@ -342,9 +321,7 @@ pub async fn consume_recovery(
     Ok(())
 }
 
-pub async fn cleanup(
-    pool: &PgPool
-) -> Result<u64, sqlx::Error> {
+pub async fn cleanup(pool: &PgPool) -> Result<u64, sqlx::Error> {
     // Retain terminal records for at least 24 hours after their terminal timestamp.
     let result = sqlx::query(
         r#"

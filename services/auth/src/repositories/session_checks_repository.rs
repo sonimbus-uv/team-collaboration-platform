@@ -39,7 +39,7 @@ impl SessionChecksRepository {
                 input.sid,
                 input.account_id,
                 COALESCE(
-                    a.status = 'active' AND a.email_verified_at IS NOT NULL,
+                    s.account_allowed,
                     false
                 ) AS account_allowed,
                 s.id IS NOT NULL AND s.revoked_at IS NULL AS unrevoked,
@@ -47,9 +47,8 @@ impl SessionChecksRepository {
                 statement_timestamp() AS observed_at
             FROM unnest($1::uuid[], $2::uuid[]) WITH ORDINALITY
                 AS input(sid, account_id, position)
-            LEFT JOIN auth.sessions s
+            LEFT JOIN auth.session_account_status s
                 ON s.id = input.sid AND s.account_id = input.account_id
-            LEFT JOIN auth.accounts a ON a.id = s.account_id
             ORDER BY input.position
             "#,
         )

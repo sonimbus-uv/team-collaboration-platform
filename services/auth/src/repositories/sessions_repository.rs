@@ -1,4 +1,7 @@
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    PgPool, Postgres, Transaction,
+};
 use uuid::Uuid;
 
 pub type Tx<'a> = Transaction<'a, Postgres>;
@@ -8,6 +11,13 @@ pub struct PasswordSnapshot {
     pub account_id: Uuid,
     pub password_hash: String,
     pub version: i64,
+}
+
+pub struct PasswordSessionContext<'a> {
+    pub credentials: &'a PasswordSnapshot,
+    pub client_type: &'a str,
+    pub device_name: Option<&'a str>,
+    pub authenticated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -30,10 +40,7 @@ impl SessionsRepository {
         Self { pool }
     }
 
-    pub async fn password(
-        &self,
-        email: &str
-    ) -> Result<Option<PasswordSnapshot>, sqlx::Error> {
+    pub async fn password(&self, email: &str) -> Result<Option<PasswordSnapshot>, sqlx::Error> {
         sqlx::query_as(
             r#"
             SELECT
@@ -50,9 +57,9 @@ impl SessionsRepository {
         .await
     }
 
-    pub async fn lock_account(
+    pub async fn lock_password_account(
         tx: &mut Tx<'_>,
-        id: Uuid
+        id: Uuid,
     ) -> Result<Option<bool>, sqlx::Error> {
         sqlx::query_scalar(
             r#"
@@ -65,6 +72,16 @@ impl SessionsRepository {
         .bind(id)
         .fetch_optional(&mut **tx)
         .await
+    }
+
+    pub async fn lock_active_account(
+        tx: &mut Tx<'_>,
+        id: Uuid,
+    ) -> Result<Option<bool>, sqlx::Error> {
+        sqlx::query_scalar("SELECT status = 'active' FROM auth.accounts WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
     }
 
     pub async fn password_unchanged(
@@ -90,43 +107,41 @@ impl SessionsRepository {
         }))
     }
 
-    pub async fn open(
+    pub async fn open_password(
         tx: &mut Tx<'_>,
-        account: Uuid,
-        client: &str,
-        device: Option<&str>,
+        context: PasswordSessionContext<'_>,
     ) -> Result<SessionRow, sqlx::Error> {
         let id: Uuid = sqlx::query_scalar(
             r#"
-            SELECT auth.open_session($1, $2, interval '20 days', $3)
+            SELECT auth.open_authenticated_session($1, $2, interval '20 days',
+                ROW('password', NULL, $4, $5)::auth.session_authentication_context, $3)
             "#,
         )
-        .bind(account)
-        .bind(client)
-        .bind(device)
+        .bind(context.credentials.account_id)
+        .bind(context.client_type)
+        .bind(context.device_name)
+        .bind(context.credentials.version)
+        .bind(context.authenticated_at)
         .fetch_one(&mut **tx)
         .await?;
-
         Self::lock(tx, id).await
     }
 
-    pub async fn lock(
-        tx: &mut Tx<'_>,
-        id: Uuid
-    ) -> Result<SessionRow, sqlx::Error> {
+    pub async fn lock(tx: &mut Tx<'_>, id: Uuid) -> Result<SessionRow, sqlx::Error> {
         sqlx::query_as(
             r#"
             SELECT
-                id,
-                account_id,
-                FLOOR(EXTRACT(EPOCH FROM created_at))::bigint AS login_at,
-                FLOOR(EXTRACT(EPOCH FROM expires_at))::bigint AS expires_at,
-                to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS expires_text,
-                revoked_at IS NULL
-                    AND expires_at > clock_timestamp() AS usable
-            FROM auth.sessions
-            WHERE id = $1
-            FOR UPDATE
+                s.id,
+                s.account_id,
+                FLOOR(EXTRACT(EPOCH FROM s.created_at))::bigint AS login_at,
+                FLOOR(EXTRACT(EPOCH FROM s.expires_at))::bigint AS expires_at,
+                to_char(s.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS expires_text,
+                s.revoked_at IS NULL AND s.expires_at > clock_timestamp()
+                    AND eligibility.account_allowed AS usable
+            FROM auth.sessions s
+            JOIN auth.session_account_status eligibility ON eligibility.id = s.id
+            WHERE s.id = $1
+            FOR UPDATE OF s
             "#,
         )
         .bind(id)
@@ -134,11 +149,7 @@ impl SessionsRepository {
         .await
     }
 
-    pub async fn revoke(
-        tx: &mut Tx<'_>,
-        id: Uuid,
-        reason: &str
-    ) -> Result<(), sqlx::Error> {
+    pub async fn revoke(tx: &mut Tx<'_>, id: Uuid, reason: &str) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE auth.sessions

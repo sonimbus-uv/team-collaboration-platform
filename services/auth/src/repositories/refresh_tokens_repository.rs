@@ -13,10 +13,7 @@ pub struct RefreshTokensRepository;
 
 impl RefreshTokensRepository {
     // Identity lookup takes no locks; all authoritative checks happen after account/session locks.
-    pub async fn identity(
-        pool: &PgPool,
-        hash: &[u8]
-    ) -> Result<Option<(Uuid, Uuid)>, sqlx::Error> {
+    pub async fn identity(pool: &PgPool, hash: &[u8]) -> Result<Option<(Uuid, Uuid)>, sqlx::Error> {
         sqlx::query_as(
             r#"
             SELECT s.account_id, s.id
@@ -73,11 +70,7 @@ impl RefreshTokensRepository {
         .await
     }
 
-    pub async fn consume(
-        tx: &mut Tx<'_>,
-        id: Uuid,
-        next: Uuid
-    ) -> Result<(), sqlx::Error> {
+    pub async fn consume(tx: &mut Tx<'_>, id: Uuid, next: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE auth.refresh_tokens

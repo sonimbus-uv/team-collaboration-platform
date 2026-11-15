@@ -8,7 +8,9 @@ use crate::{
     dto::sessions::{LoginRequest, TokenResponse},
     repositories::{
         refresh_tokens_repository::RefreshTokensRepository as Refresh,
-        sessions_repository::{PasswordSnapshot, SessionRow, SessionsRepository, Tx},
+        sessions_repository::{
+            PasswordSessionContext, PasswordSnapshot, SessionRow, SessionsRepository, Tx,
+        },
     },
     services::password_processor::{PasswordProcessingError, PasswordProcessor},
     validators::auth_validator::is_valid_email_format,
@@ -17,6 +19,7 @@ use crate::{
 #[derive(Debug)]
 pub enum SessionError {
     Malformed,
+    InvalidAccess,
     InvalidCredentials,
     InvalidRefresh,
     Busy,
@@ -68,33 +71,84 @@ impl SessionService {
         validate_login(&request, &email)?;
         let password_snapshot = self.authenticate(&email, request.password).await?;
 
+        let authenticated_at = sqlx::types::chrono::Utc::now();
         let mut tx = self.repository.pool.begin().await?;
 
-        if SessionsRepository::lock_account(&mut tx, password_snapshot.account_id).await?
+        if SessionsRepository::lock_password_account(&mut tx, password_snapshot.account_id).await?
             != Some(true)
             || !SessionsRepository::password_unchanged(&mut tx, &password_snapshot).await?
         {
             return Err(SessionError::InvalidCredentials);
         }
 
-        let session = SessionsRepository::open(
+        let session = SessionsRepository::open_password(
             &mut tx,
-            password_snapshot.account_id,
-            request.client_type.as_str(),
-            request.device_name.as_deref(),
+            PasswordSessionContext {
+                credentials: &password_snapshot,
+                client_type: request.client_type.as_str(),
+                device_name: request.device_name.as_deref(),
+                authenticated_at,
+            },
         )
         .await?;
 
-        let (refresh_secret, refresh_token_hash) = new_refresh()?;
-
-        Refresh::insert(&mut tx, &session, &refresh_token_hash).await?;
-
-        let response = self.response(&session, refresh_secret)?;
+        let response = self.issue_tokens(&mut tx, &session).await?;
 
         tx.commit()
             .await
             .map_err(|_| SessionError::CommitUncertain)?;
         Ok(response)
+    }
+
+    pub async fn reauthenticate(
+        &self,
+        actor: crate::repositories::session_authentication_repository::SessionActor,
+        password: String,
+    ) -> Result<(), SessionError> {
+        use crate::repositories::session_authentication_repository::SessionAuthenticationRepository;
+        if password.chars().count() > 128 {
+            return Err(SessionError::Malformed);
+        }
+        let snapshot =
+            SessionAuthenticationRepository::password(&self.repository.pool, actor).await?;
+        let matches = self
+            .passwords
+            .verify(
+                password,
+                snapshot.as_ref().map(|proof| proof.password_hash.clone()),
+            )
+            .await
+            .map_err(|error| match error {
+                PasswordProcessingError::Busy => SessionError::Busy,
+                _ => SessionError::Signing,
+            })?;
+        if !matches {
+            return Err(SessionError::InvalidCredentials);
+        }
+        let proof = snapshot.ok_or(SessionError::InvalidCredentials)?;
+        let authenticated_at = sqlx::types::chrono::Utc::now();
+        let mut tx = self.repository.pool.begin().await?;
+        if SessionsRepository::lock_password_account(&mut tx, actor.account_id).await? != Some(true)
+            || SessionAuthenticationRepository::lock(&mut tx, actor)
+                .await?
+                .is_none()
+        {
+            return Err(SessionError::InvalidAccess);
+        }
+        if !SessionsRepository::password_unchanged(&mut tx, &proof).await? {
+            return Err(SessionError::InvalidCredentials);
+        }
+        SessionAuthenticationRepository::record_password_proof(
+            &mut tx,
+            actor,
+            &proof,
+            authenticated_at,
+        )
+        .await?;
+        tx.commit()
+            .await
+            .map_err(|_| SessionError::CommitUncertain)?;
+        Ok(())
     }
 
     pub async fn refresh(&self, refresh_secret: &str) -> Result<TokenResponse, SessionError> {
@@ -107,7 +161,7 @@ impl SessionService {
 
         let mut tx = self.repository.pool.begin().await?;
 
-        if SessionsRepository::lock_account(&mut tx, account_id).await? != Some(true) {
+        if SessionsRepository::lock_active_account(&mut tx, account_id).await? != Some(true) {
             return Err(SessionError::InvalidRefresh);
         }
 
@@ -155,7 +209,7 @@ impl SessionService {
 
         let mut tx = self.repository.pool.begin().await?;
 
-        if SessionsRepository::lock_account(&mut tx, account_id)
+        if SessionsRepository::lock_active_account(&mut tx, account_id)
             .await?
             .is_some()
         {
@@ -195,6 +249,16 @@ impl SessionService {
         password_snapshot
             .filter(|_| password_matches)
             .ok_or(SessionError::InvalidCredentials)
+    }
+
+    pub(crate) async fn issue_tokens(
+        &self,
+        tx: &mut Tx<'_>,
+        session: &SessionRow,
+    ) -> Result<TokenResponse, SessionError> {
+        let (secret, token_hash) = new_refresh()?;
+        Refresh::insert(tx, session, &token_hash).await?;
+        self.response(session, secret)
     }
 
     async fn rotate_refresh(

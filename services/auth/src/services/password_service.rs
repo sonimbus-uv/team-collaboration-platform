@@ -7,7 +7,7 @@ use crate::{
         passwords_repository,
         sessions_repository::{PasswordSnapshot, SessionsRepository},
     },
-    security::{recovery_code::RecoveryCodeKey, registration_code::RegistrationCodeKey},
+    security::{recovery_code::RecoveryCodeKey, verification_code::VerificationCodeKey},
     validators::auth_validator::{is_valid_email_format, validate_register_input},
 };
 use sqlx::PgPool;
@@ -168,7 +168,7 @@ impl PasswordService {
             RateLimitDecision::Allowed
         );
         let recovery_attempt_id = Uuid::new_v4();
-        let code = RegistrationCodeKey::generate();
+        let code = VerificationCodeKey::generate();
 
         let mut tx = self.pool.begin().await?;
         let recovery_created = self
@@ -267,7 +267,7 @@ impl PasswordService {
         account_id: Uuid,
         session_id: Uuid,
     ) -> Result<(), PasswordError> {
-        if SessionsRepository::lock_account(tx, account_id).await? != Some(true)
+        if SessionsRepository::lock_password_account(tx, account_id).await? != Some(true)
             || !passwords_repository::session_active(tx, account_id, session_id).await?
         {
             return Err(PasswordError::InvalidAccess);
@@ -306,7 +306,9 @@ impl PasswordService {
         attempt_id: Uuid,
         password_snapshot: &PasswordSnapshot,
     ) -> Result<passwords_repository::RecoveryRow, PasswordError> {
-        if SessionsRepository::lock_account(tx, password_snapshot.account_id).await? != Some(true) {
+        if SessionsRepository::lock_password_account(tx, password_snapshot.account_id).await?
+            != Some(true)
+        {
             return Err(PasswordError::InvalidCode);
         }
         if !SessionsRepository::password_unchanged(tx, password_snapshot).await? {
