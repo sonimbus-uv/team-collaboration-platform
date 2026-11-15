@@ -1,7 +1,6 @@
 use crate::{
     email::{
-        contact_template::google_link_notice,
-        content::EmailContent,
+        contact_template::google_link_notice, content::EmailContent,
         recovery_template::recovery_email_content,
         verification_template::verification_email_content,
     },

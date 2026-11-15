@@ -8,8 +8,8 @@ pub fn google_link_notice(locale: &str) -> EmailContent {
     };
 
     EmailContent {
-        subject, 
-        text: message.into(), 
+        subject,
+        text: message.into(),
         html: format!("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><h1>{subject}</h1><p>{message}</p></body></html>")
     }
 }

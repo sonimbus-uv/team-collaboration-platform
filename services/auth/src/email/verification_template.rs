@@ -7,7 +7,7 @@ pub fn verification_email_content(locale: &str, code: &str) -> EmailContent {
         ("Tu código de verificación de Sonimbus", "Introduce este código en Sonimbus para verificar tu correo electrónico. Vence a los 10 minutos de solicitarlo. Reenviarlo no amplía el plazo. No lo compartas. Si no lo solicitaste, ignora este mensaje.")
     };
     let safe_code = super::html::escape_html(code);
-    
+
     EmailContent {
         subject,
         text: format!("{message}\n\n{code}"),

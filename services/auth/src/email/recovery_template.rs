@@ -24,7 +24,7 @@ pub fn recovery_email_content(locale: &str, code: &str) -> EmailContent {
             "Equipo Sonimbus",
         ))
     };
-    
+
     EmailContent {
         subject,
         text: format!("{before}\n\n{code}\n\n{after}"),
