@@ -31,10 +31,13 @@ acredita despliegue ni habilitación para producción. La revisión de cuentas
 heredadas y de enumeración sigue siendo una condición operativa.
 
 El [contrato Google y correo de contacto v1.0](../../contracts/auth/public-api.md#google-y-correo-de-contacto)
-define el diseño aprobado, sin implementación ni migraciones todavía. Google,
-vinculación y verificación general de contacto no deben presentarse como funciones
-habilitadas. La gestión general de perfil tampoco forma parte de los flujos
-implementados descritos aquí. Los requisitos generales se encuentran en
+define el diseño aprobado. El esquema, adaptador OIDC y login Google están
+implementados con activación explícita, junto con vinculación, conexiones y
+reautenticación por contraseña. La verificación general de contacto y el worker
+de avisos están implementados con banderas independientes, apagadas por defecto.
+La integración de clientes y el aprovisionamiento Google real requieren validación.
+La gestión general de perfil tampoco forma parte de los flujos implementados.
+Los requisitos generales se encuentran en
 [requisitos](../../docs/requirements/README.md#auth-service).
 
 ## Mantenimiento documental

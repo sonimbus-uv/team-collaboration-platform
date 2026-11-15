@@ -115,3 +115,55 @@ privados. El inventario y los predeterminados se mantienen en
 [contrato interno](../../../contracts/auth/internal-api.md#autenticación-y-límites).
 Las políticas específicas de contraseña se contrastan con el
 [contrato de contraseñas](../../../contracts/auth/public-api.md#presupuestos).
+
+## Configuración del adaptador Google
+
+`GoogleOidcConfig::new` valida el identificador del cliente OAuth confidencial,
+su secreto y el callback HTTPS fijo `/api/v1/auth/google/callback`. Rechaza
+credenciales vacías, espacios, URLs con usuario, query o fragmento y rutas
+alternativas. El secreto se mantiene en un contenedor con borrado al liberar;
+la configuración no implementa `Debug` ni serialización.
+
+El arranque integra esta configuración cuando `AUTH_GOOGLE_ENABLED=true`.
+Requiere `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET`,
+`AUTH_GOOGLE_CALLBACK_URL` y `AUTH_GOOGLE_RETURN_TARGETS`. El último valor es un
+objeto JSON de identificadores registrados, cada uno con `client_type` (`desktop`
+o `mobile`) y `url`. El identificador solicitado debe corresponder al tipo de cliente.
+Las URLs admiten HTTPS o el esquema explícito `sonimbus`, sin usuario, query ni
+fragmento; loopback dinámico no está habilitado en esta versión.
+
+Google permanece deshabilitado por defecto, independientemente de
+`AUTH_LOGIN_ENABLED`. Los valores de `.env.example` son ejemplos sin credenciales
+utilizables. El callback HTTPS debe coincidir con el registrado en Google Cloud.
+La habilitación requiere revisar el destino real de cada cliente y terminar la
+configuración de consentimiento; la existencia del adaptador no acredita esa operación.
+
+`AUTH_GOOGLE_IP_CAPACITY` (20) y `AUTH_GOOGLE_IP_REFILL_SECS` (60) configuran
+el presupuesto Redis compartido de login, vinculación y consulta de conexiones por IP. No comparten
+clave ni parámetros con login por contraseña. Los valores requieren medición
+antes de habilitar el despliegue.
+
+La vinculación, consulta de conexiones y reautenticación por contraseña utilizan
+la misma bandera `AUTH_GOOGLE_ENABLED`. Reautenticación tiene presupuestos fijos
+Redis de seis solicitudes por IP y por cuenta con recarga de 60 segundos. El gateway
+usa una zona propia `auth_reauthenticate`. La entrega de avisos se habilita mediante
+una bandera independiente.
+
+## Contacto y avisos de seguridad
+
+`AUTH_CONTACT_EMAIL_ENABLED=false` deshabilita las cuatro operaciones de contacto.
+Su activación exige `AUTH_CONTACT_EMAIL_HMAC_SECRET` de al menos 32 bytes, distinto
+de los secretos de registro, destinatario y recuperación habilitada. El generador
+local aprovisiona un valor aleatorio y mantiene la función apagada; no modifica
+un `.env` ya existente. La rotación requiere coordinar los intentos todavía vigentes.
+
+`AUTH_SECURITY_NOTIFICATIONS_ENABLED=false` mantiene los avisos encolados sin
+procesarlos. Al habilitarla, el worker usa el proveedor y remitente de correo ya
+configurados, sin depender de que Google o contacto sigan habilitados. No se
+cambia ninguna de estas banderas automáticamente por crear un vínculo.
+
+Contactos usa límites Redis propios por IP y cuenta, más el presupuesto por
+destinatario compartido con registro. El gateway tiene zonas independientes de
+lectura/envío/confirmación y espera hasta 15 segundos en solicitud y reenvío para
+cubrir el envío acotado. La documentación de límites en el contrato es la referencia
+de capacidades y recargas; los valores no acreditan capacidad productiva.
