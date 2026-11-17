@@ -12,9 +12,12 @@ defmodule CoreWeb.Endpoint do
   ]
 
   # Tiempo real de los clientes; el token va en Sec-WebSocket-Protocol
-  # (auth_token) y no en la URL. Sin longpoll.
+  # (auth_token) y no en la URL. Sin longpoll. `auth_token` es opción del
+  # socket: dentro de `websocket:` Phoenix la reemplaza por la del socket
+  # (nil) y el token de la cabecera se ignora.
   socket "/socket", CoreWeb.UserSocket,
-    websocket: [auth_token: true],
+    auth_token: true,
+    websocket: true,
     longpoll: false
 
   # socket "/live", Phoenix.LiveView.Socket,
