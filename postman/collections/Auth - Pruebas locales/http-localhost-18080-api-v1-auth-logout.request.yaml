@@ -1,0 +1,29 @@
+$kind: http-request
+name: http://localhost:18080/api/v1/auth/logout
+description: 04-Registro
+url: http://localhost:18080/api/v1/auth/logout
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"refresh_token\": \"WhkEtTjlkNY0LOn8xpYBZgOrYinqQ-MOkCW-UymolO0\"\r
+
+    }"
+scripts:
+  - type: afterResponse
+    code: "pm.test(\"Logout devuelve HTTP 204\", () => {\r
+
+      \    pm.response.to.have.status(204);\r
+
+      });\r
+
+      \r
+
+      pm.test(\"La respuesta no contiene cuerpo\", () => {\r
+
+      \    pm.expect(pm.response.text()).to.eql(\"\");\r
+
+      });"
+    language: text/javascript
+order: 6000

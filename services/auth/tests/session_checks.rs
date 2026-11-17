@@ -1,4 +1,3 @@
-//! sqlx::test creates a separate migrated database per test. Login is never enabled.
 use auth_service::{
     session_check_service::{SessionCheckError, SessionCheckService},
     session_check_types::{
@@ -9,7 +8,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::time::Duration;
 use uuid::Uuid;
 
-async fn fixture(
+async fn create_session_fixture(
     pool: &PgPool,
     status: &str,
     verified: bool,
@@ -17,7 +16,7 @@ async fn fixture(
 ) -> SessionCheckRequest {
     let account_id: Uuid = sqlx::query_scalar(
         "INSERT INTO auth.accounts(email,status,email_verified_at)
-         VALUES($1,$2,CASE WHEN $3 THEN statement_timestamp() END) RETURNING id",
+         VALUES(CASE WHEN $3 THEN $1::text END,$2,CASE WHEN $3 THEN statement_timestamp() END) RETURNING id",
     )
     .bind(format!("{}@example.invalid", Uuid::new_v4()))
     .bind(status)
@@ -25,7 +24,8 @@ async fn fixture(
     .fetch_one(pool)
     .await
     .unwrap();
-    // Fixed elapsed intervals, no real waiting and no credential or open_session() needed.
+    sqlx::query("INSERT INTO auth.password_credentials(account_id, password_hash) VALUES ($1, 'fixture-only-hash')")
+        .bind(account_id).execute(pool).await.unwrap();
     let sid = sqlx::query_scalar(
         "INSERT INTO auth.sessions(account_id,client_type,created_at,expires_at)
          VALUES($1,'desktop',statement_timestamp()-interval '2 days',
@@ -55,12 +55,12 @@ async fn snapshot(pool: &PgPool) -> serde_json::Value {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn mixed_batch_matches_individual_rules_and_never_writes(pool: PgPool) {
-    let active = fixture(&pool, "active", true, false).await;
-    let expired = fixture(&pool, "active", true, true).await;
-    let revoked = fixture(&pool, "active", true, false).await;
+    let active = create_session_fixture(&pool, "active", true, false).await;
+    let expired = create_session_fixture(&pool, "active", true, true).await;
+    let revoked = create_session_fixture(&pool, "active", true, false).await;
     sqlx::query("UPDATE auth.sessions SET revoked_at=statement_timestamp(),revoke_reason='logout' WHERE id=$1")
         .bind(revoked.sid).execute(&pool).await.unwrap();
-    let unverified = fixture(&pool, "active", false, false).await;
+    let unverified = create_session_fixture(&pool, "active", false, false).await;
     let mut requests = vec![
         active,
         expired,
@@ -76,7 +76,7 @@ async fn mixed_batch_matches_individual_rules_and_never_writes(pool: PgPool) {
         unverified,
     ];
     for status in ["locked", "suspended", "deleted"] {
-        requests.push(fixture(&pool, status, true, false).await);
+        requests.push(create_session_fixture(&pool, status, true, false).await);
     }
     while requests.len() < MAX_SESSION_CHECKS {
         requests.push(SessionCheckRequest {
@@ -84,12 +84,11 @@ async fn mixed_batch_matches_individual_rules_and_never_writes(pool: PgPool) {
             ..active
         });
     }
-    // Include refresh state in the write-safety check, even though checks never read it.
     sqlx::query("INSERT INTO auth.refresh_tokens(session_id,token_hash,expires_at) SELECT id,$2,expires_at FROM auth.sessions WHERE id=$1")
         .bind(active.sid).bind(vec![42u8;32]).execute(&pool).await.unwrap();
     let before = snapshot(&pool).await;
     // All connections used by the service are read-only: any accidental DML must fail.
-    let readonly = PgPoolOptions::new()
+    let read_only_pool = PgPoolOptions::new()
         .max_connections(1)
         .after_connect(|connection, _| {
             Box::pin(async move {
@@ -102,7 +101,7 @@ async fn mixed_batch_matches_individual_rules_and_never_writes(pool: PgPool) {
         .connect_with(pool.connect_options().as_ref().clone())
         .await
         .unwrap();
-    let service = SessionCheckService::new(readonly.clone());
+    let service = SessionCheckService::new(read_only_pool.clone());
     let batch = service
         .check_batch(SessionCheckBatchRequest {
             sessions: requests.clone(),
@@ -120,12 +119,12 @@ async fn mixed_batch_matches_individual_rules_and_never_writes(pool: PgPool) {
         assert_eq!(json.as_object().unwrap().len(), 4);
     }
     assert_eq!(snapshot(&pool).await, before);
-    readonly.close().await;
+    read_only_pool.close().await;
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn allowed_account_state_is_rechecked_on_every_query(pool: PgPool) {
-    let request = fixture(&pool, "active", true, false).await;
+    let request = create_session_fixture(&pool, "active", true, false).await;
     let service = SessionCheckService::new(pool.clone());
     assert!(service.check(request).await.unwrap().active);
     sqlx::query("UPDATE auth.accounts SET status='locked' WHERE id=$1")
@@ -134,11 +133,13 @@ async fn allowed_account_state_is_rechecked_on_every_query(pool: PgPool) {
         .await
         .unwrap();
     assert!(!service.check(request).await.unwrap().active);
-    sqlx::query("UPDATE auth.accounts SET status='active',email_verified_at=NULL WHERE id=$1")
-        .bind(request.account_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE auth.accounts SET status='active',email=NULL,email_verified_at=NULL WHERE id=$1",
+    )
+    .bind(request.account_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(!service.check(request).await.unwrap().active);
 }
 
@@ -185,19 +186,19 @@ async fn invalid_batches_are_rejected_before_database_access() {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn pool_timeout_and_sql_errors_fail_entire_operation(pool: PgPool) {
-    let active = fixture(&pool, "active", true, false).await;
+    let active = create_session_fixture(&pool, "active", true, false).await;
     let missing = SessionCheckRequest {
         sid: Uuid::new_v4(),
         ..active
     };
-    let constrained = PgPoolOptions::new()
+    let constrained_pool = PgPoolOptions::new()
         .max_connections(1)
         .acquire_timeout(Duration::from_secs(1))
         .connect_with(pool.connect_options().as_ref().clone())
         .await
         .unwrap();
-    let held = constrained.acquire().await.unwrap();
-    let service = SessionCheckService::new(constrained.clone());
+    let held_connection = constrained_pool.acquire().await.unwrap();
+    let service = SessionCheckService::new(constrained_pool.clone());
     assert!(matches!(
         service.check(active).await,
         Err(SessionCheckError::Database(sqlx::Error::PoolTimedOut))
@@ -210,17 +211,20 @@ async fn pool_timeout_and_sql_errors_fail_entire_operation(pool: PgPool) {
             .await,
         Err(SessionCheckError::Database(sqlx::Error::PoolTimedOut))
     ));
-    drop(held);
-    constrained.close().await;
-    // Break only this sqlx::test database. fetch_all must discard any partial rows.
-    sqlx::query("ALTER TABLE auth.sessions RENAME TO unavailable_sessions")
-        .execute(&pool)
-        .await
-        .unwrap();
+    drop(held_connection);
+    constrained_pool.close().await;
+    // sqlx::test isolates this schema change from other tests.
+    sqlx::query(
+        "ALTER VIEW auth.session_account_status RENAME TO unavailable_session_account_status",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let service = SessionCheckService::new(pool);
     assert!(matches!(
         service.check(active).await,
-        Err(SessionCheckError::Database(_))
+        Err(SessionCheckError::Database(sqlx::Error::Database(error)))
+        if error.code().as_deref() == Some("42P01")
     ));
     assert!(matches!(
         service
@@ -228,14 +232,15 @@ async fn pool_timeout_and_sql_errors_fail_entire_operation(pool: PgPool) {
                 sessions: vec![active, missing]
             })
             .await,
-        Err(SessionCheckError::Database(_))
+        Err(SessionCheckError::Database(sqlx::Error::Database(error)))
+        if error.code().as_deref() == Some("42P01")
     ));
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn database_statement_timeout_is_not_an_inactive_session(pool: PgPool) {
-    let active = fixture(&pool, "active", true, false).await;
-    let limited = PgPoolOptions::new()
+    let active = create_session_fixture(&pool, "active", true, false).await;
+    let timeout_pool = PgPoolOptions::new()
         .max_connections(1)
         .after_connect(|connection, _| {
             Box::pin(async move {
@@ -248,7 +253,7 @@ async fn database_statement_timeout_is_not_an_inactive_session(pool: PgPool) {
         .connect_with(pool.connect_options().as_ref().clone())
         .await
         .unwrap();
-    let service = SessionCheckService::new(limited.clone());
+    let service = SessionCheckService::new(timeout_pool.clone());
     assert!(service.check(active).await.unwrap().active);
     let mut blocker = pool.begin().await.unwrap();
     sqlx::query("LOCK TABLE auth.sessions IN ACCESS EXCLUSIVE MODE")
@@ -256,13 +261,13 @@ async fn database_statement_timeout_is_not_an_inactive_session(pool: PgPool) {
         .await
         .unwrap();
     for result in [
-        service.check(active).await.map(|r| vec![r]),
+        service.check(active).await.map(|result| vec![result]),
         service
             .check_batch(SessionCheckBatchRequest {
                 sessions: vec![active],
             })
             .await
-            .map(|r| r.results),
+            .map(|result| result.results),
     ] {
         assert!(
             matches!(result, Err(SessionCheckError::Database(sqlx::Error::Database(error)))
@@ -271,5 +276,5 @@ async fn database_statement_timeout_is_not_an_inactive_session(pool: PgPool) {
     }
     blocker.rollback().await.unwrap();
     assert!(service.check(active).await.unwrap().active);
-    limited.close().await;
+    timeout_pool.close().await;
 }

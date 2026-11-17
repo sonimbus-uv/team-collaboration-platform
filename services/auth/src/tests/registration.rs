@@ -31,6 +31,7 @@ struct Mail {
     messages: Mutex<Vec<String>>,
     fail: AtomicBool,
 }
+
 #[async_trait::async_trait]
 impl VerificationEmailSender for Mail {
     async fn send(&self, _: &str, code: &str, _: &str) -> Result<(), EmailDeliveryError> {
@@ -41,11 +42,13 @@ impl VerificationEmailSender for Mail {
         Ok(())
     }
 }
+
 impl Mail {
     fn last(&self) -> String {
         self.messages.lock().unwrap().last().unwrap().clone()
     }
 }
+
 fn state(pool: &PgPool, mail: Arc<Mail>) -> AppState {
     let verification = EmailVerificationService::new(
         RegistrationAttemptsRepository::new(pool.clone()),
@@ -54,14 +57,20 @@ fn state(pool: &PgPool, mail: Arc<Mail>) -> AppState {
     )
     .unwrap();
     AppState {
-        login_enabled: true, // Isolated test only; production default remains false.
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
+        password_service: None,
+        login_enabled: true,
         token_issuer: crate::tests::token_support::issuer(),
         pool: pool.clone(),
         auth_service: AuthService::new(
             AccountsRepository::new(pool.clone()),
-            Arc::new(Argon2PasswordHasher),
+            crate::services::password_processor::PasswordProcessor::new(
+                Arc::new(Argon2PasswordHasher),
+                4,
+            ),
             verification.clone(),
-            4,
         ),
         email_verification_service: verification,
         auth_rate_limiter: Arc::new(
@@ -72,6 +81,7 @@ fn state(pool: &PgPool, mail: Arc<Mail>) -> AppState {
         ),
     }
 }
+
 fn request(path: &str, body: serde_json::Value) -> Request<Body> {
     Request::builder()
         .method("POST")
@@ -83,13 +93,18 @@ fn request(path: &str, body: serde_json::Value) -> Request<Body> {
         .body(Body::from(body.to_string()))
         .unwrap()
 }
+
 async fn call(
-    app: &axum::Router,
+    test_router: &axum::Router,
     path: &str,
     body: serde_json::Value,
     status: StatusCode,
 ) -> serde_json::Value {
-    let response = app.clone().oneshot(request(path, body)).await.unwrap();
+    let response = test_router
+        .clone()
+        .oneshot(request(path, body))
+        .await
+        .unwrap();
     assert_eq!(response.status(), status);
     assert_eq!(response.headers()["cache-control"], "no-store");
     let bytes = to_bytes(response.into_body(), 16384).await.unwrap();
@@ -99,6 +114,7 @@ async fn call(
         serde_json::from_slice(&bytes).unwrap()
     }
 }
+
 async fn start(state: &AppState, email: &str, password: &str) -> Uuid {
     state
         .auth_service
@@ -108,23 +124,45 @@ async fn start(state: &AppState, email: &str, password: &str) -> Uuid {
         .0
         .id
 }
+
 async fn age(pool: &PgPool, id: Uuid) {
-    sqlx::query("UPDATE auth.registration_attempts SET last_sent_at=clock_timestamp()-interval '61 seconds' WHERE id=$1").bind(id).execute(pool).await.unwrap();
+    sqlx::query(
+        r#"
+        UPDATE auth.registration_attempts
+        SET last_sent_at = clock_timestamp() - interval '61 seconds'
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
+
 async fn expire(pool: &PgPool, id: Uuid) {
-    sqlx::query("UPDATE auth.registration_attempts SET created_at=clock_timestamp()-interval '11 minutes',expires_at=clock_timestamp()-interval '1 second' WHERE id=$1").bind(id).execute(pool).await.unwrap();
+    sqlx::query(
+        r#"
+        UPDATE auth.registration_attempts
+        SET created_at = clock_timestamp() - interval '11 minutes', expires_at = clock_timestamp() - interval '1 second'
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     let mail = Arc::new(Mail::default());
     let state = state(&pool, mail.clone());
-    let app = crate::routes::router(state.clone());
+    let test_router = crate::routes::router(state.clone());
     let attacker = start(&state, "owner@example.com", "AttackerPass123!").await;
     let code_a = mail.last();
     let result = call(
-        &app,
-        "/auth/register",
+        &test_router,
+        "/api/v1/auth/register",
         serde_json::json!({"email":" OWNER@Example.COM ","password":"OwnerPass456!"}),
         StatusCode::CREATED,
     )
@@ -145,36 +183,36 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
         0
     );
     call(
-        &app,
-        "/auth/verify-email",
+        &test_router,
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":attacker,"code":code_b}),
         StatusCode::BAD_REQUEST,
     )
     .await;
     call(
-        &app,
-        "/auth/verify-email",
+        &test_router,
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":owner,"code":code_b}),
         StatusCode::OK,
     )
     .await;
     call(
-        &app,
-        "/auth/verify-email",
+        &test_router,
+        "/api/v1/auth/verify-email",
         serde_json::json!({"registration_attempt_id":attacker,"code":code_a}),
         StatusCode::BAD_REQUEST,
     )
     .await;
     let login = |password: &str| serde_json::json!({"email":"owner@example.com","password":password,"client_type":"desktop"});
     call(
-        &app,
+        &test_router,
         "/api/v1/auth/login",
         login("AttackerPass123!"),
         StatusCode::UNAUTHORIZED,
     )
     .await;
     let tokens = call(
-        &app,
+        &test_router,
         "/api/v1/auth/login",
         login("OwnerPass456!"),
         StatusCode::OK,
@@ -188,7 +226,7 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     };
     assert!(checks.check(pair).await.unwrap().active);
     let next = call(
-        &app,
+        &test_router,
         "/api/v1/auth/refresh",
         serde_json::json!({"refresh_token":tokens["refresh_token"]}),
         StatusCode::OK,
@@ -196,7 +234,7 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     .await;
     assert_ne!(tokens["refresh_token"], next["refresh_token"]);
     call(
-        &app,
+        &test_router,
         "/api/v1/auth/logout",
         serde_json::json!({"refresh_token":next["refresh_token"]}),
         StatusCode::NO_CONTENT,
@@ -204,7 +242,7 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
     .await;
     assert!(!checks.check(pair).await.unwrap().active);
     call(
-        &app,
+        &test_router,
         "/api/v1/auth/refresh",
         serde_json::json!({"refresh_token":next["refresh_token"]}),
         StatusCode::UNAUTHORIZED,
@@ -216,19 +254,23 @@ async fn risk17_owner_attempt_wins_and_full_session_lifecycle(pool: PgPool) {
 async fn wrong_codes_persist_and_fifth_failure_locks_even_correct_code(pool: PgPool) {
     let mail = Arc::new(Mail::default());
     let state = state(&pool, mail.clone());
-    let app = crate::routes::router(state.clone());
+    let test_router = crate::routes::router(state.clone());
     let id = start(&state, "failures@example.com", "ValidPass123!").await;
     let code = mail.last();
     for expected in 1..=5 {
         call(
-            &app,
-            "/auth/verify-email",
+            &test_router,
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":"invalid-format"}),
             StatusCode::BAD_REQUEST,
         )
         .await;
         let count: i32 = sqlx::query_scalar(
-            "SELECT failed_attempts FROM auth.registration_attempts WHERE id=$1",
+            r#"
+            SELECT failed_attempts
+            FROM auth.registration_attempts
+            WHERE id = $1
+            "#,
         )
         .bind(id)
         .fetch_one(&pool)
@@ -321,7 +363,21 @@ async fn resends_replace_code_preserve_failures_deadline_and_have_fixed_limits(p
             .await
             .unwrap();
     }
-    let (count,version,actual):(i32,i32,sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>)=sqlx::query_as("SELECT failed_attempts,code_version,expires_at FROM auth.registration_attempts WHERE id=$1").bind(id).fetch_one(&pool).await.unwrap();
+    let (count, version, actual): (
+        i32,
+        i32,
+        sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+    ) = sqlx::query_as(
+        r#"
+        SELECT failed_attempts, code_version, expires_at
+        FROM auth.registration_attempts
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!((count, version), (1, 3));
     assert_eq!(actual, expiry);
     age(&pool, id).await;
@@ -401,7 +457,19 @@ async fn concurrent_same_attempt_and_distinct_attempts_have_only_one_winner(pool
             state.email_verification_service.confirm(b, &cb)
         );
         assert_eq!(usize::from(one.is_ok()) + usize::from(two.is_ok()), 1);
-        let hash:String=sqlx::query_scalar("SELECT p.password_hash FROM auth.password_credentials p JOIN auth.accounts a ON a.id=p.account_id WHERE a.email=$1").bind(&email).fetch_one(&pool).await.unwrap();
+        let hash: String = sqlx::query_scalar(
+            r#"
+            SELECT p . password_hash
+            FROM auth.password_credentials p
+            JOIN auth.accounts a
+            ON a . id = p . account_id
+            WHERE a . email = $1
+            "#,
+        )
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         let password = if one.is_ok() || same {
             "FirstPass123!"
         } else {
@@ -414,28 +482,49 @@ async fn concurrent_same_attempt_and_distinct_attempts_have_only_one_winner(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn verified_accounts_cannot_be_changed_and_legacy_pending_can_be_claimed(pool: PgPool) {
+async fn registration_does_not_claim_another_accounts_pending_contact_or_credentials(pool: PgPool) {
     let mail = Arc::new(Mail::default());
     let state = state(&pool, mail.clone());
     let account: Uuid = sqlx::query_scalar(
-        "INSERT INTO auth.accounts(email) VALUES('legacy@example.com') RETURNING id",
+        r#"
+        INSERT INTO auth.accounts DEFAULT VALUES
+        RETURNING id
+        "#,
     )
     .fetch_one(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO auth.password_credentials(account_id,password_hash) VALUES($1,'legacy-attacker-hash')").bind(account).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO auth.one_time_tokens(account_id,purpose,token_hash,sent_to_email,expires_at) VALUES($1,'email_verification',$2,'legacy@example.com',clock_timestamp()+interval '1 hour')").bind(account).bind(vec![1u8;32]).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO auth.account_email_proposals(account_id, email) VALUES ($1, 'legacy@example.com')")
+        .bind(account).execute(&pool).await.unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO auth.password_credentials (account_id, password_hash)
+        VALUES ($1, 'legacy-attacker-hash')
+        "#,
+    )
+    .bind(account)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO auth.one_time_tokens (account_id, purpose, token_hash, sent_to_email, expires_at)
+        VALUES ($1, 'email_verification', $2, 'legacy@example.com', clock_timestamp() + interval '1 hour')
+        "#,
+    )
+    .bind(account)
+    .bind(vec![1u8;32])
+    .execute(&pool)
+    .await
+    .unwrap();
     let id = start(&state, "legacy@example.com", "OwnerPass456!").await;
     let code = mail.last();
-    assert_eq!(
-        state
-            .email_verification_service
-            .confirm(id, &code)
-            .await
-            .unwrap()
-            .id,
-        account
-    );
+    let confirmed = state
+        .email_verification_service
+        .confirm(id, &code)
+        .await
+        .unwrap();
+    assert_ne!(confirmed.id, account);
     assert!(state
         .auth_service
         .register(
@@ -451,17 +540,33 @@ async fn verified_accounts_cannot_be_changed_and_legacy_pending_can_be_claimed(p
         .await
         .is_err());
     let hash: String = sqlx::query_scalar(
-        "SELECT password_hash FROM auth.password_credentials WHERE account_id=$1",
+        r#"
+        SELECT password_hash
+        FROM auth.password_credentials
+        WHERE account_id = $1
+        "#,
     )
-    .bind(account)
+    .bind(confirmed.id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert!(Argon2PasswordHasher
         .verify_password("OwnerPass456!", &hash)
         .unwrap());
-    assert!(sqlx::query_scalar::<_, bool>(
-        "SELECT invalidated_at IS NOT NULL FROM auth.one_time_tokens WHERE account_id=$1"
+    let old_hash: String = sqlx::query_scalar(
+        "SELECT password_hash FROM auth.password_credentials WHERE account_id = $1",
+    )
+    .bind(account)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(old_hash, "legacy-attacker-hash");
+    assert!(!sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT invalidated_at IS NOT NULL
+        FROM auth.one_time_tokens
+        WHERE account_id = $1
+        "#,
     )
     .bind(account)
     .fetch_one(&pool)
@@ -474,10 +579,10 @@ async fn mail_failure_keeps_attempt_and_can_retry_without_open_transaction(pool:
     let mail = Arc::new(Mail::default());
     mail.fail.store(true, Ordering::SeqCst);
     let state = state(&pool, mail.clone());
-    let app = crate::routes::router(state.clone());
+    let test_router = crate::routes::router(state.clone());
     let response = call(
-        &app,
-        "/auth/register",
+        &test_router,
+        "/api/v1/auth/register",
         serde_json::json!({"email":"mail@example.com","password":"ValidPass123!"}),
         StatusCode::CREATED,
     )
@@ -491,8 +596,8 @@ async fn mail_failure_keeps_attempt_and_can_retry_without_open_transaction(pool:
     age(&pool, id).await;
     mail.fail.store(false, Ordering::SeqCst);
     call(
-        &app,
-        "/auth/resend-verification",
+        &test_router,
+        "/api/v1/auth/resend-verification",
         serde_json::json!({"registration_attempt_id":id}),
         StatusCode::ACCEPTED,
     )
@@ -510,8 +615,29 @@ async fn database_error_rolls_back_activation_code_consumption_and_password(pool
     let state = state(&pool, mail.clone());
     let id = start(&state, "rollback@example.com", "ValidPass123!").await;
     let code = mail.last();
-    sqlx::query("CREATE FUNCTION auth.fail_password() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test-only failure'; END; $$").execute(&pool).await.unwrap();
-    sqlx::query("CREATE TRIGGER fail_password BEFORE INSERT ON auth.password_credentials FOR EACH ROW EXECUTE FUNCTION auth.fail_password()").execute(&pool).await.unwrap();
+    sqlx::query(
+        r#"
+        CREATE FUNCTION auth.fail_password() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            RAISE EXCEPTION 'test-only failure';
+        END;
+        $$
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        CREATE TRIGGER fail_password BEFORE INSERT
+        ON auth.password_credentials
+        FOR EACH ROW EXECUTE FUNCTION auth.fail_password()
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         state.email_verification_service.confirm(id, &code).await,
         Err(VerificationError::Database(_))
@@ -524,7 +650,11 @@ async fn database_error_rolls_back_activation_code_consumption_and_password(pool
         0
     );
     assert!(sqlx::query_scalar::<_, bool>(
-        "SELECT consumed_at IS NULL FROM auth.registration_attempts WHERE id=$1"
+        r#"
+        SELECT consumed_at IS NULL
+        FROM auth.registration_attempts
+        WHERE id = $1
+        "#,
     )
     .bind(id)
     .fetch_one(&pool)
@@ -547,6 +677,7 @@ struct LockCheckingMail {
     pool: PgPool,
     codes: Mutex<Vec<String>>,
 }
+
 #[async_trait::async_trait]
 impl VerificationEmailSender for LockCheckingMail {
     async fn send(&self, email: &str, code: &str, _: &str) -> Result<(), EmailDeliveryError> {
@@ -580,9 +711,11 @@ async fn initial_and_resend_mail_run_after_commit_without_registration_locks(poo
     .unwrap();
     let auth = AuthService::new(
         AccountsRepository::new(pool.clone()),
-        Arc::new(Argon2PasswordHasher),
+        crate::services::password_processor::PasswordProcessor::new(
+            Arc::new(Argon2PasswordHasher),
+            4,
+        ),
         verification.clone(),
-        4,
     );
     let (attempt, sent) = auth
         .register(
@@ -604,6 +737,7 @@ async fn initial_and_resend_mail_run_after_commit_without_registration_locks(poo
     let code = mail.codes.lock().unwrap().last().unwrap().clone();
     verification.confirm(attempt.id, &code).await.unwrap();
 }
+
 #[async_trait::async_trait]
 impl RecipientBudget for Budget {
     async fn consume(&self, _: &str) -> Result<bool, ()> {
@@ -641,12 +775,12 @@ async fn legacy_paths_and_malformed_inputs_never_activate_or_expose_secrets(pool
     let state = state(&pool, mail.clone());
     let id = start(&state, "legacy-path@example.com", "ValidPass123!").await;
     let code = mail.last();
-    let app = crate::routes::router(state.clone());
+    let test_router = crate::routes::router(state.clone());
     for uri in [
-        "/auth/verify-email",
-        "/auth/verify-email?token=legacy-secret",
+        "/api/v1/auth/verify-email",
+        "/api/v1/auth/verify-email?token=legacy-secret",
     ] {
-        let response = app
+        let response = test_router
             .clone()
             .oneshot(
                 Request::builder()
@@ -668,7 +802,13 @@ async fn legacy_paths_and_malformed_inputs_never_activate_or_expose_secrets(pool
         serde_json::json!({"registration_attempt_id":"malformed","code":code}),
         serde_json::json!({"registration_attempt_id":id,"code":code,"password":"leaked"}),
     ] {
-        let problem = call(&app, "/auth/verify-email", body, StatusCode::BAD_REQUEST).await;
+        let problem = call(
+            &test_router,
+            "/api/v1/auth/verify-email",
+            body,
+            StatusCode::BAD_REQUEST,
+        )
+        .await;
         assert!(!problem.to_string().contains(&code));
         assert!(!problem.to_string().contains("leaked"));
     }
@@ -691,8 +831,8 @@ async fn jwks_route_is_public_even_when_redis_and_database_are_unavailable() {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy("postgres://test:test@127.0.0.1:1/unavailable")
         .unwrap();
-    let app = crate::routes::router(state(&pool, Arc::new(Mail::default())));
-    let response = app
+    let test_router = crate::routes::router(state(&pool, Arc::new(Mail::default())));
+    let response = test_router
         .oneshot(
             Request::builder()
                 .uri("/.well-known/jwks.json")
@@ -721,11 +861,11 @@ async fn initial_delivery_and_resends_share_recipient_budget(pool: PgPool) {
             crate::protection::rate_limit::BucketPolicy::new(1, 600).unwrap(),
         ),
     );
-    let app = crate::routes::router(state.clone());
+    let test_router = crate::routes::router(state.clone());
     let email = format!("budget-{}@example.com", Uuid::new_v4());
     let registered = call(
-        &app,
-        "/auth/register",
+        &test_router,
+        "/api/v1/auth/register",
         serde_json::json!({"email":email,"password":"ValidPass123!"}),
         StatusCode::CREATED,
     )
@@ -738,15 +878,15 @@ async fn initial_delivery_and_resends_share_recipient_budget(pool: PgPool) {
     let code = mail.last();
     age(&pool, id).await;
     call(
-        &app,
-        "/auth/resend-verification",
+        &test_router,
+        "/api/v1/auth/resend-verification",
         serde_json::json!({"registration_attempt_id":id}),
         StatusCode::TOO_MANY_REQUESTS,
     )
     .await;
     call(
-        &app,
-        "/auth/register",
+        &test_router,
+        "/api/v1/auth/register",
         serde_json::json!({"email":email,"password":"OtherPass456!"}),
         StatusCode::TOO_MANY_REQUESTS,
     )
@@ -792,19 +932,19 @@ async fn registration_errors_do_not_log_codes_passwords_or_mac(pool: PgPool) {
         .with_max_level(tracing::Level::TRACE)
         .with_writer(move || writer.clone())
         .finish();
-    let app = crate::routes::router(state);
+    let test_router = crate::routes::router(state);
     async {
         call(
-            &app,
-            "/auth/verify-email",
+            &test_router,
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":"SensitiveWrongCode"}),
             StatusCode::BAD_REQUEST,
         )
         .await;
         pool.close().await;
         call(
-            &app,
-            "/auth/verify-email",
+            &test_router,
+            "/api/v1/auth/verify-email",
             serde_json::json!({"registration_attempt_id":id,"code":code}),
             StatusCode::SERVICE_UNAVAILABLE,
         )
@@ -840,9 +980,11 @@ async fn real_mailpit_code_completes_registration_without_activation_links(pool:
     .unwrap();
     let auth = AuthService::new(
         AccountsRepository::new(pool.clone()),
-        Arc::new(Argon2PasswordHasher),
+        crate::services::password_processor::PasswordProcessor::new(
+            Arc::new(Argon2PasswordHasher),
+            4,
+        ),
         service.clone(),
-        4,
     );
     let email = format!("mailpit-{}@example.com", Uuid::new_v4());
     let (attempt, sent) = auth
@@ -850,26 +992,7 @@ async fn real_mailpit_code_completes_registration_without_activation_links(pool:
         .await
         .unwrap();
     assert!(sent);
-    let base = std::env::var("AUTH_TEST_MAILPIT_API_URL").unwrap();
-    let client = reqwest::Client::new();
-    let search: serde_json::Value = client
-        .get(format!("{base}/api/v1/search"))
-        .query(&[("query", format!("to:{email}"))])
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let message_id = search["messages"][0]["ID"].as_str().unwrap();
-    let message: serde_json::Value = client
-        .get(format!("{base}/api/v1/message/{message_id}"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let message = super::support::mailpit_message(&email).await;
     let text = message["Text"].as_str().unwrap();
     let code = text
         .split_whitespace()

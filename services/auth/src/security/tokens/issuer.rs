@@ -21,6 +21,7 @@ pub struct AccessTokenIssuer {
 impl AccessTokenIssuer {
     pub fn load(config: TokenConfig) -> anyhow::Result<Self> {
         config.validate()?;
+
         let keys = KeySet::load(
             &config.private_key_path,
             &config.active_kid,
@@ -50,6 +51,54 @@ impl AccessTokenIssuer {
             issuer: config.issuer,
             audiences: config.audiences,
         })
+    }
+
+    pub fn verify_for_auth(&self, token: &str) -> anyhow::Result<AccessClaims> {
+        use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
+
+        anyhow::ensure!(token.len() <= 8192, "Invalid access token");
+
+        let header = decode_header(token).map_err(|_| anyhow::anyhow!("Invalid access token"))?;
+        anyhow::ensure!(
+            header.alg == Algorithm::EdDSA && header.typ.as_deref() == Some("at+jwt"),
+            "Invalid access token"
+        );
+
+        let key = self
+            .public_keys()
+            .keys
+            .iter()
+            .find(|k| Some(k.kid.as_str()) == header.kid.as_deref())
+            .ok_or_else(|| anyhow::anyhow!("Invalid access token"))?;
+
+        let mut validation = Validation::new(Algorithm::EdDSA);
+
+        validation.leeway = 0;
+        validation.set_issuer(&[self.issuer.as_str()]);
+        validation.set_audience(&["sonimbus-auth"]);
+        validation.set_required_spec_claims(&["exp", "iss", "aud", "sub", "iat"]);
+
+        let claims = decode::<AccessClaims>(
+            token,
+            &DecodingKey::from_ed_components(&key.x)?,
+            &validation,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid access token"))?
+        .claims;
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        anyhow::ensure!(
+            !claims.sub.is_nil()
+                && !claims.sid.is_nil()
+                && !claims.jti.is_nil()
+                && claims.iat <= now
+                && claims.exp > now
+                && claims.exp > claims.iat
+                && claims.exp - claims.iat <= 900,
+            "Invalid access token"
+        );
+
+        Ok(claims)
     }
 
     pub fn public_keys(&self) -> &Jwks {
@@ -113,6 +162,49 @@ mod tests {
             KeySet::for_tests(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn auth_verification_requires_signature_type_known_key_audience_and_expiry() {
+        let issuer = issuer();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = issuer.issue_at(&session(now, 900), now).unwrap();
+
+        assert!(issuer.verify_for_auth(&token).is_ok());
+
+        let claims = issuer.verify_for_auth(&token).unwrap();
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.typ = Some("at+jwt".into());
+        header.kid = Some(issuer.keys.active_kid().into());
+
+        for typ in ["JWT", "svc"] {
+            header.typ = Some(typ.into());
+            let token = encode(&header, &claims, &issuer.encoding).unwrap();
+            assert!(issuer.verify_for_auth(&token).is_err());
+        }
+
+        header.typ = Some("at+jwt".into());
+        let mut wrong = claims.clone();
+        wrong.aud = vec!["sonimbus-core".into()];
+        assert!(issuer
+            .verify_for_auth(&encode(&header, &wrong, &issuer.encoding).unwrap())
+            .is_err());
+
+        wrong = claims.clone();
+        wrong.exp = now - 1;
+        assert!(issuer
+            .verify_for_auth(&encode(&header, &wrong, &issuer.encoding).unwrap())
+            .is_err());
+
+        header.kid = Some("unknown".into());
+        assert!(issuer
+            .verify_for_auth(&encode(&header, &claims, &issuer.encoding).unwrap())
+            .is_err());
+
+        assert!(issuer.verify_for_auth("svc_invalid").is_err());
     }
 
     fn session(now: u64, remaining: u64) -> SessionContext {
@@ -286,6 +378,99 @@ mod tests {
                 &validation
             )
             .is_ok());
+        }
+    }
+    #[test]
+    fn auth_verification_rejects_malformed_and_oversized_tokens() {
+        let issuer = issuer();
+        for token in ["", "not-a-jwt", "a.b", "a.b.c.d", "@@@.@@@.@@@"] {
+            assert!(issuer.verify_for_auth(token).is_err());
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let valid_token = issuer.issue_at(&session(now, 900), now).unwrap();
+        let mut claims = issuer.verify_for_auth(&valid_token).unwrap();
+        claims.aud.push("a".repeat(8192));
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.typ = Some("at+jwt".into());
+        header.kid = Some(issuer.keys.active_kid().into());
+        let oversized_token = encode(&header, &claims, &issuer.encoding).unwrap();
+        assert!(oversized_token.len() > 8192);
+        assert!(issuer.verify_for_auth(&oversized_token).is_err());
+    }
+
+    #[test]
+    fn auth_verification_rejects_missing_headers_and_wrong_algorithms() {
+        let issuer = issuer();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let valid_token = issuer.issue_at(&session(now, 900), now).unwrap();
+        let claims = issuer.verify_for_auth(&valid_token).unwrap();
+        for (token_type, key_id) in [
+            (None, Some(issuer.keys.active_kid().to_owned())),
+            (Some("at+jwt".to_owned()), None),
+        ] {
+            let mut header = Header::new(Algorithm::EdDSA);
+            header.typ = token_type;
+            header.kid = key_id;
+            let token = encode(&header, &claims, &issuer.encoding).unwrap();
+            assert!(issuer.verify_for_auth(&token).is_err());
+        }
+        let mut header = Header::new(Algorithm::HS256);
+        header.typ = Some("at+jwt".into());
+        header.kid = Some(issuer.keys.active_kid().into());
+        let token = encode(
+            &header,
+            &claims,
+            &EncodingKey::from_secret(b"test-only-hmac-key"),
+        )
+        .unwrap();
+        assert!(issuer.verify_for_auth(&token).is_err());
+    }
+
+    #[test]
+    fn auth_verification_rejects_nil_identifiers_and_invalid_time_claims() {
+        let issuer = issuer();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let valid_token = issuer.issue_at(&session(now, 900), now).unwrap();
+        let claims = issuer.verify_for_auth(&valid_token).unwrap();
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.typ = Some("at+jwt".into());
+        header.kid = Some(issuer.keys.active_kid().into());
+        let mut invalid_claims = Vec::new();
+        for identifier in ["sub", "sid", "jti"] {
+            let mut invalid = claims.clone();
+            match identifier {
+                "sub" => invalid.sub = Uuid::nil(),
+                "sid" => invalid.sid = Uuid::nil(),
+                _ => invalid.jti = Uuid::nil(),
+            }
+            invalid_claims.push(invalid);
+        }
+        let mut future_issued = claims.clone();
+        future_issued.iat = now + 3600;
+        future_issued.exp = future_issued.iat + 900;
+        invalid_claims.push(future_issued);
+        let mut expired = claims.clone();
+        expired.exp = now;
+        invalid_claims.push(expired);
+        let mut reversed_lifetime = claims.clone();
+        reversed_lifetime.iat = now;
+        reversed_lifetime.exp = now - 1;
+        invalid_claims.push(reversed_lifetime);
+        let mut excessive_lifetime = claims.clone();
+        excessive_lifetime.exp = excessive_lifetime.iat + 901;
+        invalid_claims.push(excessive_lifetime);
+        for invalid in invalid_claims {
+            let token = encode(&header, &invalid, &issuer.encoding).unwrap();
+            assert!(issuer.verify_for_auth(&token).is_err());
         }
     }
 }

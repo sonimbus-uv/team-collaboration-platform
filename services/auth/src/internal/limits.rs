@@ -11,6 +11,15 @@ pub enum AdmissionError {
     Limited(u64),
 }
 
+struct AdmissionRequest<'a> {
+    bucket_key: String,
+    capacity: u32,
+    refill_per_second: u32,
+    pair_cost: u32,
+    concurrent_limit: u32,
+    reservation_id: &'a str,
+}
+
 pub struct InternalLimits {
     config: InternalConfig,
     redis_url: String,
@@ -47,38 +56,43 @@ impl InternalLimits {
 
     pub async fn preauthenticate(&self, ip: IpAddr) -> Result<(), AdmissionError> {
         // IP comes from the socket and passed the CIDR allow-list before reaching here.
-        self.admit(
-            format!("{}:ip:{{{ip}}}", self.prefix()),
-            self.config.preauth_per_second,
-            self.config.preauth_per_second,
-            1,
-            0,
-            "",
-        )
+        self.admit(AdmissionRequest {
+            bucket_key: format!("{}:ip:{{{ip}}}", self.prefix()),
+            capacity: self.config.preauth_per_second,
+            refill_per_second: self.config.preauth_per_second,
+            pair_cost: 1,
+            concurrent_limit: 0,
+            reservation_id: "",
+        })
         .await
     }
 
     pub async fn reserve(
         self: &Arc<Self>,
         identity: Identity,
-        pairs: usize,
+        pair_count: usize,
     ) -> Result<Reservation, AdmissionError> {
+        let pair_cost = u32::try_from(pair_count).map_err(|_| AdmissionError::Unavailable)?;
+        if pair_cost == 0 {
+            return Err(AdmissionError::Unavailable);
+        }
+
         let mut reservation = Reservation {
             limits: self.clone(),
             identity,
-            id: Uuid::new_v4().to_string(),
+            reservation_id: Uuid::new_v4().to_string(),
             released: false,
         };
         // The guard exists before awaiting Redis: cancellation/lost reply still triggers cleanup.
         let result = self
-            .admit(
-                self.service_key(identity),
-                self.config.pair_capacity,
-                self.config.pairs_per_second,
-                pairs as u32,
-                self.config.concurrent_per_service,
-                &reservation.id,
-            )
+            .admit(AdmissionRequest {
+                bucket_key: self.service_key(identity),
+                capacity: self.config.pair_capacity,
+                refill_per_second: self.config.pairs_per_second,
+                pair_cost,
+                concurrent_limit: self.config.concurrent_per_service,
+                reservation_id: &reservation.reservation_id,
+            })
             .await;
         match result {
             Ok(()) => Ok(reservation),
@@ -92,27 +106,22 @@ impl InternalLimits {
         }
     }
 
-    async fn admit(
-        &self,
-        key: String,
-        capacity: u32,
-        rate: u32,
-        cost: u32,
-        concurrent: u32,
-        id: &str,
-    ) -> Result<(), AdmissionError> {
+    async fn admit(&self, request: AdmissionRequest<'_>) -> Result<(), AdmissionError> {
         let connection = self.connection().await?;
         let result = connection
             .script(
                 &redis::Script::new(include_str!("admission.lua")),
-                &[format!("{key}:quota"), format!("{key}:leases")],
                 &[
-                    capacity.to_string(),
-                    rate.to_string(),
-                    cost.to_string(),
-                    concurrent.to_string(),
+                    format!("{}:quota", request.bucket_key),
+                    format!("{}:leases", request.bucket_key),
+                ],
+                &[
+                    request.capacity.to_string(),
+                    request.refill_per_second.to_string(),
+                    request.pair_cost.to_string(),
+                    request.concurrent_limit.to_string(),
                     self.config.lease_ttl.as_millis().to_string(),
-                    id.into(),
+                    request.reservation_id.into(),
                 ],
             )
             .await
@@ -124,14 +133,18 @@ impl InternalLimits {
         }
     }
 
-    async fn release(&self, identity: Identity, id: &str) -> Result<(), AdmissionError> {
+    async fn release(
+        &self,
+        identity: Identity,
+        reservation_id: &str,
+    ) -> Result<(), AdmissionError> {
         let removed = self
             .connection()
             .await?
             .script(
-                &redis::Script::new("local score=redis.call('ZSCORE',KEYS[1],ARGV[1]); local t=redis.call('TIME'); local now=tonumber(t[1])*1000+math.floor(tonumber(t[2])/1000); redis.call('ZREM',KEYS[1],ARGV[1]); if score and tonumber(score)>now then return {1} else return {0} end"),
+                &redis::Script::new(include_str!("release.lua")),
                 &[format!("{}:leases", self.service_key(identity))],
-                &[id.into()],
+                &[reservation_id.into()],
             )
             .await
             .map_err(|_| AdmissionError::Unavailable)?;
@@ -161,13 +174,15 @@ impl InternalLimits {
 pub struct Reservation {
     limits: Arc<InternalLimits>,
     identity: Identity,
-    id: String,
+    reservation_id: String,
     released: bool,
 }
 
 impl Reservation {
     pub async fn release(mut self) -> Result<(), AdmissionError> {
-        self.limits.release(self.identity, &self.id).await?;
+        self.limits
+            .release(self.identity, &self.reservation_id)
+            .await?;
         self.released = true;
         Ok(())
     }
@@ -176,11 +191,17 @@ impl Reservation {
 impl Drop for Reservation {
     fn drop(&mut self) {
         if !self.released {
-            let (limits, identity, id) = (self.limits.clone(), self.identity, self.id.clone());
-            tokio::spawn(async move {
-                let _ = limits.release(identity, &id).await;
-            });
-            // Expiring Redis leases bound capacity loss if release fails or the process dies.
+            let (limits, identity, id) = (
+                self.limits.clone(),
+                self.identity,
+                self.reservation_id.clone(),
+            );
+            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                runtime.spawn(async move {
+                    let _ = limits.release(identity, &id).await;
+                });
+            }
+            // The lease TTL bounds capacity loss if cleanup cannot run or Redis is unavailable.
         }
     }
 }

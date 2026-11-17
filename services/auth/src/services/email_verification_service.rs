@@ -31,51 +31,73 @@ impl EmailVerificationService {
         })
     }
 
-    async fn budget(email: &str, budget: &dyn RecipientBudget) -> Result<(), VerificationError> {
-        match budget.consume(email).await {
+    async fn consume_recipient_budget(
+        email: &str,
+        recipient_budget: &dyn RecipientBudget,
+    ) -> Result<(), VerificationError> {
+        match recipient_budget.consume(email).await {
             Ok(true) => Ok(()),
             Ok(false) => Err(VerificationError::Limited(600)),
             Err(()) => Err(VerificationError::Unavailable),
         }
     }
 
-    async fn deliver(&self, email: &str, code: &str) -> bool {
-        // No transaction is held during SMTP/HTTP. Errors never include request bodies.
-        self.sender.send(email, code, "es-MX").await.is_ok()
+    async fn deliver_attempt(
+        &self,
+        attempt: RegistrationAttempt,
+        code: &str,
+    ) -> (RegistrationAttempt, bool) {
+        // Delivery runs after the repository transaction has completed.
+        let email_sent = self
+            .sender
+            .send(&attempt.email, code, "es-MX")
+            .await
+            .is_ok();
+        (attempt, email_sent)
     }
 
     pub async fn start(
         &self,
         email: &str,
         password_hash: &str,
-        budget: &dyn RecipientBudget,
+        recipient_budget: &dyn RecipientBudget,
     ) -> Result<(RegistrationAttempt, bool), VerificationError> {
-        Self::budget(email, budget).await?;
-        let id = Uuid::new_v4();
+        Self::consume_recipient_budget(email, recipient_budget).await?;
+        let registration_attempt_id = Uuid::new_v4();
         let code = RegistrationCodeKey::generate();
-        let mac = self.key.digest(id, 0, &code);
+        let code_mac = self.key.digest(registration_attempt_id, 0, &code);
         let attempt = self
             .repository
-            .create(email, password_hash, id, &mac)
+            .create(email, password_hash, registration_attempt_id, &code_mac)
             .await?;
-        let sent = self.deliver(email, &code).await;
-        Ok((attempt, sent))
+        Ok(self.deliver_attempt(attempt, &code).await)
     }
 
-    pub async fn confirm(&self, id: Uuid, code: &str) -> Result<Account, VerificationError> {
-        self.repository.confirm(id, code, &self.key).await
+    pub async fn confirm(
+        &self,
+        registration_attempt_id: Uuid,
+        code: &str,
+    ) -> Result<Account, VerificationError> {
+        self.repository
+            .confirm(registration_attempt_id, code, &self.key)
+            .await
     }
 
     pub async fn resend(
         &self,
-        id: Uuid,
-        budget: &dyn RecipientBudget,
+        registration_attempt_id: Uuid,
+        recipient_budget: &dyn RecipientBudget,
     ) -> Result<(RegistrationAttempt, bool), VerificationError> {
-        let attempt = self.repository.resend_candidate(id).await?;
-        Self::budget(&attempt.email, budget).await?;
+        let attempt = self
+            .repository
+            .resend_candidate(registration_attempt_id)
+            .await?;
+        Self::consume_recipient_budget(&attempt.email, recipient_budget).await?;
         let mut code = RegistrationCodeKey::generate();
-        let attempt = self.repository.reissue(id, &self.key, &mut code).await?;
-        let sent = self.deliver(&attempt.email, &code).await;
-        Ok((attempt, sent))
+        let attempt = self
+            .repository
+            .reissue(registration_attempt_id, &self.key, &mut code)
+            .await?;
+        Ok(self.deliver_attempt(attempt, &code).await)
     }
 }

@@ -31,19 +31,24 @@ impl SessionChecksRepository {
     ) -> Result<Vec<SessionCheckRow>, sqlx::Error> {
         let sids: Vec<_> = requests.iter().map(|r| r.sid).collect();
         let accounts: Vec<_> = requests.iter().map(|r| r.account_id).collect();
-        // One statement / MVCC snapshot, no row locks. Missing pairs remain in the result.
-        // statement_timestamp() supplies one database clock value for the entire batch.
+
+        // One MVCC snapshot and database timestamp for the batch, including missing pairs.
         sqlx::query_as(
             r#"
-            SELECT input.sid, input.account_id,
-                   COALESCE(a.status = 'active' AND a.email_verified_at IS NOT NULL, false)
-                       AS account_allowed,
-                   s.id IS NOT NULL AND s.revoked_at IS NULL AS unrevoked,
-                   s.expires_at, statement_timestamp() AS observed_at
+            SELECT
+                input.sid,
+                input.account_id,
+                COALESCE(
+                    s.account_allowed,
+                    false
+                ) AS account_allowed,
+                s.id IS NOT NULL AND s.revoked_at IS NULL AS unrevoked,
+                s.expires_at,
+                statement_timestamp() AS observed_at
             FROM unnest($1::uuid[], $2::uuid[]) WITH ORDINALITY
                 AS input(sid, account_id, position)
-            LEFT JOIN auth.sessions s ON s.id = input.sid AND s.account_id = input.account_id
-            LEFT JOIN auth.accounts a ON a.id = s.account_id
+            LEFT JOIN auth.session_account_status s
+                ON s.id = input.sid AND s.account_id = input.account_id
             ORDER BY input.position
             "#,
         )

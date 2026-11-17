@@ -1,0 +1,21 @@
+$kind: http-request
+url: "{{base_url}}/health"
+method: GET
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (pm.info.iteration > 0) { pm.execution.setNextRequest(null); throw new Error("Ejecuta solo una iteraci?n por corrida"); }
+      const now = Date.now().toString(36);
+      const uid = pm.variables.replaceIn('{{$guid}}');
+      pm.collectionVariables.set('email', `postman-${now}-${uid}@example.invalid`);
+      ['registration_attempt_id','verification_code','access_token','refresh_token','previous_refresh_token','sid','account_id'].forEach(k => pm.collectionVariables.unset(k));
+      pm.collectionVariables.set('mail_attempts', '0');
+      for (const key of ['core_service_token','files_service_token']) { if (!pm.variables.get(key)) { pm.execution.setNextRequest(null); throw new Error('Falta configurar ' + key); } }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      pm.test("Estado ok", () => pm.expect(pm.response.json().status).to.eql("ok"));
+    language: text/javascript
+order: 1000

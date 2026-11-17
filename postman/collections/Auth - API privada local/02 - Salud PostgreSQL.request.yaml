@@ -1,0 +1,11 @@
+$kind: http-request
+url: "{{base_url}}/health/db"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      pm.test("Estado ok", () => pm.expect(pm.response.json().status).to.eql("ok"));
+    language: text/javascript
+order: 2000

@@ -1,0 +1,26 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{email}}",
+      "password": "{{password}}",
+      "client_type": "desktop",
+      "device_name": "Postman autom?tico"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const b=pm.response.json();
+      pm.test("Tokens y cuenta v?lidos", () => { pm.expect(b.access_token).to.be.a('string').and.not.empty; pm.expect(b.refresh_token).to.be.a('string').and.not.empty; pm.expect(b.account_id).to.eql(pm.collectionVariables.get('account_id')); pm.expect(b.access_expires_in).to.be.above(0).and.at.most(900); });
+      pm.collectionVariables.set('access_token', b.access_token);
+      pm.collectionVariables.set('refresh_token', b.refresh_token);
+      pm.collectionVariables.set('sid', b.sid);
+    language: text/javascript
+order: 13000
