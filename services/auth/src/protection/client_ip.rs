@@ -7,42 +7,42 @@ pub enum ClientIpError {
     InvalidForwardedIp,
 }
 
-fn normalize_ip(ip: IpAddr) -> IpAddr {
-    match ip {
-        IpAddr::V6(ipv6) => match ipv6.to_ipv4_mapped() {
-            Some(ipv4) => IpAddr::V4(ipv4),
-            None => IpAddr::V6(ipv6),
+fn normalize_ip(ip_address: IpAddr) -> IpAddr {
+    match ip_address {
+        IpAddr::V6(ipv6_address) => match ipv6_address.to_ipv4_mapped() {
+            Some(ipv4_address) => IpAddr::V4(ipv4_address),
+            None => IpAddr::V6(ipv6_address),
         },
-        IpAddr::V4(ipv4) => IpAddr::V4(ipv4),
+        IpAddr::V4(ipv4_address) => IpAddr::V4(ipv4_address),
     }
 }
 
 pub fn resolve_client_ip(
-    peer: SocketAddr,
+    peer_address: SocketAddr,
     headers: &HeaderMap,
     trusted_proxies: &[IpAddr],
 ) -> Result<IpAddr, ClientIpError> {
-    let peer_ip = normalize_ip(peer.ip());
+    let peer_ip = normalize_ip(peer_address.ip());
 
     let is_trusted_proxy = trusted_proxies
         .iter()
-        .any(|trusted| normalize_ip(*trusted) == peer_ip);
+        .any(|trusted_proxy_ip| normalize_ip(*trusted_proxy_ip) == peer_ip);
 
     if !is_trusted_proxy {
         return Ok(peer_ip);
     }
 
-    let mut forwarded_values = headers.get_all("x-real-ip").iter();
+    let mut forwarded_header_values = headers.get_all("x-real-ip").iter();
 
-    let value = forwarded_values
+    let forwarded_header_value = forwarded_header_values
         .next()
         .ok_or(ClientIpError::MissingForwardedIp)?;
 
-    if forwarded_values.next().is_some() {
+    if forwarded_header_values.next().is_some() {
         return Err(ClientIpError::InvalidForwardedIp);
     }
 
-    let forwarded_ip = value
+    let forwarded_ip = forwarded_header_value
         .to_str()
         .map_err(|_| ClientIpError::InvalidForwardedIp)?
         .parse::<IpAddr>()
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn direct_client_cannot_override_its_ip() {
-        let peer = "192.0.2.10:45000".parse().unwrap();
+        let peer_address = "192.0.2.10:45000".parse().unwrap();
         let trusted_proxies = ["192.0.2.20".parse().unwrap()];
         let mut headers = HeaderMap::new();
 
@@ -68,45 +68,48 @@ mod tests {
             HeaderValue::from_static("198.51.100.100"),
         );
 
-        let result = resolve_client_ip(peer, &headers, &trusted_proxies);
+        let result = resolve_client_ip(peer_address, &headers, &trusted_proxies);
 
         assert_eq!(result, Ok("192.0.2.10".parse().unwrap()));
     }
 
     #[test]
     fn trusted_proxy_can_supply_client_ip() {
-        let peer = "192.0.2.20:45000".parse().unwrap();
+        let peer_address = "192.0.2.20:45000".parse().unwrap();
         let trusted_proxies = ["192.0.2.20".parse().unwrap()];
         let mut headers = HeaderMap::new();
 
         headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.10"));
 
-        let result = resolve_client_ip(peer, &headers, &trusted_proxies);
+        let result = resolve_client_ip(peer_address, &headers, &trusted_proxies);
 
         assert_eq!(result, Ok("198.51.100.10".parse().unwrap()));
     }
 
     #[test]
     fn trusted_proxy_must_supply_client_ip() {
-        let peer = "192.0.2.20:45000".parse().unwrap();
+        let peer_address = "192.0.2.20:45000".parse().unwrap();
         let trusted_proxies = ["192.0.2.20".parse().unwrap()];
 
-        let result = resolve_client_ip(peer, &HeaderMap::new(), &trusted_proxies);
+        let result = resolve_client_ip(peer_address, &HeaderMap::new(), &trusted_proxies);
 
         assert_eq!(result, Err(ClientIpError::MissingForwardedIp));
     }
 
     #[test]
     fn trusted_proxy_cannot_supply_invalid_or_multiple_ips() {
-        let peer = "192.0.2.20:45000".parse().unwrap();
+        let peer_address = "192.0.2.20:45000".parse().unwrap();
         let trusted_proxies = ["192.0.2.20".parse().unwrap()];
 
-        for value in ["not-an-ip", "198.51.100.10, 198.51.100.11"] {
+        for forwarded_header_value in ["not-an-ip", "198.51.100.10, 198.51.100.11"] {
             let mut headers = HeaderMap::new();
-            headers.insert("x-real-ip", HeaderValue::from_str(value).unwrap());
+            headers.insert(
+                "x-real-ip",
+                HeaderValue::from_str(forwarded_header_value).unwrap(),
+            );
 
             assert_eq!(
-                resolve_client_ip(peer, &headers, &trusted_proxies),
+                resolve_client_ip(peer_address, &headers, &trusted_proxies),
                 Err(ClientIpError::InvalidForwardedIp)
             );
         }
@@ -116,16 +119,16 @@ mod tests {
         headers.append("x-real-ip", HeaderValue::from_static("198.51.100.11"));
 
         assert_eq!(
-            resolve_client_ip(peer, &headers, &trusted_proxies),
+            resolve_client_ip(peer_address, &headers, &trusted_proxies),
             Err(ClientIpError::InvalidForwardedIp)
         );
     }
 
     #[test]
     fn ipv4_mapped_ipv6_has_the_same_identity_as_ipv4() {
-        let peer = "[::ffff:192.0.2.10]:45000".parse().unwrap();
+        let peer_address = "[::ffff:192.0.2.10]:45000".parse().unwrap();
 
-        let result = resolve_client_ip(peer, &HeaderMap::new(), &[]);
+        let result = resolve_client_ip(peer_address, &HeaderMap::new(), &[]);
 
         assert_eq!(result, Ok("192.0.2.10".parse().unwrap()));
     }

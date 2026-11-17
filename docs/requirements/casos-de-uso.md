@@ -35,7 +35,7 @@ Las excepciones comunes a todos los casos no se repiten en cada uno:
 | ID | Caso de uso | Actor principal | Fase | Servicio | Requisitos |
 |---|---|---|---|---|---|
 | CU-01 | Registrar cuenta | Visitante | MVP | Auth | RF-AUTH-01 |
-| CU-02 | Verificar cuenta | Visitante | MVP | Auth | RF-AUTH-07 |
+| CU-02 | Verificar correo de contacto | Usuario autenticado | MVP | Auth | RF-AUTH-07 |
 | CU-03 | Iniciar sesión | Visitante | MVP | Auth | RF-AUTH-02 |
 | CU-04 | Iniciar sesión con Google | Visitante | MVP | Auth | RF-AUTH-06 |
 | CU-05 | Recuperar contraseña | Visitante | MVP | Auth | RF-AUTH-04 |
@@ -70,74 +70,79 @@ Las excepciones comunes a todos los casos no se repiten en cada uno:
 
 ## Paquete: Identidad y acceso
 
-Siete casos cubren el ciclo de la cuenta: registro, verificación, acceso con correo o Google, recuperación, cierre de sesión y perfil. Servicio: **Auth**.
+Siete casos cubren registro, verificación opcional de contacto, acceso local o Google, recuperación, cierre de sesión y perfil con conexiones. Servicio: **Auth**.
 
 ### CU-01 Registrar cuenta
 
-**Actores:** Visitante (primario). Servicio de correo (secundario, a través de CU-02).
+**Actores:** Visitante (primario). Servicio de correo (secundario).
 
-**Descripción:** Permite que un visitante cree una cuenta con nombre, correo electrónico y contraseña.
+**Descripción:** Registra mediante un intento ligado a correo, contraseña y código.
+La confirmación de registro no requiere una sesión y es distinta de CU-02; ambos
+contextos comparten el mecanismo de prueba de correo, sin intercambiar códigos.
 
-**Precondiciones:**
-
-- El visitante no tiene una sesión activa.
-
-**Flujo principal:**
-
-1. El visitante selecciona “Crear cuenta”.
-2. El sistema muestra el formulario con nombre, correo, contraseña y confirmación de contraseña.
-3. El visitante captura los datos y confirma.
-4. El sistema valida el formato de los campos y la política de contraseña.
-5. El sistema verifica que el correo no esté registrado.
-6. El sistema crea la cuenta en estado “pendiente de verificación” y almacena la contraseña con hash (RNF-SEG-01).
-7. El sistema ejecuta CU-02 Verificar cuenta «include».
-8. El sistema informa que envió un correo de verificación.
-
-**Flujos alternativos:**
-
-- **FA-01 (paso 1) Registro con Google.** El visitante elige “Continuar con Google”. Se ejecuta CU-04 y este caso termina.
-
-**Postcondiciones:**
-
-- Existe una cuenta nueva en estado “pendiente de verificación”.
-
-**Excepciones:**
-
-- **EX-01 (paso 4) Datos inválidos.** El sistema señala los campos con error y conserva los válidos. Regresa al paso 3.
-- **EX-02 (paso 5) Correo ya registrado.** El sistema rechaza el registro y ofrece iniciar sesión o recuperar la contraseña. El caso termina.
-
-### CU-02 Verificar cuenta
-
-**Actores:** Servicio de correo (secundario). Se ejecuta por «include» desde CU-01; el visitante interviene al usar el código o enlace.
-
-**Descripción:** Confirma que el correo registrado pertenece a quien creó la cuenta mediante un código o enlace de un solo uso (RF-AUTH-07).
-
-**Precondiciones:**
-
-- Existe una cuenta en estado “pendiente de verificación”.
+**Precondiciones:** El visitante no tiene sesión activa.
 
 **Flujo principal:**
 
-1. El sistema genera un código o enlace de un solo uso con fecha de caducidad.
-2. El sistema solicita al Servicio de correo el envío al correo registrado.
-3. El Servicio de correo entrega el mensaje.
-4. El visitante abre el enlace o captura el código en el cliente.
-5. El sistema valida que el código esté vigente y no se haya usado.
-6. El sistema marca la cuenta como verificada e invalida el código.
-7. El sistema informa que la cuenta está verificada y permite iniciar sesión.
+1. El visitante introduce correo y contraseña.
+2. El sistema valida entradas y crea un intento independiente con hash de contraseña.
+3. El sistema solicita el envío de un código ligado al intento.
+4. El visitante introduce el identificador de su intento y el código recibido.
+5. El sistema valida vigencia, MAC, fallos y elegibilidad.
+6. En una transacción, asigna el correo bajo la exclusividad común, crea o activa
+   la cuenta permitida, instala la contraseña de ese intento e invalida los demás.
+7. El sistema informa del éxito; no crea una sesión automáticamente.
 
 **Flujos alternativos:**
 
-- **FA-01 (paso 4) Reenviar verificación.** El visitante solicita un nuevo correo. El sistema invalida el código anterior y regresa al paso 1.
+- **FA-01 (paso 1) Google.** Se ejecuta CU-04 sin código de correo obligatorio.
+- **FA-02 (paso 3) Reenvío.** Se reemplaza el código del mismo intento dentro de
+  sus límites, sin prolongar vencimiento ni reiniciar fallos.
 
-**Postcondiciones:**
+**Postcondiciones:** La cuenta y su correo quedan habilitados para acceso local;
+ninguna contraseña ajena se hereda por compartir dirección pendiente.
 
-- La cuenta queda verificada y el código queda invalidado.
+**Excepciones:** Entrada o código inválidos, expiración, bloqueo de intentos,
+contacto ya asignado a otra cuenta o dependencia no disponible. La carrera con
+CU-02 o la asignación Google se resuelve por la misma restricción única, sin
+cambios parciales. El detalle técnico está en el
+[contrato de registro](../../contracts/auth/public-api.md#registro-y-verificación).
 
-**Excepciones:**
+### CU-02 Verificar correo de contacto
 
-- **EX-01 (paso 2) Servicio de correo no disponible.** El sistema registra el fallo e informa que no pudo enviar el correo. La cuenta sigue pendiente y el visitante puede usar FA-01 más tarde.
-- **EX-02 (paso 5) Código caducado o usado.** El sistema rechaza el código y ofrece FA-01.
+**Actores:** Usuario autenticado (primario). Servicio de correo (secundario).
+
+**Descripción:** Acredita opcionalmente una dirección de contacto para cualquier
+cuenta, con independencia de su proveedor de autenticación (RF-AUTH-07).
+
+**Precondiciones:** Cuenta activa, sesión válida y ausencia de contacto verificado.
+
+**Flujo principal:**
+
+1. El usuario accede a la verificación desde perfil o una función que la requiere.
+2. El sistema registra la dirección propuesta sin reservarla de forma exclusiva.
+3. El sistema envía un código ligado a cuenta, dirección e intento.
+4. El usuario introduce el código desde la misma cuenta autenticada.
+5. El sistema valida la prueba y asigna la dirección bajo la exclusividad común.
+6. El sistema confirma el contacto verificado, sin crear credenciales ni sesión.
+
+**Flujos alternativos:**
+
+- **FA-01 (paso 3) Reenvío.** Se aplican cooldown, sustitución y vigencia originales.
+- **FA-02 (paso 2) Otra dirección pendiente.** Se invalida la prueba anterior.
+- **FA-03 (paso 5) Misma dirección ya verificada en esa cuenta.** Resultado idempotente.
+
+**Postcondiciones:** La cuenta tiene un contacto acreditado, sin fusionarse con otra.
+
+**Excepciones:** Código inválido, vencido o bloqueado; sesión no utilizable;
+dirección asignada a otra cuenta; intento ajeno; proveedor no disponible.
+El cambio de un contacto ya verificado requiere otro flujo y queda fuera de alcance.
+
+CU-02 es una extensión opcional de CU-07. No se incluye obligatoriamente en CU-04
+ni se ejecuta después de cada login Google. Las funciones que exigen contacto
+verificado comprueban esa precondición y ofrecen CU-02 solo cuando falta.
+Las reglas y operaciones están centralizadas en el
+[contrato de contacto](../../contracts/auth/public-api.md#verificar-correo-de-contacto).
 
 ### CU-03 Iniciar sesión
 
@@ -163,7 +168,7 @@ Siete casos cubren el ciclo de la cuenta: registro, verificación, acceso con co
 
 **Flujos alternativos:**
 
-- **FA-01 (paso 1) Inicio con Google.** El visitante elige “Continuar con Google”. Se ejecuta CU-04, que especializa este caso.
+- **FA-01 (paso 1) Inicio con Google.** El visitante elige “Continuar con Google”. Se ejecuta CU-04 como recorrido alternativo, con elegibilidad propia de la identidad Google.
 - **FA-02 (paso 3) Contraseña olvidada.** El visitante selecciona “¿Olvidaste tu contraseña?”. Se ejecuta CU-05.
 - **FA-03 (paso 6) Sesión previa en el mismo tipo de cliente.** El sistema informa que la sesión anterior se cerrará. Si el visitante confirma, el sistema invalida esa sesión y continúa en el paso 7; si cancela, el caso termina sin sesión.
 
@@ -174,44 +179,48 @@ Siete casos cubren el ciclo de la cuenta: registro, verificación, acceso con co
 **Excepciones:**
 
 - **EX-01 (paso 4) Credenciales inválidas.** El sistema muestra un mensaje genérico sin indicar qué dato falló (RF-AUTH-02). Regresa al paso 3.
-- **EX-02 (paso 5) Cuenta sin verificar.** El sistema informa que debe verificar su correo y ofrece reenviar la verificación (CU-02, FA-01). El caso termina sin sesión.
+- **EX-02 (paso 5) Cuenta local pendiente.** El sistema no abre sesión y conserva el error genérico del acceso local. La confirmación del registro se completa mediante CU-01; no mediante CU-02, que requiere una sesión activa.
 
 ### CU-04 Iniciar sesión con Google
 
-**Actores:** Visitante (primario, heredado de CU-03). Proveedor de identidad de Google (secundario).
+**Actores:** Visitante (primario). Google (secundario).
 
-**Descripción:** Especializa CU-03. Autentica al visitante con su cuenta de Google mediante OAuth 2.0 / OpenID Connect y crea la cuenta si no existe (RF-AUTH-06).
+**Descripción:** Autentica una identidad Google y obtiene una sesión Sonimbus,
+sin exigir verificación de contacto como condición de acceso (RF-AUTH-06).
+**Estado:** Diseño aprobado v1.0, pendiente de migraciones e implementación.
 
-**Precondiciones:**
-
-- El visitante no tiene una sesión activa en ese dispositivo.
-- El visitante tiene una cuenta de Google.
+**Precondiciones:** Cliente configurado, integración habilitada y Google disponible.
 
 **Flujo principal:**
 
-1. El visitante selecciona “Continuar con Google”.
-2. El sistema redirige al Proveedor de identidad de Google.
-3. El visitante se autentica en Google y autoriza el acceso a su nombre y correo.
-4. Google devuelve un código de autorización al sistema.
-5. El sistema intercambia el código y valida el token de identidad: firma, emisor, audiencia y vigencia.
-6. El sistema verifica que Google marque el correo como verificado (`email_verified`).
-7. El sistema busca la cuenta vinculada al identificador de Google.
-8. El sistema abre la sesión como en los pasos 6 a 8 de CU-03.
+1. El visitante selecciona «Continuar con Google».
+2. El cliente inicia un intento protegido y abre el navegador del sistema.
+3. Google autentica y obtiene consentimiento para `openid email`.
+4. Auth correlaciona el callback y valida el ID token.
+5. El cliente acredita ser el iniciador mediante el canje protegido.
+6. Auth resuelve la identidad por emisor y `sub` y comprueba el estado de cuenta.
+7. La transacción abre la sesión y entrega access y refresh de Sonimbus.
 
 **Flujos alternativos:**
 
-- **FA-01 (paso 7) Cuenta existente con el mismo correo.** No hay cuenta vinculada a Google, pero sí una con ese correo. El sistema vincula la identidad de Google a esa cuenta sin duplicarla y continúa en el paso 8.
-- **FA-02 (paso 7) Sin cuenta.** El sistema crea una cuenta verificada con el nombre y correo de Google, sin contraseña local, y continúa en el paso 8.
+- **FA-01 (paso 6) Nueva identidad.** Se crea una cuenta sin contraseña local.
+  Gmail/Workspace acreditados adquieren contacto si está libre; una dirección
+  externa permanece pendiente y no bloquea el acceso ni reserva el correo.
+- **FA-02 (paso 6) Contacto Google acreditado ya asignado.** No se fusionan cuentas.
+  El visitante debe iniciar sesión en la cuenta existente y conectar Google desde
+  CU-07. La coincidencia de una dirección no acreditada tampoco permite tomarla.
 
-**Postcondiciones:**
+**Postcondiciones:** Sesión Sonimbus válida, con o sin contacto verificado. No se
+almacenan refresh de Google ni se alteran automáticamente contactos existentes.
 
-- Existe una sesión activa y la cuenta queda vinculada al identificador de Google.
+**Excepciones:** Cancelación, prueba inválida, intento vencido o repetido, cuenta
+no habilitada o dependencia no disponible. No se crea una sesión por un error;
+un commit incierto se comunica sin prometer ausencia de cambios.
 
-**Excepciones:**
-
-- **EX-01 (paso 3) Autorización cancelada.** El visitante cancela en Google. El sistema regresa a la pantalla de inicio de sesión sin crear sesión.
-- **EX-02 (paso 5) Token inválido o Google no disponible.** El sistema rechaza la autenticación con un mensaje genérico. El caso termina.
-- **EX-03 (paso 6) Correo no verificado por Google.** El sistema rechaza el acceso y sugiere registrarse con correo y contraseña (CU-01). El caso termina.
+El [contrato técnico](../../contracts/auth/public-api.md#google-y-correo-de-contacto)
+define el recorrido, la vinculación, los errores y el riesgo de recuperación de
+cuentas exclusivamente Google. CU-04 no especializa una regla que obligue a
+verificar correo para toda forma de autenticación.
 
 ### CU-05 Recuperar contraseña
 
@@ -307,6 +316,14 @@ Siete casos cubren el ciclo de la cuenta: registro, verificación, acceso con co
 
 - **FA-01 (paso 3) Cambiar foto.** El usuario elige una imagen del paquete predefinido incluido en los clientes. El sistema valida que el identificador pertenezca al paquete, lo guarda y continúa en el paso 6.
 - **FA-02 (paso 3) Cambiar contraseña.** El usuario captura su contraseña actual y la nueva. El sistema verifica la actual, almacena el hash de la nueva y continúa en el paso 6.
+- **FA-03 (paso 2) Verificar contacto.** El usuario inicia opcionalmente CU-02.
+- **FA-04 (paso 2) Conectar Google.** El usuario selecciona la identidad a conectar.
+  Si falta autenticación reciente de diez minutos, se reautentica. El sistema
+  valida el recorrido Google, revalida la sesión y guarda la asociación sin
+  cambiar el contacto, aunque los correos difieran. Informa en la aplicación y,
+  si existe contacto verificado, envía un aviso sin código. No fusiona cuentas,
+  reasigna identidades ni sustituye otra conexión Google. Diseño pendiente de
+  implementación conforme al [contrato](../../contracts/auth/public-api.md#vinculación-y-autenticación-reciente).
 
 **Postcondiciones:**
 

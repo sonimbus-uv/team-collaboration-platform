@@ -8,13 +8,17 @@ Requisitos funcionales, no funcionales y restricciones de la especificación AR0
 
 | ID | CU | Requisito | Prioridad | Criterio de aceptación |
 |---|---|---|---|---|
-| RF-AUTH-01 | CU-01 | El sistema permitirá que un visitante registre una cuenta con nombre, correo electrónico y contraseña. | Alta | La cuenta se crea con datos válidos; si el correo ya existe, el registro se rechaza. |
+| RF-AUTH-01 | CU-01 | El sistema permitirá que un visitante registre una cuenta con correo y contraseña. | Alta | Se crea un intento ligado a su contraseña; confirmar su código crea o activa la cuenta. La asignación de correo verificado usa la misma exclusividad transaccional que contacto y Google; no hereda credenciales de otra cuenta. |
 | RF-AUTH-02 | CU-03 | El sistema permitirá que un usuario inicie sesión mediante correo electrónico y contraseña. | Alta | Con credenciales válidas se concede acceso; con credenciales inválidas se rechaza sin revelar cuál dato falló. |
 | RF-AUTH-03 | CU-06 | El sistema permitirá cerrar sesión desde el cliente utilizado. | Alta | Al cerrar sesión, el token de renovación queda invalidado y no puede usarse nuevamente. |
-| RF-AUTH-04 | CU-05 | El sistema permitirá recuperar la contraseña mediante un código o enlace de un solo uso enviado al correo registrado. | Media | El código o enlace caduca, no puede reutilizarse y permite definir una nueva contraseña. |
+| RF-AUTH-04 | CU-05 | El sistema permitirá recuperar una contraseña local mediante un código de un solo uso enviado al contacto verificado. | Media | Se exige contraseña local existente; el código caduca, no se reutiliza y permite reemplazarla. Verificar contacto no habilita recuperación para una cuenta exclusivamente Google. |
 | RF-AUTH-05 | CU-07 | El sistema permitirá que el usuario gestione los datos básicos de su perfil. | Media | El usuario puede actualizar nombre visible, foto (de un paquete predefinido) y contraseña, y los cambios se reflejan en sus grupos. |
-| RF-AUTH-06 | CU-04 | El sistema permitirá que un visitante inicie sesión mediante su cuenta de Google utilizando OAuth. | Media | El backend valida el token de identidad emitido por Google antes de conceder acceso. Si el correo no tiene cuenta, se crea una; si ya existe, se vincula sin duplicarla. Si el usuario cancela o Google rechaza la autenticación, no se crea ninguna sesión. |
-| RF-AUTH-07 | CU-02 | El sistema enviará un código o enlace de verificación al correo registrado para confirmar la cuenta. | Media | El código o enlace caduca y no puede reutilizarse. Al usarse correctamente, la cuenta queda marcada como verificada. |
+| RF-AUTH-06 | CU-04, CU-07 | El sistema permitirá autenticación Google mediante OpenID Connect y vinculación explícita desde una cuenta autenticada. | Media | Se valida la identidad por emisor y subject, sin código de correo obligatorio ni vinculación automática por coincidencia de dirección. Conectar Google admite correos distintos, exige autenticación reciente de diez minutos y no fusiona cuentas. Diseño aprobado v1.0; implementación pendiente. |
+| RF-AUTH-07 | CU-01, CU-02 | El sistema comprobará el correo en la confirmación de registro y permitirá verificar opcionalmente un correo de contacto a usuarios autenticados. | Media | Los contextos comparten mecanismo de códigos con propósitos distintos y una misma exclusividad de contacto verificado. Una dirección pendiente no reserva el correo. La verificación no es obligatoria para iniciar sesión con Google. |
+
+El [contrato Google y contacto v1.0](../../contracts/auth/public-api.md#google-y-correo-de-contacto)
+precisa RF-AUTH-06/07 y la exclusividad de RF-AUTH-01. Es diseño aprobado, pendiente
+de migraciones e implementación; sustituye la vinculación automática por correo.
 
 ### Grupos y permisos — Core
 

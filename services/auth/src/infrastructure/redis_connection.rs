@@ -1,6 +1,6 @@
 use crate::protection::rate_limit::{BucketPolicy, RateLimitDecision};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 use tokio::time::timeout;
 
 #[derive(Clone)]
@@ -9,7 +9,7 @@ pub struct RedisConnection {
     operation_timeout: Duration,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RedisConnectionError {
     InvalidUrl,
     ConnectionTimeout,
@@ -20,29 +20,25 @@ pub enum RedisConnectionError {
 }
 
 impl RedisConnection {
-    /// Execute a bounded internal-protection script using the existing connection manager.
-    /// Errors remain finite categories; never log keys, arguments or Redis diagnostics.
     pub async fn script(
         &self,
         script: &redis::Script,
         keys: &[String],
-        args: &[String],
+        arguments: &[String],
     ) -> Result<Vec<i64>, RedisConnectionError> {
         let mut connection = self.manager.clone();
         let mut invocation = script.prepare_invoke();
         for key in keys {
             invocation.key(key);
         }
-        for arg in args {
-            invocation.arg(arg);
+        for argument in arguments {
+            invocation.arg(argument);
         }
-        timeout(
+        execute_operation(
             self.operation_timeout,
             invocation.invoke_async(&mut connection),
         )
         .await
-        .map_err(|_| RedisConnectionError::OperationTimeout)?
-        .map_err(|_| RedisConnectionError::OperationFailed)
     }
 
     pub async fn connect(
@@ -63,7 +59,13 @@ impl RedisConnection {
         )
         .await
         .map_err(|_| RedisConnectionError::ConnectionTimeout)?
-        .map_err(|_| RedisConnectionError::ConnectionFailed)?;
+        .map_err(|error| {
+            if error.is_timeout() {
+                RedisConnectionError::ConnectionTimeout
+            } else {
+                RedisConnectionError::ConnectionFailed
+            }
+        })?;
 
         Ok(Self {
             manager,
@@ -79,56 +81,31 @@ impl RedisConnection {
         let mut connection = self.manager.clone();
         let script = redis::Script::new(include_str!("../protection/rate_limit.lua"));
 
-        let refill_ms = u64::from(policy.refill_period_secs()) * 1000;
+        let refill_period_ms = u64::from(policy.refill_period_secs()) * 1000;
 
         let mut invocation = script.prepare_invoke();
-        invocation.key(key).arg(policy.capacity()).arg(refill_ms);
+        invocation
+            .key(key)
+            .arg(policy.capacity())
+            .arg(refill_period_ms);
 
-        let (allowed, retry_ms): (i64, i64) = timeout(
+        let response = execute_operation(
             self.operation_timeout,
             invocation.invoke_async(&mut connection),
         )
-        .await
-        .map_err(|_| RedisConnectionError::OperationTimeout)?
-        .map_err(|error| {
-            tracing::warn!(
-                error_kind = ?error.kind(),
-                "Redis rate limit operation failed"
-            );
+        .await?;
 
-            RedisConnectionError::OperationFailed
-        })?;
-
-        match (allowed, retry_ms) {
-            (1, 0) => Ok(RateLimitDecision::Allowed),
-            (0, wait) if wait > 0 => {
-                let retry_after_secs = (wait as u64).div_ceil(1000);
-
-                Ok(RateLimitDecision::Limited { retry_after_secs })
-            }
-            _ => Err(RedisConnectionError::UnexpectedResponse),
-        }
+        decode_rate_limit_decision(response)
     }
 
     pub async fn ping(&self) -> Result<(), RedisConnectionError> {
         let mut connection = self.manager.clone();
 
-        let response: String = timeout(
+        let response: String = execute_operation(
             self.operation_timeout,
             redis::cmd("PING").query_async(&mut connection),
         )
-        .await
-        .map_err(|_| RedisConnectionError::OperationTimeout)?
-        .map_err(|error| {
-            tracing::warn!(
-                error_kind = ?error.kind(),
-                is_timeout = error.is_timeout(),
-                is_io_error = error.is_io_error(),
-                "Redis operation failed"
-            );
-
-            RedisConnectionError::OperationFailed
-        })?;
+        .await?;
 
         if response != "PONG" {
             return Err(RedisConnectionError::UnexpectedResponse);
@@ -138,25 +115,102 @@ impl RedisConnection {
     }
 }
 
+async fn execute_operation<T>(
+    operation_timeout: Duration,
+    operation: impl Future<Output = redis::RedisResult<T>>,
+) -> Result<T, RedisConnectionError> {
+    timeout(operation_timeout, operation)
+        .await
+        .map_err(|_| RedisConnectionError::OperationTimeout)?
+        .map_err(|error| {
+            if error.is_timeout() {
+                RedisConnectionError::OperationTimeout
+            } else {
+                tracing::warn!(error_kind = ?error.kind(), "Redis operation failed");
+                RedisConnectionError::OperationFailed
+            }
+        })
+}
+
+fn decode_rate_limit_decision(
+    (allowed, retry_after_ms): (i64, i64),
+) -> Result<RateLimitDecision, RedisConnectionError> {
+    match (allowed, retry_after_ms) {
+        (1, 0) => Ok(RateLimitDecision::Allowed),
+        (0, milliseconds) if milliseconds > 0 => Ok(RateLimitDecision::Limited {
+            retry_after_secs: (milliseconds as u64).div_ceil(1_000),
+        }),
+        _ => Err(RedisConnectionError::UnexpectedResponse),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    async fn test_connection() -> RedisConnection {
+        let redis_url = std::env::var("REDIS_URL")
+            .expect("REDIS_URL must point to a dedicated test Redis instance");
+        RedisConnection::connect(&redis_url, Duration::from_secs(2), Duration::from_secs(2))
+            .await
+            .expect("Test Redis connection failed")
+    }
+
+    #[test]
+    fn rate_limit_decisions_validate_status_and_round_retry_delays_up() {
+        assert_eq!(
+            decode_rate_limit_decision((1, 0)),
+            Ok(RateLimitDecision::Allowed)
+        );
+        for (milliseconds, seconds) in [
+            (1, 1),
+            (999, 1),
+            (1_000, 1),
+            (1_001, 2),
+            (i64::MAX, (i64::MAX as u64).div_ceil(1_000)),
+        ] {
+            assert_eq!(
+                decode_rate_limit_decision((0, milliseconds)),
+                Ok(RateLimitDecision::Limited {
+                    retry_after_secs: seconds
+                })
+            );
+        }
+        for response in [(0, 0), (0, -1), (1, 1), (1, -1), (-1, 0), (2, 0)] {
+            assert_eq!(
+                decode_rate_limit_decision(response),
+                Err(RedisConnectionError::UnexpectedResponse)
+            );
+        }
+    }
+
     #[tokio::test]
-    #[ignore = "requires the local .env and a running Redis instance"]
-    async fn configured_redis_responds_to_ping() {
-        dotenvy::dotenv().expect("This manual test requires a valid local .env");
+    async fn operations_distinguish_deadlines_from_redis_failures() {
+        let deadline = Duration::from_millis(10);
+        assert_eq!(
+            execute_operation::<()>(deadline, std::future::pending()).await,
+            Err(RedisConnectionError::OperationTimeout)
+        );
+        let redis_timeout = redis::RedisError::from(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "test timeout",
+        ));
+        assert_eq!(
+            execute_operation::<()>(deadline, async { Err(redis_timeout) }).await,
+            Err(RedisConnectionError::OperationTimeout)
+        );
+        let failure = redis::RedisError::from((redis::ErrorKind::ResponseError, "test failure"));
+        assert_eq!(
+            execute_operation::<()>(deadline, async { Err(failure) }).await,
+            Err(RedisConnectionError::OperationFailed)
+        );
+        assert_eq!(execute_operation(deadline, async { Ok(42) }).await, Ok(42));
+    }
 
-        let config =
-            crate::config::Config::from_env().expect("The local Auth configuration must be valid");
-
-        let connection = RedisConnection::connect(
-            &config.redis_url,
-            Duration::from_millis(u64::from(config.redis_connect_timeout_ms)),
-            Duration::from_millis(u64::from(config.redis_operation_timeout_ms)),
-        )
-        .await
-        .expect("Redis connection failed; check address, password and availability");
+    #[tokio::test]
+    #[ignore = "requires REDIS_URL pointing to a dedicated test Redis instance"]
+    async fn redis_responds_to_ping_and_enforces_bucket_capacity() {
+        let connection = test_connection().await;
 
         connection
             .ping()
@@ -193,24 +247,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires the local .env and a running development Redis instance"]
-    async fn redis_bucket_refills_expires_and_shares_concurrent_budget() {
-        dotenvy::dotenv().expect("This manual test requires a valid local .env");
-
-        let config =
-            crate::config::Config::from_env().expect("The local Auth configuration must be valid");
-
-        let connect_timeout = Duration::from_millis(u64::from(config.redis_connect_timeout_ms));
-        let operation_timeout = Duration::from_millis(u64::from(config.redis_operation_timeout_ms));
-
-        let first = RedisConnection::connect(&config.redis_url, connect_timeout, operation_timeout)
-            .await
-            .expect("First Redis connection failed");
-
-        let second =
-            RedisConnection::connect(&config.redis_url, connect_timeout, operation_timeout)
-                .await
-                .expect("Second Redis connection failed");
+    #[ignore = "requires REDIS_URL pointing to a dedicated test Redis instance"]
+    async fn redis_bucket_refills_and_expires() {
+        let first = test_connection().await;
+        let second = test_connection().await;
+        let operation_timeout = first.operation_timeout;
 
         let refill_key = format!("auth:rl:test:refill:{}", rand::random::<u128>());
         let refill_policy = BucketPolicy::new(2, 4).unwrap();
@@ -271,7 +312,13 @@ mod tests {
             first.consume(&refill_key, refill_policy).await.unwrap(),
             RateLimitDecision::Allowed
         );
+    }
 
+    #[tokio::test]
+    #[ignore = "requires REDIS_URL pointing to a dedicated test Redis instance"]
+    async fn redis_connections_share_concurrent_bucket_capacity() {
+        let first = test_connection().await;
+        let second = test_connection().await;
         let concurrent_key = format!("auth:rl:test:concurrent:{}", rand::random::<u128>());
         let concurrent_policy = BucketPolicy::new(5, 60).unwrap();
 

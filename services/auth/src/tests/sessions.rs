@@ -40,31 +40,52 @@ impl PasswordHasher for TestHasher {
         Ok(password == "TestPass123!" && hash == "test-only-password-hash")
     }
 }
+
 fn auth(pool: &PgPool, hasher: Arc<dyn PasswordHasher>) -> AuthService {
     AuthService::new(
         AccountsRepository::new(pool.clone()),
-        hasher,
+        crate::services::password_processor::PasswordProcessor::new(hasher, 4),
         EmailVerificationService::new(
             RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
             &[0x17; 32],
         )
         .unwrap(),
-        4,
     )
 }
-fn service(pool: &PgPool) -> SessionService {
+
+pub(super) fn service(pool: &PgPool) -> SessionService {
     SessionService::new(
         SessionsRepository::new(pool.clone()),
-        auth(pool, Arc::new(TestHasher)),
+        auth(pool, Arc::new(TestHasher)).password_processor(),
         crate::tests::token_support::issuer(),
     )
 }
-async fn account(pool: &PgPool) -> Uuid {
-    let id:Uuid=sqlx::query_scalar("INSERT INTO auth.accounts(email,email_verified_at) VALUES('person@example.invalid',clock_timestamp()) RETURNING id").fetch_one(pool).await.unwrap();
-    sqlx::query("INSERT INTO auth.password_credentials(account_id,password_hash) VALUES($1,'test-only-password-hash')").bind(id).execute(pool).await.unwrap();
+
+async fn create_account(pool: &PgPool) -> Uuid {
+    let id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO auth.accounts (email, email_verified_at)
+        VALUES ('person@example.invalid', clock_timestamp())
+        RETURNING id
+        "#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO auth.password_credentials (account_id, password_hash)
+        VALUES ($1, 'test-only-password-hash')
+        "#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
     id
 }
+
 fn request(client: ClientType) -> LoginRequest {
     LoginRequest {
         email: " PERSON@Example.Invalid ".into(),
@@ -73,14 +94,16 @@ fn request(client: ClientType) -> LoginRequest {
         device_name: Some("test-only-device".into()),
     }
 }
-async fn active(pool: &PgPool, id: Uuid) -> bool {
+
+async fn is_unrevoked(pool: &PgPool, id: Uuid) -> bool {
     sqlx::query_scalar("SELECT revoked_at IS NULL FROM auth.sessions WHERE id=$1")
         .bind(id)
         .fetch_one(pool)
         .await
         .unwrap()
 }
-async fn events(pool: &PgPool) -> i64 {
+
+async fn revocation_event_count(pool: &PgPool) -> i64 {
     sqlx::query_scalar("SELECT count(*) FROM auth.session_revocation_outbox")
         .fetch_one(pool)
         .await
@@ -89,13 +112,17 @@ async fn events(pool: &PgPool) -> i64 {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn login_limits_independence_replacement_and_outbox(pool: PgPool) {
-    let id = account(&pool).await;
+    let id = create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
     assert_eq!(first.account_id, id);
     assert_eq!(first.access_expires_in, 900);
     let lifetime: i64 = sqlx::query_scalar(
-        "SELECT extract(epoch FROM expires_at-created_at)::bigint FROM auth.sessions WHERE id=$1",
+        r#"
+        SELECT extract(epoch FROM expires_at - created_at)::bigint
+        FROM auth.sessions
+        WHERE id = $1
+        "#,
     )
     .bind(first.sid)
     .fetch_one(&pool)
@@ -104,9 +131,9 @@ async fn login_limits_independence_replacement_and_outbox(pool: PgPool) {
     assert_eq!(lifetime, 20 * 86400);
     let mobile = service.login(request(ClientType::Mobile)).await.unwrap();
     let next = service.login(request(ClientType::Desktop)).await.unwrap();
-    assert!(!active(&pool, first.sid).await);
-    assert!(active(&pool, mobile.sid).await && active(&pool, next.sid).await);
-    assert_eq!(events(&pool).await, 1);
+    assert!(!is_unrevoked(&pool, first.sid).await);
+    assert!(is_unrevoked(&pool, mobile.sid).await && is_unrevoked(&pool, next.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 1);
     let event: serde_json::Value =
         sqlx::query_scalar("SELECT event FROM auth.session_revocation_outbox")
             .fetch_one(&pool)
@@ -124,7 +151,7 @@ async fn login_limits_independence_replacement_and_outbox(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn wrong_credentials_and_account_states_are_generic(pool: PgPool) {
-    let id = account(&pool).await;
+    let id = create_account(&pool).await;
     let service = service(&pool);
     let mut wrong = request(ClientType::Desktop);
     wrong.password = "wrong".into();
@@ -150,11 +177,17 @@ async fn wrong_credentials_and_account_states_are_generic(pool: PgPool) {
             Err(SessionError::InvalidCredentials)
         ));
     }
-    sqlx::query("UPDATE auth.accounts SET status='active',email_verified_at=NULL WHERE id=$1")
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        r#"
+        UPDATE auth.accounts
+        SET status = 'active', email = NULL, email_verified_at = NULL
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         service.login(request(ClientType::Desktop)).await,
         Err(SessionError::InvalidCredentials)
@@ -168,7 +201,7 @@ async fn wrong_credentials_and_account_states_are_generic(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn rotation_preserves_expiry_and_replay_commits_revocation(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
     let second = service.refresh(&first.refresh_token).await.unwrap();
@@ -179,60 +212,73 @@ async fn rotation_preserves_expiry_and_replay_commits_revocation(pool: PgPool) {
         service.refresh(&first.refresh_token).await,
         Err(SessionError::InvalidRefresh)
     ));
-    assert!(!active(&pool, first.sid).await);
-    assert_eq!(events(&pool).await, 1);
+    assert!(!is_unrevoked(&pool, first.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 1);
     assert!(matches!(
         service.refresh(&second.refresh_token).await,
         Err(SessionError::InvalidRefresh)
     ));
-    let live: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM auth.refresh_tokens WHERE revoked_at IS NULL")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let live: i64 = sqlx::query_scalar(
+        r#"
+            SELECT count(*)
+            FROM auth.refresh_tokens
+            WHERE revoked_at IS NULL
+            "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(live, 0);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn concurrent_refresh_revokes_family(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
-    let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        tokio::join!(
-            service.refresh(&first.refresh_token),
-            service.refresh(&first.refresh_token)
-        )
-    })
-    .await
-    .unwrap();
-    assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
-    assert!(!active(&pool, first.sid).await);
-    assert_eq!(events(&pool).await, 1);
+    let (first_refresh, second_refresh) =
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            tokio::join!(
+                service.refresh(&first.refresh_token),
+                service.refresh(&first.refresh_token)
+            )
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        usize::from(first_refresh.is_ok()) + usize::from(second_refresh.is_ok()),
+        1
+    );
+    assert!(!is_unrevoked(&pool, first.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 1);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn concurrent_logins_last_wins(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
-    let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        tokio::join!(
-            service.login(request(ClientType::Desktop)),
-            service.login(request(ClientType::Desktop))
-        )
-    })
-    .await
-    .unwrap();
-    let a = a.unwrap();
-    let b = b.unwrap();
-    assert_ne!(a.sid, b.sid);
-    assert_ne!(active(&pool, a.sid).await, active(&pool, b.sid).await);
-    assert_eq!(events(&pool).await, 1);
+    let (first_login, second_login) =
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            tokio::join!(
+                service.login(request(ClientType::Desktop)),
+                service.login(request(ClientType::Desktop))
+            )
+        })
+        .await
+        .unwrap();
+    let first_login = first_login.unwrap();
+    let second_login = second_login.unwrap();
+    assert_ne!(first_login.sid, second_login.sid);
+    assert_ne!(
+        is_unrevoked(&pool, first_login.sid).await,
+        is_unrevoked(&pool, second_login.sid).await
+    );
+    assert_eq!(revocation_event_count(&pool).await, 1);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn logout_is_idempotent_and_does_not_reactivate_or_affect_mobile(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
     let mobile = service.login(request(ClientType::Mobile)).await.unwrap();
@@ -241,8 +287,8 @@ async fn logout_is_idempotent_and_does_not_reactivate_or_affect_mobile(pool: PgP
     service.logout(&first.refresh_token).await.unwrap();
     service.logout(&rotated.refresh_token).await.unwrap();
     service.logout("unknown").await.unwrap();
-    assert_eq!(events(&pool).await, 1);
-    assert!(active(&pool, mobile.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 1);
+    assert!(is_unrevoked(&pool, mobile.sid).await);
     assert!(matches!(
         service.refresh(&rotated.refresh_token).await,
         Err(SessionError::InvalidRefresh)
@@ -251,7 +297,7 @@ async fn logout_is_idempotent_and_does_not_reactivate_or_affect_mobile(pool: PgP
 
 #[sqlx::test(migrations = "./migrations")]
 async fn refresh_racing_logout_cannot_resurrect(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
     let (result, logout) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
@@ -263,16 +309,20 @@ async fn refresh_racing_logout_cannot_resurrect(pool: PgPool) {
     .await
     .unwrap();
     logout.unwrap();
-    assert!(!active(&pool, first.sid).await);
+    assert!(!is_unrevoked(&pool, first.sid).await);
+    assert!(matches!(&result, Ok(_) | Err(SessionError::InvalidRefresh)));
     if let Ok(next) = result {
-        assert!(service.refresh(&next.refresh_token).await.is_err());
+        assert!(matches!(
+            service.refresh(&next.refresh_token).await,
+            Err(SessionError::InvalidRefresh)
+        ));
     }
-    assert_eq!(events(&pool).await, 1);
+    assert_eq!(revocation_event_count(&pool).await, 1);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn refresh_racing_replacement_cannot_resurrect(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
     let (result, next) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
@@ -284,10 +334,14 @@ async fn refresh_racing_replacement_cannot_resurrect(pool: PgPool) {
     .await
     .unwrap();
     let next = next.unwrap();
-    assert!(active(&pool, next.sid).await);
-    assert!(!active(&pool, first.sid).await);
+    assert!(is_unrevoked(&pool, next.sid).await);
+    assert!(!is_unrevoked(&pool, first.sid).await);
+    assert!(matches!(&result, Ok(_) | Err(SessionError::InvalidRefresh)));
     if let Ok(rotated) = result {
-        assert!(service.refresh(&rotated.refresh_token).await.is_err());
+        assert!(matches!(
+            service.refresh(&rotated.refresh_token).await,
+            Err(SessionError::InvalidRefresh)
+        ));
     }
 }
 
@@ -305,6 +359,7 @@ struct VerificationGate {
     entered: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
 }
+
 impl PasswordHasher for VerificationGate {
     fn hash_password(&self, _: &str) -> Result<String, PasswordHashingError> {
         unreachable!()
@@ -328,12 +383,22 @@ impl PasswordHasher for VerificationGate {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn credential_and_account_changes_after_verification_are_rechecked(pool: PgPool) {
-    let id = account(&pool).await;
+    let id = create_account(&pool).await;
     for change in [
         "UPDATE auth.password_credentials SET password_hash='changed' WHERE account_id=$1",
         "UPDATE auth.accounts SET status='suspended' WHERE id=$1",
     ] {
-        sqlx::query("UPDATE auth.password_credentials SET password_hash='test-only-password-hash' WHERE account_id=$1").bind(id).execute(&pool).await.unwrap();
+        sqlx::query(
+            r#"
+            UPDATE auth.password_credentials
+            SET password_hash = 'test-only-password-hash'
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
         sqlx::query("UPDATE auth.accounts SET status='active' WHERE id=$1")
             .bind(id)
             .execute(&pool)
@@ -350,7 +415,7 @@ async fn credential_and_account_changes_after_verification_are_rechecked(pool: P
         );
         let service = SessionService::new(
             SessionsRepository::new(pool.clone()),
-            passwords,
+            passwords.password_processor(),
             crate::tests::token_support::issuer(),
         );
         let pending =
@@ -379,21 +444,24 @@ async fn bounded_password_verification_runs_off_runtime_and_shares_register_budg
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let passwords = AuthService::new(
         AccountsRepository::new(pool.clone()),
-        Arc::new(VerificationGate {
-            entered: std::sync::Mutex::new(Some(entered_tx)),
-            release: std::sync::Mutex::new(release_rx),
-        }),
+        crate::services::password_processor::PasswordProcessor::new(
+            Arc::new(VerificationGate {
+                entered: std::sync::Mutex::new(Some(entered_tx)),
+                release: std::sync::Mutex::new(release_rx),
+            }),
+            1,
+        ),
         EmailVerificationService::new(
             RegistrationAttemptsRepository::new(pool.clone()),
             Arc::new(NoEmail),
             &[0x17; 32],
         )
         .unwrap(),
-        1,
     );
     let copy = passwords.clone();
     let pending = tokio::spawn(async move {
-        copy.check_password("test-only".into(), Some("test-only-hash".into()))
+        copy.password_processor()
+            .verify("test-only".into(), Some("test-only-hash".into()))
             .await
     });
     tokio::time::timeout(std::time::Duration::from_secs(10), entered_rx)
@@ -402,9 +470,10 @@ async fn bounded_password_verification_runs_off_runtime_and_shares_register_budg
         .unwrap();
     assert!(matches!(
         passwords
-            .check_password("test-only".into(), Some("test-only-hash".into()))
+            .password_processor()
+            .verify("test-only".into(), Some("test-only-hash".into()))
             .await,
-        Err(crate::services::account_service::PasswordCheckError::Busy)
+        Err(crate::services::password_processor::PasswordProcessingError::Busy)
     ));
     assert!(matches!(
         passwords
@@ -421,20 +490,20 @@ async fn bounded_password_verification_runs_off_runtime_and_shares_register_budg
 }
 #[sqlx::test(migrations = "./migrations")]
 async fn signing_failure_rolls_back_open_rotation_and_outbox(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let good = service(&pool);
     let first = good.login(request(ClientType::Desktop)).await.unwrap();
     let failing = SessionService::new(
         SessionsRepository::new(pool.clone()),
-        auth(&pool, Arc::new(TestHasher)),
+        auth(&pool, Arc::new(TestHasher)).password_processor(),
         Arc::new(FailingSigner),
     );
     assert!(matches!(
         failing.login(request(ClientType::Desktop)).await,
         Err(SessionError::Signing)
     ));
-    assert!(active(&pool, first.sid).await);
-    assert_eq!(events(&pool).await, 0);
+    assert!(is_unrevoked(&pool, first.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 0);
     assert!(matches!(
         failing.refresh(&first.refresh_token).await,
         Err(SessionError::Signing)
@@ -449,55 +518,84 @@ async fn signing_failure_rolls_back_open_rotation_and_outbox(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn outbox_failure_rolls_back_revocation_and_database_failure_rolls_back_open(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
-    sqlx::query("ALTER TABLE auth.session_revocation_outbox ADD CONSTRAINT fail_event CHECK(false) NOT VALID").execute(&pool).await.unwrap();
-    assert!(service.logout(&first.refresh_token).await.is_err());
-    assert!(active(&pool, first.sid).await);
-    assert!(service.login(request(ClientType::Desktop)).await.is_err());
-    assert!(active(&pool, first.sid).await);
-    assert_eq!(events(&pool).await, 0);
-    sqlx::query("ALTER TABLE auth.session_revocation_outbox DROP CONSTRAINT fail_event")
-        .execute(&pool)
-        .await
-        .unwrap();
     sqlx::query(
-        "ALTER TABLE auth.refresh_tokens ADD CONSTRAINT fail_refresh CHECK(false) NOT VALID",
+        r#"
+        ALTER TABLE auth.session_revocation_outbox ADD CONSTRAINT fail_event CHECK (false) NOT VALID
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(service.logout(&first.refresh_token).await.is_err());
+    assert!(is_unrevoked(&pool, first.sid).await);
+    assert!(service.login(request(ClientType::Desktop)).await.is_err());
+    assert!(is_unrevoked(&pool, first.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 0);
+    sqlx::query(
+        r#"
+        ALTER TABLE auth.session_revocation_outbox DROP CONSTRAINT fail_event
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        ALTER TABLE auth.refresh_tokens ADD CONSTRAINT fail_refresh CHECK (false) NOT VALID
+        "#,
     )
     .execute(&pool)
     .await
     .unwrap();
     assert!(service.login(request(ClientType::Desktop)).await.is_err());
-    assert!(active(&pool, first.sid).await);
-    assert_eq!(events(&pool).await, 0);
+    assert!(is_unrevoked(&pool, first.sid).await);
+    assert_eq!(revocation_event_count(&pool).await, 0);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn expiration_is_checked_without_waiting_and_lifetime_cannot_extend(pool: PgPool) {
-    let id = account(&pool).await;
+    let id = create_account(&pool).await;
     let service = service(&pool);
     let first = service.login(request(ClientType::Desktop)).await.unwrap();
-    sqlx::query("UPDATE auth.refresh_tokens SET expires_at=clock_timestamp()-interval '1 second'")
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert!(service.refresh(&first.refresh_token).await.is_err());
+    sqlx::query(
+        r#"
+        UPDATE auth.refresh_tokens
+        SET expires_at = clock_timestamp() - interval '1 second'
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(matches!(
+        service.refresh(&first.refresh_token).await,
+        Err(SessionError::InvalidRefresh)
+    ));
     assert!(sqlx::query(
-        "UPDATE auth.sessions SET expires_at=expires_at+interval '1 second' WHERE id=$1"
+        r#"
+        UPDATE auth.sessions
+        SET expires_at = expires_at + interval '1 second'
+        WHERE id = $1
+        "#,
     )
     .bind(first.sid)
     .execute(&pool)
     .await
     .is_err());
     service.logout(&first.refresh_token).await.unwrap();
-    assert!(
-        sqlx::query("UPDATE auth.sessions SET revoked_at=NULL,revoke_reason=NULL WHERE id=$1")
-            .bind(first.sid)
-            .execute(&pool)
-            .await
-            .is_err()
-    );
+    assert!(sqlx::query(
+        r#"
+            UPDATE auth.sessions
+            SET revoked_at = NULL, revoke_reason = NULL
+            WHERE id = $1
+            "#,
+    )
+    .bind(first.sid)
+    .execute(&pool)
+    .await
+    .is_err());
     assert!(
         sqlx::query("SELECT auth.open_session($1,'desktop',interval '21 days')")
             .bind(id)
@@ -506,20 +604,44 @@ async fn expiration_is_checked_without_waiting_and_lifetime_cannot_extend(pool: 
             .is_err()
     );
     // A preexpired fixture, preserving the 20-day invariant, requires no sleeps.
-    let sid:Uuid=sqlx::query_scalar("INSERT INTO auth.sessions(account_id,client_type,created_at,expires_at) VALUES($1,'desktop',clock_timestamp()-interval '20 days',clock_timestamp()-interval '1 second') RETURNING id").bind(id).fetch_one(&pool).await.unwrap();
+    let sid:Uuid=sqlx::query_scalar(
+        r#"
+        INSERT INTO auth.sessions (account_id, client_type, created_at, expires_at)
+        VALUES ($1, 'desktop', clock_timestamp() - interval '20 days', clock_timestamp() - interval '1 second')
+        RETURNING id
+        "#,
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let secret = base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         [42u8; 32],
     );
-    sqlx::query("INSERT INTO auth.refresh_tokens(session_id,token_hash,expires_at) VALUES($1,$2,clock_timestamp()+interval '1 day')").bind(sid).bind(refresh_hash(&secret).unwrap().to_vec()).execute(&pool).await.unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO auth.refresh_tokens (session_id, token_hash, expires_at)
+        VALUES ($1, $2, clock_timestamp() + interval '1 day')
+        "#,
+    )
+    .bind(sid)
+    .bind(refresh_hash(&secret).unwrap().to_vec())
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         service.refresh(&secret).await,
         Err(SessionError::InvalidRefresh)
     ));
 }
 
-fn app(pool: &PgPool, enabled: bool) -> axum::Router {
-    crate::routes::router(AppState {
+pub(super) fn test_state(pool: &PgPool, enabled: bool) -> AppState {
+    AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
+        password_service: None,
         login_enabled: enabled,
         pool: pool.clone(),
         auth_service: auth(pool, Arc::new(TestHasher)),
@@ -536,7 +658,11 @@ fn app(pool: &PgPool, enabled: bool) -> axum::Router {
             )
             .without_redis_for_tests(),
         ),
-    })
+    }
+}
+
+fn test_router(pool: &PgPool, enabled: bool) -> axum::Router {
+    crate::routes::router(test_state(pool, enabled))
 }
 
 fn protected_app(
@@ -544,6 +670,10 @@ fn protected_app(
     limiter: crate::protection::auth_rate_limiter::AuthRateLimiter,
 ) -> axum::Router {
     crate::routes::router(AppState {
+        google_service: None,
+        contact_email_service: None,
+        security_notifications: None,
+        password_service: None,
         login_enabled: true,
         pool: pool.clone(),
         auth_service: auth(pool, Arc::new(TestHasher)),
@@ -560,7 +690,7 @@ fn protected_app(
 
 #[sqlx::test(migrations = "./migrations")]
 async fn redis_outage_rejects_session_http_without_consuming_refresh(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let service = service(&pool);
     let tokens = service.login(request(ClientType::Desktop)).await.unwrap();
     let router = protected_app(
@@ -578,14 +708,14 @@ async fn redis_outage_rejects_session_http_without_consuming_refresh(pool: PgPoo
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(headers["cache-control"], "no-store");
     assert_eq!(body["type"], "/problems/auth-unavailable");
-    assert!(active(&pool, tokens.sid).await);
+    assert!(is_unrevoked(&pool, tokens.sid).await);
     service.refresh(&tokens.refresh_token).await.unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires Redis; CI runs --include-ignored"]
 async fn redis_login_account_budget_and_refresh_ip_budget_are_independent(pool: PgPool) {
-    let id = account(&pool).await;
+    let id = create_account(&pool).await;
     let email = format!("rate-{}@example.invalid", Uuid::new_v4());
     sqlx::query("UPDATE auth.accounts SET email=$2 WHERE id=$1")
         .bind(id)
@@ -624,19 +754,20 @@ async fn redis_login_account_budget_and_refresh_ip_budget_are_independent(pool: 
     assert_eq!(problem["type"], "/problems/too-many-requests");
     // The second request was rejected before replay detection; the rotated session remains usable.
     assert!(
-        active(
+        is_unrevoked(
             &pool,
             Uuid::parse_str(next["sid"].as_str().unwrap()).unwrap()
         )
         .await
     );
 }
+
 async fn http(
-    app: axum::Router,
+    test_router: axum::Router,
     path: &str,
     body: serde_json::Value,
 ) -> (StatusCode, axum::http::HeaderMap, serde_json::Value) {
-    let response = app
+    let response = test_router
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -662,12 +793,17 @@ async fn http(
 }
 #[sqlx::test(migrations = "./migrations")]
 async fn http_contract_headers_gate_and_redaction(pool: PgPool) {
-    account(&pool).await;
+    create_account(&pool).await;
     let login = serde_json::json!({"email":"person@example.invalid","password":"TestPass123!","client_type":"desktop"});
-    let (status, _, body) = http(app(&pool, false), "/api/v1/auth/login", login.clone()).await;
+    let (status, _, body) = http(
+        test_router(&pool, false),
+        "/api/v1/auth/login",
+        login.clone(),
+    )
+    .await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["type"], "/problems/auth-unavailable");
-    let router = app(&pool, true);
+    let router = test_router(&pool, true);
     let (status, headers, tokens) = http(router.clone(), "/api/v1/auth/login", login).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers["cache-control"], "no-store");
@@ -719,4 +855,103 @@ async fn http_contract_headers_gate_and_redaction(pool: PgPool) {
         account_id: Uuid::new_v4(),
     };
     assert!(!format!("{response:?}").contains("secret"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn google_session_without_contact_refreshes_and_is_authoritative_without_enabling_local_login(
+    pool: PgPool,
+) {
+    use base64::Engine;
+    let account_id: Uuid =
+        sqlx::query_scalar("INSERT INTO auth.accounts DEFAULT VALUES RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let identity_id: Uuid = sqlx::query_scalar("INSERT INTO auth.oauth_identities(account_id, provider, provider_subject, provider_email) VALUES ($1, 'google', $2, 'unaccredited@example.invalid') RETURNING id")
+        .bind(account_id).bind(Uuid::new_v4().to_string()).fetch_one(&pool).await.unwrap();
+    let session_id: Uuid = sqlx::query_scalar("SELECT auth.open_authenticated_session($1, 'desktop', interval '1 day', ROW('google', $2, NULL, NULL)::auth.session_authentication_context)")
+        .bind(account_id).bind(identity_id).fetch_one(&pool).await.unwrap();
+    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x55u8; 32]);
+    sqlx::query("INSERT INTO auth.refresh_tokens(session_id, token_hash, expires_at) SELECT id, $2, expires_at FROM auth.sessions WHERE id = $1")
+        .bind(session_id).bind(refresh_hash(&secret).unwrap().to_vec()).execute(&pool).await.unwrap();
+    let sessions = service(&pool);
+    let tokens = sessions.refresh(&secret).await.unwrap();
+    assert_eq!(tokens.sid, session_id);
+    assert_eq!(tokens.account_id, account_id);
+    let checks = auth_service::session_check_service::SessionCheckService::new(pool.clone());
+    let pair = auth_service::session_check_types::SessionCheckRequest {
+        sid: session_id,
+        account_id,
+    };
+    assert!(checks.check(pair).await.unwrap().active);
+    let mut password_request = request(ClientType::Desktop);
+    password_request.email = "unaccredited@example.invalid".into();
+    assert!(matches!(
+        sessions.login(password_request).await,
+        Err(SessionError::InvalidCredentials)
+    ));
+    let evidence: (
+        String,
+        Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
+    ) = sqlx::query_as(
+        "SELECT authentication_method, last_authenticated_at FROM auth.sessions WHERE id = $1",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(evidence.0, "google");
+    assert!(evidence.1.is_none());
+    sqlx::query("UPDATE auth.accounts SET status = 'locked' WHERE id = $1")
+        .bind(account_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!checks.check(pair).await.unwrap().active);
+    assert!(matches!(
+        sessions.refresh(&tokens.refresh_token).await,
+        Err(SessionError::InvalidRefresh)
+    ));
+    let unconsumed: bool = sqlx::query_scalar(
+        "SELECT revoked_at IS NULL FROM auth.refresh_tokens WHERE token_hash = $1",
+    )
+    .bind(refresh_hash(&tokens.refresh_token).unwrap().to_vec())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(unconsumed);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn password_login_records_proof_without_refresh_renewing_it(pool: PgPool) {
+    create_account(&pool).await;
+    let sessions = service(&pool);
+    let tokens = sessions.login(request(ClientType::Desktop)).await.unwrap();
+    let evidence_sql = "SELECT authentication_method, password_credential_version, last_authenticated_at, reauthentication_method, reauthentication_password_version FROM auth.sessions WHERE id = $1";
+    type Evidence = (
+        String,
+        i64,
+        sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
+        String,
+        i64,
+    );
+    let before: Evidence = sqlx::query_as(evidence_sql)
+        .bind(tokens.sid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before.0, "password");
+    assert_eq!(before.3, "password");
+    assert_eq!(before.1, before.4);
+    let credential_version: i64 = sqlx::query_scalar("SELECT (extract(epoch FROM password_changed_at) * 1000000)::bigint FROM auth.password_credentials WHERE account_id = $1")
+        .bind(tokens.account_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(before.1, credential_version);
+    let next = sessions.refresh(&tokens.refresh_token).await.unwrap();
+    assert_eq!(next.sid, tokens.sid);
+    let after: Evidence = sqlx::query_as(evidence_sql)
+        .bind(tokens.sid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
 }

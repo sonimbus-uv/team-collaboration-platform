@@ -1,14 +1,18 @@
 # Plan de implementación y pruebas de sesiones
 
+> Documento histórico de planificación. Las descripciones de capacidades ausentes
+> corresponden a entregas anteriores. El estado vigente se mantiene en la
+> [documentación de Auth](../services/auth/README.md).
+
 Tercera entrega: sesiones transaccionales y rutas públicas implementadas, con
 login deshabilitado por defecto mientras #17 siga sin mitigación aprobada.
 Incluye intención de outbox; publicación, API interna e integración siguen
-pendientes. Ver [SESSIONS.md](../services/auth/SESSIONS.md) para estado y validación.
+pendientes. Ver [arquitectura de sesiones](../services/auth/docs/architecture.md#sesiones-y-transacciones) para estado y validación.
 
 Primera entrega documental, 2026-10-22. Refs #35.
 Actualización de la segunda entrega: componente de firma y endpoint JWKS con
 gateway implementados; configuración, rotación y validaciones se documentan en
-[TOKENS.md](../services/auth/TOKENS.md). La inspección y secuencia siguientes
+[operación de claves](../services/auth/docs/operations.md#claves-jwt-y-jwks). La inspección y secuencia siguientes
 conservan el contexto de la primera entrega. #17 continúa siendo previo a login;
 CA-03 e integración Rust–Elixir permanecen pendientes.
 [ADR-007](decisions/ADR-007-auth-sessions.md), [contratos](../contracts/README.md).

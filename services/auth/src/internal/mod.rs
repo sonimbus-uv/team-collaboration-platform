@@ -31,6 +31,20 @@ use config::InternalConfig;
 use credentials::{Identity, ServiceCredentials};
 use limits::{AdmissionError, InternalLimits};
 
+enum AuthorizationError {
+    Rejected(StatusCode),
+    Admission(AdmissionError),
+}
+
+impl IntoResponse for AuthorizationError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Rejected(status) => problem(status, None),
+            Self::Admission(error) => admission_error(error),
+        }
+    }
+}
+
 pub struct InternalApi {
     pub config: InternalConfig,
     pub credentials: ServiceCredentials,
@@ -66,10 +80,8 @@ impl InternalApi {
     }
 
     pub fn allows(&self, ip: IpAddr) -> bool {
-        let ip = match ip {
-            IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(ip),
-            _ => ip,
-        };
+        let ip = normalize_peer_ip(ip);
+
         self.config
             .allowed_peers
             .iter()
@@ -87,35 +99,10 @@ async fn protect(
         return problem(StatusCode::TOO_MANY_REQUESTS, Some(1));
     };
     let result = timeout(api.config.request_timeout, async {
-        let Some(ConnectInfo(peer)) = request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .copied()
-        else {
-            return problem(StatusCode::SERVICE_UNAVAILABLE, None);
+        let identity = match authorize_request(&api, &mut request).await {
+            Ok(identity) => identity,
+            Err(error) => return error.into_response(),
         };
-        if !api.allows(peer.ip()) {
-            return problem(StatusCode::FORBIDDEN, None);
-        }
-        // IPv4-mapped socket addresses use the same budget as IPv4 addresses.
-        let ip = match peer.ip() {
-            IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(peer.ip()),
-            ip => ip,
-        };
-        if let Err(error) = api.limits.preauthenticate(ip).await {
-            return admission_error(error);
-        }
-        let Some((identity, allowed)) = api.credentials.authenticate(request.headers(), Utc::now())
-        else {
-            return problem(StatusCode::UNAUTHORIZED, None);
-        };
-        if !allowed {
-            return problem(StatusCode::FORBIDDEN, None);
-        }
-        request.headers_mut().remove(header::AUTHORIZATION);
-        if request.uri().query().is_some() {
-            return problem(StatusCode::BAD_REQUEST, None);
-        }
         request.extensions_mut().insert(identity);
         next.run(request).await
     })
@@ -125,6 +112,49 @@ async fn protect(
         problem(StatusCode::SERVICE_UNAVAILABLE, None)
     } else {
         no_store(result)
+    }
+}
+
+async fn authorize_request(
+    api: &InternalApi,
+    request: &mut axum::extract::Request,
+) -> Result<Identity, AuthorizationError> {
+    let Some(ConnectInfo(peer_address)) = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .copied()
+    else {
+        return Err(AuthorizationError::Rejected(
+            StatusCode::SERVICE_UNAVAILABLE,
+        ));
+    };
+    if !api.allows(peer_address.ip()) {
+        return Err(AuthorizationError::Rejected(StatusCode::FORBIDDEN));
+    }
+    let ip = normalize_peer_ip(peer_address.ip());
+    if let Err(error) = api.limits.preauthenticate(ip).await {
+        return Err(AuthorizationError::Admission(error));
+    }
+    let Some((identity, can_check_sessions)) =
+        api.credentials.authenticate(request.headers(), Utc::now())
+    else {
+        return Err(AuthorizationError::Rejected(StatusCode::UNAUTHORIZED));
+    };
+    if !can_check_sessions {
+        return Err(AuthorizationError::Rejected(StatusCode::FORBIDDEN));
+    }
+    request.headers_mut().remove(header::AUTHORIZATION);
+    if request.uri().query().is_some() {
+        return Err(AuthorizationError::Rejected(StatusCode::BAD_REQUEST));
+    }
+
+    Ok(identity)
+}
+
+fn normalize_peer_ip(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(ipv6) => ipv6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(ip),
+        ipv4 => ipv4,
     }
 }
 
@@ -149,20 +179,20 @@ async fn check_batch(
         Ok(Json(value)) => value,
         Err(error) => return json_error(error),
     };
-    let cost = request.sessions.len();
-    if !(1..=MAX_SESSION_CHECKS).contains(&cost) {
+    let pair_count = request.sessions.len();
+    if !(1..=MAX_SESSION_CHECKS).contains(&pair_count) {
         return problem(StatusCode::BAD_REQUEST, None);
     }
-    evaluate(&api, identity, cost, api.service.check_batch(request)).await
+    evaluate(&api, identity, pair_count, api.service.check_batch(request)).await
 }
 
 async fn evaluate<T: Serialize>(
     api: &InternalApi,
     identity: Identity,
-    cost: usize,
+    pair_count: usize,
     query: impl std::future::Future<Output = Result<T, SessionCheckError>>,
 ) -> Response {
-    let lease = match api.limits.reserve(identity, cost).await {
+    let lease = match api.limits.reserve(identity, pair_count).await {
         Ok(lease) => lease,
         Err(error) => return admission_error(error),
     };
@@ -173,7 +203,7 @@ async fn evaluate<T: Serialize>(
     match result {
         Ok(Ok(result)) => Json(result).into_response(),
         Ok(Err(SessionCheckError::InvalidInput(_))) => problem(StatusCode::BAD_REQUEST, None),
-        // No error is logged with Debug, converted into inactivity, or exposed to callers.
+        // Dependency failures must never be reported as inactive sessions.
         _ => problem(StatusCode::SERVICE_UNAVAILABLE, None),
     }
 }
@@ -219,10 +249,14 @@ pub(super) fn problem(status: StatusCode, retry: Option<u64>) -> Response {
         StatusCode::TOO_MANY_REQUESTS => "service-rate-limited",
         _ => "session-check-unavailable",
     };
-    let mut response = no_store((status, Json(serde_json::json!({
-        "type":format!("/problems/{kind}"), "title":status.canonical_reason().unwrap_or("Error"),
-        "status":status.as_u16(), "detail":"The session check could not be completed."
-    }))).into_response());
+    let body = Json(serde_json::json!({
+        "type": format!("/problems/{kind}"),
+        "title": status.canonical_reason().unwrap_or("Error"),
+        "status": status.as_u16(),
+        "detail": "The session check could not be completed.",
+    }));
+    let mut response = no_store((status, body).into_response());
+
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/problem+json"),

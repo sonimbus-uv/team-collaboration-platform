@@ -1,0 +1,23 @@
+services:
+  nginx:
+    ports:
+      - "127.0.0.1:8443:443"
+    volumes:
+      - type: bind
+        source: ../gateway/nginx/tls/development.conf
+        target: /etc/nginx/listeners/development.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${GATEWAY_TLS_DIR:?Run scripts/auth/dev/setup-gateway-tls.py first}/gateway.crt
+        target: /etc/nginx/tls/gateway.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${GATEWAY_TLS_DIR:?Run scripts/auth/dev/setup-gateway-tls.py first}/gateway.key
+        target: /etc/nginx/tls/gateway.key
+        read_only: true
+        bind:
+          create_host_path: false

@@ -23,7 +23,7 @@ Conectar el cliente de escritorio **únicamente con lo que ya existe en el backe
   - `docs/STANDARD_DEVELOPMENT.md` (secciones 8, 9, 13, 14, 17, 19, 21, 27).
   - `docs/requirements/casos-de-uso.md` (CU-01, CU-02, CU-03, CU-05) y `docs/requirements/requisitos.md` (RF-AUTH-*, RNF-USA-01/02, RNF-SEG-04, RNF-CON-03, RNF-REN-01, RNF-MNT-02).
   - `docs/decisions/README.md` (D-06, D-07, D-11, D-12 y la tabla de decisiones pendientes).
-  - `services/auth/REGISTRATION.md` y, para confirmar detalles, `services/auth/src/handlers/auth.rs`, `src/error.rs`, `src/dto/auth.rs`, `src/validators/auth_validator.rs`, `src/routes/mod.rs`. **Léelos, no los modifiques.**
+  - `services/auth/docs/architecture.md` y, para confirmar detalles, `services/auth/src/handlers/auth.rs`, `src/error.rs`, `src/dto/auth.rs`, `src/validators/auth_validator.rs`, `src/routes/mod.rs`. **Léelos, no los modifiques.**
   - Issues de GitHub `#14` a `#36` del repo `sonimbus-uv/team-collaboration-platform` (si `gh` está disponible: `gh issue view N`; si no, usa la tabla de la sección 7).
   - `clients/desktop/docs/vistas-javafx.md` y `vistas-notas.md` (convenciones de las vistas).
 

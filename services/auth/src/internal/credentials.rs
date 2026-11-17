@@ -16,6 +16,7 @@ pub enum Identity {
     Core,
     Files,
 }
+
 impl Identity {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -28,26 +29,28 @@ impl Identity {
 // No Debug or Serialize for credential configuration or its in-memory snapshot.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Document {
-    core: Entry,
-    files: Entry,
+struct CredentialDocument {
+    core: CredentialEntry,
+    files: CredentialEntry,
 }
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Entry {
+struct CredentialEntry {
     enabled: bool,
     permissions: Vec<String>,
     active_sha256: Option<String>,
-    previous: Option<Previous>,
+    previous: Option<PreviousCredential>,
 }
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Previous {
+struct PreviousCredential {
     sha256: String,
     expires_at: String,
 }
 
-struct Service {
+struct ServiceCredential {
     identity: Identity,
     enabled: bool,
     allowed: bool,
@@ -56,7 +59,7 @@ struct Service {
 }
 
 pub struct ServiceCredentials {
-    services: [Service; 2],
+    services: [ServiceCredential; 2],
 }
 
 impl ServiceCredentials {
@@ -65,59 +68,14 @@ impl ServiceCredentials {
     }
 
     pub(super) fn parse(bytes: &[u8], now: DateTime<Utc>) -> anyhow::Result<Self> {
-        let document: Document = serde_json::from_slice(bytes)
+        let document: CredentialDocument = serde_json::from_slice(bytes)
             .map_err(|_| anyhow::anyhow!("Invalid internal credential document"))?;
-        let mut hashes = HashSet::new();
-        let mut parse = |identity, entry: Entry| -> anyhow::Result<Service> {
-            ensure!(
-                entry.permissions.len() <= 1
-                    && entry.permissions.iter().all(|p| p == "sessions:check"),
-                "Invalid internal permissions"
-            );
-            ensure!(
-                !entry.enabled || entry.active_sha256.is_some(),
-                "Enabled service requires active credential"
-            );
-            let mut digest = |value: &str| -> anyhow::Result<[u8; 32]> {
-                let bytes = decode_digest(value)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid internal credential digest"))?;
-                ensure!(hashes.insert(bytes), "Duplicate internal credential digest");
-                Ok(bytes)
-            };
-            let active = entry
-                .active_sha256
-                .as_deref()
-                .map(&mut digest)
-                .transpose()?;
-            let previous = entry
-                .previous
-                .map(|previous| -> anyhow::Result<_> {
-                    let expires = DateTime::parse_from_rfc3339(&previous.expires_at)
-                        .map_err(|_| anyhow::anyhow!("Invalid previous credential expiration"))?
-                        .with_timezone(&Utc);
-                    ensure!(
-                        expires <= now + std::time::Duration::from_secs(900),
-                        "Previous credential overlap exceeds 15 minutes"
-                    );
-                    ensure!(
-                        active.is_some(),
-                        "Previous credential requires active credential"
-                    );
-                    Ok((digest(&previous.sha256)?, expires))
-                })
-                .transpose()?;
-            Ok(Service {
-                identity,
-                enabled: entry.enabled,
-                allowed: !entry.permissions.is_empty(),
-                active,
-                previous,
-            })
-        };
+        let mut unique_digests = HashSet::new();
+
         Ok(Self {
             services: [
-                parse(Identity::Core, document.core)?,
-                parse(Identity::Files, document.files)?,
+                parse_service(Identity::Core, document.core, now, &mut unique_digests)?,
+                parse_service(Identity::Files, document.files, now, &mut unique_digests)?,
             ],
         })
     }
@@ -128,29 +86,110 @@ impl ServiceCredentials {
         headers: &HeaderMap,
         now: DateTime<Utc>,
     ) -> Option<(Identity, bool)> {
-        let mut values = headers.get_all(AUTHORIZATION).iter();
-        let value = values.next()?.to_str().ok()?;
-        if values.next().is_some() {
-            return None;
-        }
-        let (scheme, token) = value.split_once(' ')?;
-        if !scheme.eq_ignore_ascii_case("Bearer") {
-            return None;
-        }
+        let token = bearer_token(headers)?;
         let digest = token_digest(token)?;
         let mut identity = None;
-        // Check every fixed slot. Match digests in constant time, not with string equality.
+        // Check every slot and both generations without stopping at the first match.
         for service in &self.services {
-            let active = service.active.unwrap_or([0; 32]).ct_eq(&digest);
-            let (previous, expires) = service.previous.unwrap_or(([0; 32], DateTime::UNIX_EPOCH));
-            let previous_match = previous.ct_eq(&digest);
-            let matched = bool::from(active) && service.active.is_some()
-                || bool::from(previous_match) && service.previous.is_some() && now < expires;
+            let matched = service.matches_digest(&digest, now);
             if matched && service.enabled {
                 identity = Some((service.identity, service.allowed));
             }
         }
+
         identity
+    }
+}
+
+fn parse_service(
+    identity: Identity,
+    entry: CredentialEntry,
+    now: DateTime<Utc>,
+    unique_digests: &mut HashSet<[u8; 32]>,
+) -> anyhow::Result<ServiceCredential> {
+    ensure!(
+        entry.permissions.len() <= 1
+            && entry
+                .permissions
+                .iter()
+                .all(|permission| permission == "sessions:check"),
+        "Invalid internal permissions"
+    );
+    ensure!(
+        !entry.enabled || entry.active_sha256.is_some(),
+        "Enabled service requires active credential"
+    );
+
+    let active = entry
+        .active_sha256
+        .as_deref()
+        .map(|value| parse_unique_digest(value, unique_digests))
+        .transpose()?;
+    let previous = entry
+        .previous
+        .map(|previous| -> anyhow::Result<_> {
+            let expires = DateTime::parse_from_rfc3339(&previous.expires_at)
+                .map_err(|_| anyhow::anyhow!("Invalid previous credential expiration"))?
+                .with_timezone(&Utc);
+            ensure!(
+                expires <= now + std::time::Duration::from_secs(900),
+                "PreviousCredential credential overlap exceeds 15 minutes"
+            );
+            ensure!(
+                active.is_some(),
+                "PreviousCredential credential requires active credential"
+            );
+            Ok((
+                parse_unique_digest(&previous.sha256, unique_digests)?,
+                expires,
+            ))
+        })
+        .transpose()?;
+
+    Ok(ServiceCredential {
+        identity,
+        enabled: entry.enabled,
+        allowed: !entry.permissions.is_empty(),
+        active,
+        previous,
+    })
+}
+
+fn parse_unique_digest(
+    value: &str,
+    unique_digests: &mut HashSet<[u8; 32]>,
+) -> anyhow::Result<[u8; 32]> {
+    let digest = decode_digest(value)
+        .ok_or_else(|| anyhow::anyhow!("Invalid internal credential digest"))?;
+    ensure!(
+        unique_digests.insert(digest),
+        "Duplicate internal credential digest"
+    );
+    Ok(digest)
+}
+
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let mut authorization_values = headers.get_all(AUTHORIZATION).iter();
+    let authorization_header = authorization_values.next()?.to_str().ok()?;
+    if authorization_values.next().is_some() {
+        return None;
+    }
+    let (scheme, token) = authorization_header.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("Bearer") {
+        return None;
+    }
+    Some(token)
+}
+
+impl ServiceCredential {
+    fn matches_digest(&self, digest: &[u8; 32], now: DateTime<Utc>) -> bool {
+        let active_match = self.active.unwrap_or([0; 32]).ct_eq(digest);
+        let (previous_digest, expires_at) =
+            self.previous.unwrap_or(([0; 32], DateTime::UNIX_EPOCH));
+        let previous_match = previous_digest.ct_eq(digest);
+
+        bool::from(active_match) && self.active.is_some()
+            || bool::from(previous_match) && self.previous.is_some() && now < expires_at
     }
 }
 
@@ -158,7 +197,7 @@ fn decode_digest(value: &str) -> Option<[u8; 32]> {
     if value.len() != 64
         || !value
             .bytes()
-            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
         return None;
     }
