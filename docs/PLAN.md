@@ -44,9 +44,23 @@ Cada módulo tiene un responsable principal, indicado también en su `README.md`
 
 `.github/CODEOWNERS` asigna como revisores a @Maple-M136279841 y @tuzc0 en todo el repositorio, y `main` exige una aprobación. Mientras @roluva no sea codeowner, sus PR los revisa cualquiera de los dos, y él puede revisar PR de otros, aunque su aprobación no cuente para la regla de `main`.
 
+## Calendario hacia la expo
+
+Expo: **jueves 2026-12-10**. Congelamiento del código: **lunes 2026-12-07** (después solo se corrigen errores y se ensaya). Alcance de la demo: recorrido completo de Fase 5, voz con LiveKit (CU-22) y archivos; las videollamadas son una extensión **si alcanza el tiempo** (no cambian el alcance oficial: ver «Fuera del alcance» en [`docs/requirements/`](requirements/README.md#alcance-del-mvp)).
+
+| Semana | Fechas | Objetivo | Hito |
+|---|---|---|---|
+| 1 | 2026-11-18 a 11-23 | Integrar `main` en escritorio; cola local SQLite y reconexión; LiveKit en Compose con puertos validados (T-03 RabbitMQ en paralelo) | Dos clientes conversan con reconexión |
+| 2 | 2026-11-24 a 11-30 | Voz: token de LiveKit en Core (D-15), participantes y micrófono; fork de LiveKit en el escritorio (SIM-05); File Service con MinIO (SIM-04) | Llamada de voz entre dos clientes |
+| 3 | 2026-12-01 a 12-07 | Roles y permisos (CU-14, CU-15); perfil de producción del `compose`, TLS y puertos; extensión de video si alcanza; congelamiento el 12-07 | `docker compose up` en *healthy* |
+| Ensayo | 2026-12-08 y 12-09 | Ensayo completo en la laptop servidor, respaldos y plan de contingencia | Demo ensayada |
+| Expo | 2026-12-10 | Demostración | — |
+
+Se difieren a después de la expo si no alcanzan: Report Service (CU-29, CU-30), notificaciones (CU-31), proyectos y tareas (CU-25 a CU-28) y cliente móvil, salvo que @roluva los tenga avanzados.
+
 ## Fases
 
-Estado al 2026-10-27. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
+Estado al 2026-11-18. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 
 ### Fase 1. Repositorio y organización — 🟡
 
@@ -78,7 +92,7 @@ Estado al 2026-10-27. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 - 🟡 `healthcheck` en PostgreSQL, Redis, Mailpit, ScyllaDB y MinIO; falta Nginx.
 - ⬜ **Hito:** `docker compose up` deja todo en estado *healthy*.
 
-### Fase 4. Contratos — ⬜
+### Fase 4. Contratos — 🟡
 
 - ⬜ Diagrama entidad-relación de PostgreSQL por servicio.
 - ⬜ Tablas de ScyllaDB.
@@ -92,12 +106,12 @@ Estado al 2026-10-27. ✅ hecho · 🟡 en curso o parcial · ⬜ pendiente.
 
 CU-01, CU-03, CU-08, CU-11, CU-16 y CU-20.
 
-- 🟡 **Auth** (@tuzc0): ✅ esqueleto, migración inicial y *health checks*; ⬜ registro con Argon2id, verificación por correo, inicio y cierre de sesión, renovación de tokens EdDSA, *endpoint* de clave pública, límite de intentos fallidos.
-- ⬜ **Core** (@Maple-M136279841): verificación del JWT, grupos, invitaciones y unirse (cupo atómico), canales de texto, mensajes por WebSocket con idempotencia, historial paginado.
-- ⬜ **Escritorio** (@Maple-M136279841): inicio de sesión, lista de grupos, chat en tiempo real, cola local en SQLite, reconexión automática.
+- ✅ **Auth** (@tuzc0): identidad federada con Google, contactos verificados, recuperación de contraseña, avisos de seguridad y comprobación de sesión (#55, fusionado). Pendiente verificarlo contra el recorrido completo.
+- ✅ **Core** (@Maple-M136279841): grupos, invitaciones, canales y mensajes en tiempo real (#51, fusionado). Por confirmar contra el código: cupo atómico, idempotencia e historial paginado.
+- 🟡 **Escritorio** (@Maple-M136279841): ✅ inicio de sesión, grupos, canales y chat con Core (commit local `a5d1838`, sin PR); ⬜ cola local en SQLite y reconexión automática.
 - ⬜ **Hito:** dos clientes de escritorio conversan a través de Nginx.
 
-### Fase 6. Resto del MVP — ⬜
+### Fase 6. Resto del MVP — ⬜ (voz y archivos primero; ver el calendario)
 
 - Auth: inicio con Google (CU-04), recuperación de contraseña (CU-05), perfil y evento `user.updated` (CU-07).
 - Core: roles, permisos y moderación con invalidación de la caché de permisos (CU-14, CU-15); configurar, archivar, eliminar y abandonar grupo (CU-09, CU-12); invitaciones y canales (CU-10, CU-13); respuestas, reacciones, edición y eliminación (CU-17 a CU-19); proyectos y tareas con control optimista por versión (CU-25 a CU-28); notificaciones internas (CU-31).
