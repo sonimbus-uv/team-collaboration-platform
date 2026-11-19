@@ -45,7 +45,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/auth/reset-password",
             post(crate::handlers::passwords::reset),
         )
-        .route("/api/v1/auth/login", post(crate::handlers::sessions::login))
+        .route(
+            "/api/v1/auth/login",
+            post(crate::handlers::sessions::login),
+        )
         .route(
             "/api/v1/auth/refresh",
             post(crate::handlers::sessions::refresh),
