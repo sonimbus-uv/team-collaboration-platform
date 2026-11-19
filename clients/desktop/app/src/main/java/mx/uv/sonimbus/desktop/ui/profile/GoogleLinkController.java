@@ -2,6 +2,8 @@ package mx.uv.sonimbus.desktop.ui.profile;
 
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.beans.property.ReadOnlyStringProperty;
+import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -36,6 +38,7 @@ public final class GoogleLinkController {
     private final BackgroundTasks tasks;
     private final ViewManager views;
     private final ReadOnlyBooleanWrapper busy = new ReadOnlyBooleanWrapper();
+    private final ReadOnlyStringWrapper linkedEmail = new ReadOnlyStringWrapper("");
     private boolean active = true;
     private boolean linking;
     private boolean linked;
@@ -96,6 +99,10 @@ public final class GoogleLinkController {
         return busy.get();
     }
 
+    ReadOnlyStringProperty linkedEmailProperty() {
+        return linkedEmail.getReadOnlyProperty();
+    }
+
     @FXML
     private void onRefreshGoogleConnection() {
         if (!busy.get() && active) {
@@ -123,13 +130,13 @@ public final class GoogleLinkController {
             return;
         }
         linked = connection.isPresent();
+        String email = connection.map(GoogleConnection::providerEmail)
+                .filter(value -> !value.isBlank())
+                .orElse("");
+        linkedEmail.set(email);
         String label = "Google no está vinculado a esta cuenta.";
         if (linked) {
-            String email = connection.orElseThrow().providerEmail();
-            label =
-                    email == null || email.isBlank()
-                            ? "Google vinculado."
-                            : "Google vinculado: " + email;
+            label = email.isEmpty() ? "Google vinculado." : "Google vinculado: " + email;
         }
         googleConnectionLabel.setText(label);
         setBusy(false);

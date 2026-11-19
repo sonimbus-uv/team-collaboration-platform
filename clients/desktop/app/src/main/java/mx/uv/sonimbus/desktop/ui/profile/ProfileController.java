@@ -1,5 +1,6 @@
 package mx.uv.sonimbus.desktop.ui.profile;
 
+import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -105,13 +106,18 @@ public class ProfileController {
         PasswordVisibility.bind(newPasswordField, newPasswordVisibleField);
         PasswordVisibility.bind(confirmPasswordField, confirmPasswordVisibleField);
         emailLabel.setText("Cuenta autenticada con Google");
-        displayNameLabel.setText("Cuenta Google");
-        sessions.email()
-                .ifPresent(
-                        email -> {
-                            emailLabel.setText(email);
-                            displayNameLabel.setText(email);
-                        });
+        sessions.email().ifPresentOrElse(
+                email -> {
+                    emailLabel.setText(email);
+                    displayNameLabel.setText(email);
+                },
+                () -> {
+                    var linkedEmail = googleLinkController.linkedEmailProperty();
+                    displayNameLabel.textProperty().bind(
+                            Bindings.when(linkedEmail.isEmpty())
+                                    .then("Cuenta Google")
+                                    .otherwise(linkedEmail));
+                });
         logoutButton.setDisable(!sessions.isAuthenticated());
         profileScroll
                 .sceneProperty()

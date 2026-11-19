@@ -215,6 +215,7 @@ class AuthScreensTest {
                                 Instant.now().plusSeconds(600).toString()));
         when(googleBrowser.authorize(any(), any())).thenReturn(secret);
         when(authApi.exchangeGoogle(any())).thenReturn(tokenResponse());
+        when(authApi.googleConnections(any())).thenReturn(linkedGoogleResponse());
         for (View view : new View[] {View.LOGIN, View.REGISTER}) {
             sessions.invalidate();
             open(robot, view, null);
@@ -223,6 +224,8 @@ class AuthScreensTest {
             assertTrue(sessions.isAuthenticated());
             assertTrue(sessions.email().isEmpty());
             assertTrue(robot.lookup("#groupsList").tryQuery().isPresent());
+            open(robot, View.PROFILE, null);
+            assertEquals("reference@gmail.com", label(robot, "#displayNameLabel").getText());
         }
         verify(authApi, org.mockito.Mockito.never()).register(any(), any());
         verify(authApi, org.mockito.Mockito.never()).verifyEmail(any(), any());
@@ -820,6 +823,7 @@ class AuthScreensTest {
         signInForLink();
         when(authApi.googleConnections(any())).thenReturn(linkedGoogleResponse());
         open(robot, View.PROFILE, null);
+        assertEquals(EMAIL, label(robot, "#displayNameLabel").getText());
         assertTrue(robot.lookup("#linkGoogleButton").queryButton().isDisabled());
         assertTrue(
                 label(robot, "#googleConnectionLabel").getText().contains("reference@gmail.com"));
