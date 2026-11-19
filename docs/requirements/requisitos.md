@@ -72,6 +72,7 @@ de migraciones e implementación; sustituye la vinculación automática por corr
 |---|---|---|---|---|
 | RF-VOZ-01 | CU-22 | El sistema permitirá la participación en canales de voz. | Media | El usuario con permisos puede unirse, escuchar y transmitir audio en un canal de voz. |
 | RF-VOZ-02 | CU-22 | El sistema permitirá controlar el micrófono dentro de un canal de voz. | Media | El usuario puede silenciar y reactivar su micrófono, y el estado se muestra a los demás participantes. |
+| RF-VOZ-03 | CU-22 | El sistema permitirá transmitir y ver video de cámara dentro de un canal de voz (D-31). | Media | El usuario con permisos puede activar y desactivar su cámara y ver la de los demás participantes. La pantalla compartida queda fuera. |
 
 ### Inteligencia artificial — fase posterior
 
