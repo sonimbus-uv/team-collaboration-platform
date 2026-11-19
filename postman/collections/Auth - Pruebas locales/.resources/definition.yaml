@@ -1,0 +1,9 @@
+$kind: collection
+variables:
+  registration_attempt_id: ""
+  account_id: ""
+  email: ""
+  access_token: ""
+  refresh_token: ""
+  sid: ""
+  previous_refresh_token: ""

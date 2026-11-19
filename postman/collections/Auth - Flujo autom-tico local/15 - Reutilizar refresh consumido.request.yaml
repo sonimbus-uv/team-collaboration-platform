@@ -1,0 +1,19 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/auth/refresh"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "refresh_token": "{{previous_refresh_token}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 401", () => pm.response.to.have.status(401));
+      if (pm.response.code !== 401) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      pm.test('Refresh inv?lido', () => pm.expect(pm.response.json().type).to.eql('/problems/invalid-refresh-token'));
+    language: text/javascript
+order: 15000

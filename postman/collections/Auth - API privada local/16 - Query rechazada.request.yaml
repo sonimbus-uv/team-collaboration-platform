@@ -1,0 +1,27 @@
+$kind: http-request
+url: "{{internal_url}}/internal/v1/sessions/check?extra=1"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{core_service_token}}
+queryParams:
+  extra: "1"
+body:
+  type: json
+  content: |-
+    {
+      "sid": "{{sid}}",
+      "account_id": "{{account_id}}"
+    }
+scripts:
+  - type: beforeRequest
+    code: setTimeout(() => {}, 300);
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('HTTP 400', () => pm.response.to.have.status(400));
+      if (pm.response.code !== 400) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }
+      pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });
+      pm.test('Problem Details', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'); pm.expect(pm.response.json().type).to.eql('/problems/malformed-request'); });
+    language: text/javascript
+order: 16000

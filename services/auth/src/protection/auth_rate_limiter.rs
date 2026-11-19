@@ -5,8 +5,10 @@ use tokio::{sync::OnceCell, time::timeout};
 use crate::{
     config::Config,
     infrastructure::redis_connection::{RedisConnection, RedisConnectionError},
-    protection::rate_limit::{AuthOperation, BucketPolicy, RateLimitDecision},
-    protection::recipient_key::RecipientKey,
+    protection::{
+        rate_limit::{AuthOperation, BucketPolicy, RateLimitDecision},
+        recipient_key::RecipientKey,
+    },
 };
 
 pub struct AuthRateLimiter {
@@ -22,6 +24,7 @@ pub struct AuthRateLimiter {
     verify_policy: BucketPolicy,
     recipient_policy: BucketPolicy,
     recipient_key: RecipientKey,
+    google_policy: BucketPolicy,
     login_policy: BucketPolicy,
     refresh_policy: BucketPolicy,
     logout_policy: BucketPolicy,
@@ -47,6 +50,7 @@ impl AuthRateLimiter {
             resend_policy: config.resend_ip_policy,
             verify_policy: config.verify_ip_policy,
             recipient_policy: config.recipient_policy,
+            google_policy: config.google_ip_policy,
             login_policy: config.login_ip_policy,
             refresh_policy: config.refresh_ip_policy,
             logout_policy: config.logout_ip_policy,
@@ -70,6 +74,7 @@ impl AuthRateLimiter {
             resend_policy: policy,
             verify_policy: policy,
             recipient_policy: policy,
+            google_policy: policy,
             login_policy: policy,
             refresh_policy: policy,
             logout_policy: policy,
@@ -111,6 +116,7 @@ impl AuthRateLimiter {
         self.register_policy = policy;
         self.resend_policy = policy;
         self.verify_policy = policy;
+        self.google_policy = policy;
         self.login_policy = policy;
         self.refresh_policy = policy;
         self.logout_policy = policy;
@@ -119,17 +125,19 @@ impl AuthRateLimiter {
 
     pub async fn check_ip(
         &self,
-        operation: AuthOperation,
-        ip: IpAddr,
+        auth_operation: AuthOperation,
+        client_ip: IpAddr,
     ) -> Result<RateLimitDecision, RedisConnectionError> {
-        let policy = self.policy_for(operation);
+        let policy = self.policy_for(auth_operation);
+
         #[cfg(test)]
         if self.bypass_redis {
             return Ok(RateLimitDecision::Allowed);
         }
-        let key = operation.ip_key(ip);
 
-        self.check_bucket(&key, policy).await
+        let bucket_key = auth_operation.ip_key(client_ip);
+
+        self.check_bucket(&bucket_key, policy).await
     }
 
     pub async fn check_recipient(
@@ -140,9 +148,46 @@ impl AuthRateLimiter {
         if self.bypass_redis {
             return Ok(RateLimitDecision::Allowed);
         }
-        let key = self.recipient_key.redis_key(email);
 
-        self.check_bucket(&key, self.recipient_policy).await
+        let bucket_key = self.recipient_key.redis_key(email);
+
+        self.check_bucket(&bucket_key, self.recipient_policy).await
+    }
+
+    pub async fn check_contact_account(
+        &self,
+        account: uuid::Uuid,
+        operation: crate::protection::rate_limit::ContactAccountOperation,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        #[cfg(test)]
+        if self.bypass_redis {
+            return Ok(RateLimitDecision::Allowed);
+        }
+        use crate::protection::rate_limit::ContactAccountOperation;
+        let (purpose, capacity) = match operation {
+            ContactAccountOperation::Send => ("send", 6),
+            ContactAccountOperation::Verify => ("verify", 20),
+        };
+        self.check_bucket(
+            &format!("auth:rl:v1:contact:{purpose}:account:{account}"),
+            BucketPolicy::new(capacity, 600).expect("valid fixed policy"),
+        )
+        .await
+    }
+
+    pub async fn check_reauthentication(
+        &self,
+        account_id: uuid::Uuid,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        #[cfg(test)]
+        if self.bypass_redis {
+            return Ok(RateLimitDecision::Allowed);
+        }
+        self.check_bucket(
+            &format!("auth:rl:v1:reauthenticate:account:{account_id}"),
+            BucketPolicy::new(6, 60).expect("valid fixed policy"),
+        )
+        .await
     }
 
     pub async fn check_login_account(
@@ -153,6 +198,7 @@ impl AuthRateLimiter {
         if self.bypass_redis {
             return Ok(RateLimitDecision::Allowed);
         }
+
         self.check_bucket(
             &self.recipient_key.login_key(email),
             self.login_account_policy,
@@ -160,9 +206,25 @@ impl AuthRateLimiter {
         .await
     }
 
+    pub async fn check_change_account(
+        &self,
+        account_id: uuid::Uuid,
+    ) -> Result<RateLimitDecision, RedisConnectionError> {
+        #[cfg(test)]
+        if self.bypass_redis {
+            return Ok(RateLimitDecision::Allowed);
+        }
+
+        self.check_bucket(
+            &format!("auth:rl:v1:change-password:account:{account_id}"),
+            BucketPolicy::new(5, 900).expect("valid fixed policy"),
+        )
+        .await
+    }
+
     async fn check_bucket(
         &self,
-        key: &str,
+        bucket_key: &str,
         policy: BucketPolicy,
     ) -> Result<RateLimitDecision, RedisConnectionError> {
         let request_timeout = self.connect_timeout + self.operation_timeout;
@@ -180,7 +242,7 @@ impl AuthRateLimiter {
                 })
                 .await?;
 
-            connection.consume(key, policy).await
+            connection.consume(bucket_key, policy).await
         })
         .await
         .map_err(|_| RedisConnectionError::OperationTimeout)?
@@ -188,6 +250,7 @@ impl AuthRateLimiter {
 
     pub async fn health_check(&self) -> Result<(), RedisConnectionError> {
         let request_timeout = self.connect_timeout + self.operation_timeout;
+
         timeout(request_timeout, async {
             let connection = self
                 .connection
@@ -200,14 +263,24 @@ impl AuthRateLimiter {
                     .await
                 })
                 .await?;
+
             connection.ping().await
         })
         .await
         .map_err(|_| RedisConnectionError::OperationTimeout)?
     }
 
-    fn policy_for(&self, operation: AuthOperation) -> BucketPolicy {
-        match operation {
+    fn policy_for(&self, auth_operation: AuthOperation) -> BucketPolicy {
+        match auth_operation {
+            AuthOperation::ContactRead => BucketPolicy::new(30, 60).expect("valid fixed policy"),
+            AuthOperation::ContactSend => BucketPolicy::new(6, 60).expect("valid fixed policy"),
+            AuthOperation::ContactVerify => BucketPolicy::new(20, 60).expect("valid fixed policy"),
+            AuthOperation::ChangePassword | AuthOperation::ForgotPassword => {
+                BucketPolicy::new(6, 60).expect("valid fixed policy")
+            }
+            AuthOperation::ResetPassword => BucketPolicy::new(20, 60).expect("valid fixed policy"),
+            AuthOperation::Reauthenticate => BucketPolicy::new(6, 60).expect("valid fixed policy"),
+            AuthOperation::Google => self.google_policy,
             AuthOperation::Login => self.login_policy,
             AuthOperation::Refresh => self.refresh_policy,
             AuthOperation::Logout => self.logout_policy,

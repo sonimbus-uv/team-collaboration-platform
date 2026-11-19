@@ -1,0 +1,9 @@
+$kind: collection
+description: Una iteracion. Requiere API interna HTTPS habilitada, certificado confiable, credenciales core/files con sessions:check, login y Mailpit. Crea usuario, valida sesion por API privada y cierra sesion. No modifica infraestructura ni credenciales.
+variables:
+  base_url: http://localhost:18080
+  mailpit_url: http://localhost:18025
+  password: PruebaSegura123!
+  internal_url: https://localhost:18443
+  core_service_token: ""
+  files_service_token: ""

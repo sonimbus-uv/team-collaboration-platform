@@ -117,7 +117,7 @@ La URL debe ser `http` o `https`, con host y **sin credenciales**; si no lo es, 
    EMAIL_PROVIDER=mailpit
    MAILPIT_SMTP_HOST=localhost
    MAILPIT_SMTP_PORT=1025
-   EMAIL_VERIFICATION_URL=http://localhost:3001/auth/verify-email
+   EMAIL_VERIFICATION_URL=http://localhost:3001/api/v1/auth/verify-email
    ```
 
    El enlace debe quedarse en `localhost`: Auth solo acepta `http` en `EMAIL_VERIFICATION_URL` para `localhost` o `127.0.0.1`, y con la IP de la VM no arranca.

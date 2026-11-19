@@ -134,6 +134,7 @@ nb-configuration.xml
 
 
 *.pyc
+__pycache__/
 .atom/
 .build/
 .buildlog/

@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/auth/refresh"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "refresh_token": "{{refresh_token}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error("Estado inesperado; se detuvo la ejecuci?n"); }
+      const b=pm.response.json(); const old=pm.collectionVariables.get('refresh_token');
+      pm.test("Rotaci?n conserva sesi?n", () => { pm.expect(b.refresh_token).to.be.a('string').and.not.eql(old); pm.expect(b.sid).to.eql(pm.collectionVariables.get('sid')); });
+      pm.collectionVariables.set('previous_refresh_token', old);
+      pm.collectionVariables.set('refresh_token', b.refresh_token);
+      pm.collectionVariables.set('access_token', b.access_token);
+    language: text/javascript
+order: 14000

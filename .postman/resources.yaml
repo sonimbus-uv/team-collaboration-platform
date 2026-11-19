@@ -1,0 +1,15 @@
+# Use this workspace to collaborate
+workspace:
+  id: c2dfc1e0-6d48-496f-80a7-2701bca63b7f
+
+localResources:
+  specs:
+    - ../contracts/openapi/auth-internal.yaml
+    - ../contracts/openapi/auth.yaml
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
+cloudResources:
+  collections:
+    ../postman/collections/Auth - Flujo autom-tico local: 3306b98f-e586-491f-83c3-2813a3f86544
+    ../postman/collections/Auth - API privada local: 71fccd79-8c55-4b5f-9099-bc0cdfe9e56c

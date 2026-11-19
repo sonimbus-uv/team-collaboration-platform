@@ -1,0 +1,33 @@
+$kind: http-request
+url: "{{internal_url}}/internal/v1/sessions/check-batch"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{core_service_token}}
+body:
+  type: json
+  content: |-
+    {
+      "sessions": [
+        {
+          "sid": "{{sid}}",
+          "account_id": "{{account_id}}"
+        },
+        {
+          "sid": "{{$guid}}",
+          "account_id": "{{account_id}}"
+        }
+      ]
+    }
+scripts:
+  - type: beforeRequest
+    code: setTimeout(() => {}, 300);
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('HTTP 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) { pm.execution.setNextRequest(null); throw new Error('Estado inesperado; ejecucion detenida'); }
+      pm.test('Respuesta no almacenable', () => { pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'); pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'); });
+      pm.test('Orden y actividad del lote', () => { const r=pm.response.json().results; pm.expect(r).to.have.lengthOf(2); pm.expect(r[0].sid).to.eql(pm.collectionVariables.get('sid')); pm.expect(r[0].active).to.eql(true); pm.expect(r[1].active).to.eql(false); pm.expect(r[1].session_expires_at).to.eql(null); });
+    language: text/javascript
+order: 19000
