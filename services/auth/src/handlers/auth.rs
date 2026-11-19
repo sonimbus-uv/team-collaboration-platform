@@ -72,7 +72,7 @@ pub async fn verify_email(
         .confirm(request.registration_attempt_id, &request.code)
         .await
         .map_err(map_verification_error)?;
-        
+
     RegisterResponse::try_from(account).map(Json).map_err(|_| {
         ApiError::InternalServerError("Registration returned an unverified contact".into())
     })

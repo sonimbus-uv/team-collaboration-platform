@@ -80,7 +80,7 @@ public final class HttpAuthenticationGateway implements AuthenticationGateway {
                             refreshing && failure.status() != 503
                                     ? AuthenticationError.NETWORK
                                     : AuthenticationError.UNAVAILABLE;
-                    case EMAIL_TAKEN, SERVER, UNEXPECTED -> AuthenticationError.UNEXPECTED;
+                    default -> AuthenticationError.UNEXPECTED;
                 };
         return new AuthenticationException(kind, failure.retryAfter().orElse(null), failure);
     }

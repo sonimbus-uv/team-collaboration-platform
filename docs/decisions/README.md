@@ -26,6 +26,7 @@ Una decisión que cambia la arquitectura, que tiene alternativas serias o que es
 | D-14 | Desarrollo en VM Vagrant; expo en Ubuntu nativo | Aceptada | 2026-10-07 | [ADR-006](ADR-006-vagrant-docker-compose.md) |
 | D-15 | VoiceService (en Core) emite los tokens de LiveKit | Aceptada | 2026-10 | — |
 | D-16 | Sesiones absolutas de 20 días, refresh rotativo y comprobación privada de sesión | Confirmada por solicitante; revisión del equipo pendiente | 2026-10-22 | [ADR-007](ADR-007-auth-sessions.md) |
+| D-31 | La cámara entra al MVP; la pantalla compartida queda aparte | Propuesta; revisión del equipo pendiente | 2026-11-18 | — |
 
 ## Detalle
 
@@ -35,7 +36,7 @@ La prueba de concepto de JavaFX con LiveKit autoalojado fue exitosa (riesgo R-01
 
 - Escritorio: `webrtc-java` 0.18.0 y un fork del SDK comunitario `Trirrin/livekit-java-sdk` v0.1.4, aislado detrás de una interfaz propia (ver [`clients/desktop/livekit-sdk/`](../../clients/desktop/livekit-sdk/)).
 - Móvil: SDK oficial de LiveKit para Flutter.
-- Riesgo abierto: el SDK comunitario no es oficial y tiene defectos conocidos; el defecto 4 del fork debe resolverse antes de integrar la voz en la aplicación.
+- Riesgo abierto: el SDK comunitario no es oficial y tiene defectos conocidos; el defecto 4 del fork debe resolverse antes de integrar la voz en la aplicación. Su causa ya está identificada (ver D-31).
 
 ### D-02. Nginx como API Gateway
 
@@ -119,6 +120,19 @@ Coincide con la migración actual de Auth, que crea el esquema `auth`.
 ### D-15. VoiceService emite los tokens de LiveKit
 
 El plano de control de la voz vive en Core (VoiceService). Core verifica los permisos del miembro sobre el canal y genera el JWT de LiveKit con `Joken`, usando la clave y el secreto de la API de LiveKit. Los clientes nunca contienen el secreto.
+
+### D-31. La cámara entra al MVP; la pantalla compartida queda aparte
+
+La PoC de voz y video ([sonimbus-uv/poc-voice-javafx](https://github.com/sonimbus-uv/poc-voice-javafx), `REPORT.md`, actualizada el 2026-11-18) probó con el mismo servidor LiveKit y la misma pila del escritorio (`webrtc-java` 0.18.0 y el SDK comunitario) publicar la cámara (VP8, 640x480) y recibir y pintar video remoto en JavaFX, con interoperabilidad contra el cliente web oficial.
+
+- **Dentro del MVP:** video de cámara en los canales de voz (RF-VOZ-03), junto con la voz de D-01. Una sola capa, sin simulcast.
+- **Fuera del MVP, como trabajo aparte:** publicar la pantalla compartida. El SDK no la expone (`setScreenShareEnabled` está vacío) y la captura en Wayland falló en 50 de 50 pruebas. Recibirla sí funciona, pero no se compromete hasta que haya publicación.
+- **Core (D-15):** el token de sala fija `canPublish`, `canSubscribe` y `canPublishSources` explícitos (micrófono y cámara) y caduca pronto. La PoC usó un token sin esos campos; no se verificó que una lista vacía permita la pantalla.
+- **Escritorio:** el video entra por la misma interfaz propia de voz; solo su implementación depende del fork `livekit-sdk`.
+- **Riesgo abierto, con causa identificada:** el cierre a veces aborta o se cuelga porque `PeerConnectionEngine.close()` del SDK se ejecuta dos veces a la vez. Un parche de esa clase dio 0 de 60 abortos con video frente a 4 de 30 sin él, y 0 de 6 frente a 3 de 6 en sesiones largas de audio (p = 0,09, no concluyente). Debe confirmarse con más muestra y con sesiones largas con video antes de dar el video por integrado.
+- **No probado:** red real, NAT/TURN y TLS; Windows y macOS; más de dos participantes con video; CPU y memoria de la ventana recibiendo video.
+
+Sustituye la exclusión de «videollamadas» de `docs/requirements/README.md` para el video de cámara.
 
 ## Decisiones pendientes
 

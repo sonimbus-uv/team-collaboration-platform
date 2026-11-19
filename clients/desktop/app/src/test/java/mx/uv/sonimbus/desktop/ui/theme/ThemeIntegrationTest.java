@@ -39,6 +39,10 @@ import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
 import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountParams;
+import mx.uv.sonimbus.desktop.data.core.Channel;
+import mx.uv.sonimbus.desktop.data.core.CoreApi;
+import mx.uv.sonimbus.desktop.data.core.Profile;
+import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
@@ -72,14 +76,18 @@ class ThemeIntegrationTest {
     private final AuthApi authApi = mock(AuthApi.class);
 
     @Start
-    void start(Stage stage) {
+    void start(Stage stage) throws Exception {
         this.stage = stage;
         preferences = Preferences.userRoot().node("/sonimbus-theme-test/" + UUID.randomUUID());
         themes = new ThemeManager(preferences);
         ControllerFactory controllers = new ControllerFactory();
         views = new ViewManager(stage, controllers, themes);
         SessionService session = new SessionService(new HttpAuthenticationGateway(authApi));
+        CoreApi core = mock(CoreApi.class);
+        when(core.myProfile()).thenReturn(java.util.Optional.of(new Profile("test", "Ana", null, null)));
         controllers
+                .register(CoreApi.class, core)
+                .register(RealtimeClient.class, mock(RealtimeClient.class))
                 .register(GoogleService.class, mock(GoogleService.class))
                 .register(
                         PasswordService.class,
@@ -159,9 +167,11 @@ class ThemeIntegrationTest {
                                 theme == Theme.LIGHT ? "#F1EBFA" : "#251C33",
                                 background((Region) root.lookup(".channels-column")));
                         @SuppressWarnings("unchecked")
-                        ListView<String> channels =
-                                (ListView<String>) root.lookup("#textChannelsList");
-                        channels.getItems().setAll("# general — 3 sin leer", "# equipo");
+                        ListView<Channel> channels =
+                                (ListView<Channel>) root.lookup("#textChannelsList");
+                        channels.getItems().setAll(
+                                new Channel("c1", "g1", "general", null, "text", "member", null),
+                                new Channel("c2", "g1", "equipo", null, "text", "member", null));
                         channels.getSelectionModel().select(0);
                         root.applyCss();
                         root.layout();

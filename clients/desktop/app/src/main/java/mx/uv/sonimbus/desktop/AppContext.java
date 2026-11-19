@@ -1,5 +1,6 @@
 package mx.uv.sonimbus.desktop;
 
+import javafx.application.Platform;
 import javafx.stage.Stage;
 
 import mx.uv.sonimbus.desktop.data.api.ApiConfig;
@@ -9,12 +10,16 @@ import mx.uv.sonimbus.desktop.data.api.auth.password.HttpPasswordGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.HttpRegistrationGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.session.HttpAuthenticationGateway;
 import mx.uv.sonimbus.desktop.data.browser.google.DesktopGoogleBrowser;
+import mx.uv.sonimbus.desktop.data.core.CoreApi;
+import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
+import mx.uv.sonimbus.desktop.data.session.Session;
 import mx.uv.sonimbus.desktop.domain.google.GoogleService;
 import mx.uv.sonimbus.desktop.domain.password.PasswordService;
 import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
 import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 import mx.uv.sonimbus.desktop.ui.theme.ThemeManager;
 
@@ -46,7 +51,14 @@ final class AppContext implements AutoCloseable {
                         controllers,
                         new ThemeManager(),
                         () -> demo || sessions.isAuthenticated());
+        Session coreSession = new Session(sessions, () -> Platform.runLater(() -> {
+            if (!demo && !sessions.isAuthenticated()) {
+                viewManager.show(View.LOGIN);
+            }
+        }));
         controllers
+                .register(CoreApi.class, new CoreApi(config, coreSession))
+                .register(RealtimeClient.class, new RealtimeClient(config, coreSession))
                 .register(ApiConfig.class, config)
                 .register(
                         RegistrationService.class,

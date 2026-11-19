@@ -44,6 +44,9 @@ import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.auth.common.PasswordMessages;
 import mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountParams;
+import mx.uv.sonimbus.desktop.data.core.CoreApi;
+import mx.uv.sonimbus.desktop.data.core.Profile;
+import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
@@ -88,7 +91,11 @@ class AuthScreensTest {
         ControllerFactory controllers = new ControllerFactory();
         viewManager =
                 new ViewManager(stage, controllers, new ThemeManager(), sessions::isAuthenticated);
+        CoreApi core = mock(CoreApi.class);
+        when(core.myProfile()).thenReturn(java.util.Optional.of(new Profile("test", "Ana", null, null)));
         controllers
+                .register(CoreApi.class, core)
+                .register(RealtimeClient.class, mock(RealtimeClient.class))
                 .register(GoogleService.class, google)
                 .register(
                         RegistrationService.class,
@@ -399,6 +406,7 @@ class AuthScreensTest {
                 "!",
                 label(robot, "#errorIconLabel").getText(),
                 "se distingue por icono, no solo color");
+        assertEquals("", field(robot, "#passwordField").getText());
         verify(authApi).login(EMAIL, PASSWORD);
         assertFalse(sessions.isAuthenticated());
     }

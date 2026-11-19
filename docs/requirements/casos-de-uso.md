@@ -55,7 +55,7 @@ Las excepciones comunes a todos los casos no se repiten en cada uno:
 | CU-19 | Editar o eliminar mensaje propio | Miembro | MVP | Core | RF-MSG-05 |
 | CU-20 | Consultar historial | Miembro | MVP | Core | RF-MSG-02 |
 | CU-21 | Traducir mensaje | Miembro | Fase posterior | Por definir | RF-IA-02 |
-| CU-22 | Participar en canal de voz | Miembro | MVP (D-01) | Core + LiveKit | RF-VOZ-01, RF-VOZ-02 |
+| CU-22 | Participar en canal de voz | Miembro | MVP (D-01, D-31) | Core + LiveKit | RF-VOZ-01, RF-VOZ-02 |
 | CU-23 | Compartir archivo o imagen | Miembro | MVP | Files + Core | RF-MSG-04 |
 | CU-24 | Consultar archivos compartidos | Miembro | MVP | Files | RF-MSG-08 |
 | CU-25 | Gestionar proyectos | Administrador de grupo | MVP | Core | RF-PRJ-01 |
@@ -801,7 +801,7 @@ Siete casos cubren la mensajería en canales de texto y la voz. CU-21 es de fase
 
 **Actores:** Miembro (primario). Servidor de medios (secundario).
 
-**Descripción:** Permite unirse a un canal de voz, escuchar, transmitir audio y controlar el micrófono (RF-VOZ-01, RF-VOZ-02). Forma parte del MVP (D-01). Core verifica permisos y emite el token de LiveKit (D-15); el audio viaja por WebRTC entre el cliente y LiveKit.
+**Descripción:** Permite unirse a un canal de voz, escuchar, transmitir audio, controlar el micrófono y activar la cámara (RF-VOZ-01, RF-VOZ-02, RF-VOZ-03). Forma parte del MVP (D-01, D-31); la pantalla compartida queda fuera. Core verifica permisos y emite el token de LiveKit (D-15); el audio viaja por WebRTC entre el cliente y LiveKit.
 
 **Precondiciones:**
 

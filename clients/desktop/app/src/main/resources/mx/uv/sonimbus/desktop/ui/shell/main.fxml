@@ -63,6 +63,16 @@
                     <Label fx:id="groupNameLabel" text="Selecciona un grupo"
                            styleClass="group-name" HBox.hgrow="ALWAYS"
                            maxWidth="1.7976931348623157E308"/>
+                    <Button fx:id="inviteButton" styleClass="icon-button-dark"
+                            accessibleText="Invitar al grupo" onAction="#onInvite">
+                        <graphic>
+                            <SVGPath styleClass="icon-stroke-light"
+                                     content="M15 19c0-2.8-2.7-5-6-5s-6 2.2-6 5 M13 7a4 4 0 1 1-8 0a4 4 0 1 1 8 0Z M19 8v6M16 11h6"/>
+                        </graphic>
+                        <tooltip>
+                            <Tooltip text="Invitar al grupo"/>
+                        </tooltip>
+                    </Button>
                     <Button fx:id="groupSettingsButton" styleClass="icon-button-dark"
                             accessibleText="Configuración del grupo"
                             onAction="#onOpenGroupSettings">

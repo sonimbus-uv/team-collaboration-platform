@@ -20,9 +20,9 @@ Las URL de ejemplo de OpenAPI son ficticias; cada integración requiere acordar
 el entorno real y las credenciales de prueba.
 
 La [especificación Google y correo de contacto](#google-y-correo-de-contacto) es
-el diseño aprobado v1.0. El esquema y la transición de contacto están implementados;
-el login Google y su OpenAPI están implementados; vinculación y contacto siguen
-pendientes.
+el diseño aprobado v1.0. El esquema, la transición de contacto, el login y la
+vinculación Google, la reautenticación por contraseña, la verificación de contacto
+y el worker de avisos están implementados con activación explícita e independiente.
 Los archivos OpenAPI actuales describen las operaciones ya incorporadas; esta
 sección no acredita endpoints Google disponibles ni modifica su comportamiento.
 

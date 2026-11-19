@@ -75,6 +75,16 @@ public final class SessionService implements AutoCloseable {
         }
     }
 
+    public String renewAfterRejection(String rejectedToken) throws AuthenticationException {
+        synchronized (operationLock) {
+            SignedInSession current = requireSession();
+            if (!current.tokens().access().value().equals(rejectedToken)) {
+                return accessToken();
+            }
+            return refreshSession(current);
+        }
+    }
+
     @FunctionalInterface
     public interface AuthenticatedOperation<E extends Exception> {
         void run(String accessToken) throws E;

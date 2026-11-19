@@ -85,7 +85,7 @@ public final class HttpRegistrationGateway implements RegistrationGateway {
                     case TIMEOUT -> RegistrationError.TIMEOUT;
                     case SERVER -> RegistrationError.SERVER;
                     case UNAVAILABLE -> RegistrationError.UNAVAILABLE;
-                    case INVALID_CREDENTIALS, UNEXPECTED -> RegistrationError.UNEXPECTED;
+                    default -> RegistrationError.UNEXPECTED;
                 };
         return new RegistrationException(
                 kind, failure.retryAfter().orElse(null), Set.of(), failure);
