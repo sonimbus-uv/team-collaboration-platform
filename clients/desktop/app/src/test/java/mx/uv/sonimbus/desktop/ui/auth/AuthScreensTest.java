@@ -27,6 +27,7 @@ import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
 import mx.uv.sonimbus.desktop.data.api.auth.google.GoogleAttemptResponse;
 import mx.uv.sonimbus.desktop.data.api.auth.google.HttpGoogleGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.password.HttpPasswordGateway;
+import mx.uv.sonimbus.desktop.data.api.auth.password.RecoveryResponse;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.HttpRegistrationGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.RegistrationAttempt;
@@ -41,6 +42,7 @@ import mx.uv.sonimbus.desktop.domain.registration.PendingRegistration;
 import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
 import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
+import mx.uv.sonimbus.desktop.ui.auth.common.PasswordMessages;
 import mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountParams;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
@@ -532,6 +534,165 @@ class AuthScreensTest {
         assertTrue(node(robot, "#passwordVisibleField").isVisible());
         assertEquals(PASSWORD, field(robot, "#passwordVisibleField").getText());
         assertEquals("Ocultar", robot.lookup("#showPasswordToggle").queryLabeled().getText());
+    }
+
+    @Test
+    void loginRecoveryLinkOpensTheImplementedFlow(FxRobot robot) throws Exception {
+        when(authApi.forgotPassword(EMAIL))
+                .thenReturn(
+                        new RecoveryResponse(
+                                ATTEMPT_ID, Instant.now().plusSeconds(600).toString(), "generic"));
+        open(robot, View.LOGIN, null);
+        robot.interact(
+                () ->
+                        robot.lookup("#forgotPasswordLink")
+                                .queryAs(javafx.scene.control.Hyperlink.class)
+                                .fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(node(robot, "#emailStepBox").isVisible());
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    robot.lookup("#sendCodeButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi).forgotPassword(EMAIL);
+        assertTrue(node(robot, "#resetStepBox").isVisible());
+    }
+
+    @Test
+    void recoveryUsesAttemptAndCompletesWithLoginNotice(FxRobot robot) throws Exception {
+        when(authApi.forgotPassword(EMAIL))
+                .thenReturn(
+                        new RecoveryResponse(
+                                ATTEMPT_ID, Instant.now().plusSeconds(600).toString(), "generic"));
+        open(robot, View.RECOVER_PASSWORD, null);
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    robot.lookup("#sendCodeButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(node(robot, "#resetStepBox").isVisible());
+        assertTrue(label(robot, "#recoveryStatusLabel").getText().contains("Si la cuenta"));
+        assertTrue(
+                robot.lookup("#resendCodeLink")
+                        .queryAs(javafx.scene.control.Hyperlink.class)
+                        .isDisabled());
+        robot.interact(
+                () -> {
+                    field(robot, "#codeField").setText("00123456");
+                    field(robot, "#newPasswordField").setText(PASSWORD);
+                    robot.lookup("#showConfirmPasswordToggle")
+                            .queryAs(javafx.scene.control.ToggleButton.class)
+                            .fire();
+                    assertTrue(node(robot, "#confirmPasswordVisibleField").isVisible());
+                    assertFalse(node(robot, "#newPasswordVisibleField").isVisible());
+                    field(robot, "#confirmPasswordVisibleField").setText(PASSWORD);
+                    robot.lookup("#resetButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi).resetPassword(ATTEMPT_ID, "00123456", PASSWORD);
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+        assertEquals(PasswordMessages.UPDATED, label(robot, "#errorLabel").getText());
+    }
+
+    @Test
+    void recoveryRejectsInvalidInputAndKeepsErrorsVisible(FxRobot robot) throws Exception {
+        when(authApi.forgotPassword(EMAIL))
+                .thenReturn(
+                        new RecoveryResponse(
+                                ATTEMPT_ID, Instant.now().plusSeconds(600).toString(), "generic"));
+        open(robot, View.RECOVER_PASSWORD, null);
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText("bad");
+                    robot.lookup("#sendCodeButton").queryButton().fire();
+                });
+        assertTrue(node(robot, "#sentInfoBox").isVisible());
+        verifyNoInteractions(authApi);
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    robot.lookup("#sendCodeButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        robot.interact(
+                () -> {
+                    field(robot, "#codeField").setText("00123456");
+                    field(robot, "#newPasswordField").setText(PASSWORD);
+                    field(robot, "#confirmPasswordField").setText("different");
+                    robot.lookup("#resetButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(node(robot, "#confirmPasswordErrorBox").isVisible());
+        assertTrue(node(robot, "#resetErrorBox").isVisible());
+        verify(authApi, org.mockito.Mockito.never()).resetPassword(any(), any(), any());
+    }
+
+    @Test
+    void uncertainResetCannotBeSubmittedAgain(FxRobot robot) throws Exception {
+        when(authApi.forgotPassword(EMAIL))
+                .thenReturn(
+                        new RecoveryResponse(
+                                ATTEMPT_ID, Instant.now().plusSeconds(600).toString(), "generic"));
+        doThrow(new ApiException(ApiErrorKind.TIMEOUT, "reset-password", null))
+                .when(authApi)
+                .resetPassword(any(), any(), any());
+        open(robot, View.RECOVER_PASSWORD, null);
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    robot.lookup("#sendCodeButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        robot.interact(
+                () -> {
+                    field(robot, "#codeField").setText("00123456");
+                    field(robot, "#newPasswordField").setText(PASSWORD);
+                    field(robot, "#confirmPasswordField").setText(PASSWORD);
+                    robot.lookup("#resetButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertEquals(PasswordMessages.UNCERTAIN, label(robot, "#resetErrorLabel").getText());
+        assertTrue(robot.lookup("#resetButton").queryButton().isDisabled());
+        verify(authApi, org.mockito.Mockito.times(1))
+                .resetPassword(ATTEMPT_ID, "00123456", PASSWORD);
+    }
+
+    @Test
+    void passwordChangeClearsSessionAndReturnsToLogin(FxRobot robot) throws Exception {
+        when(authApi.login(EMAIL, PASSWORD)).thenReturn(tokenResponse());
+        sessions.login(new mx.uv.sonimbus.desktop.domain.session.LoginCredentials(EMAIL, PASSWORD));
+        open(robot, View.PROFILE, null);
+        fillPasswordChange(robot);
+        robot.interact(() -> robot.lookup("#updatePasswordButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi).changePassword("private-access-token", PASSWORD, "DifferentPass456!");
+        assertFalse(sessions.isAuthenticated());
+        assertEquals(PasswordMessages.UPDATED, label(robot, "#errorLabel").getText());
+    }
+
+    @Test
+    void incorrectCurrentPasswordDoesNotLogOutAndAllowsCorrection(FxRobot robot) throws Exception {
+        when(authApi.login(EMAIL, PASSWORD)).thenReturn(tokenResponse());
+        sessions.login(new mx.uv.sonimbus.desktop.domain.session.LoginCredentials(EMAIL, PASSWORD));
+        doThrow(
+                        new ApiException(
+                                new ApiException.ResponseDetails(
+                                        400, null, "/problems/invalid-current-password"),
+                                ApiErrorKind.VALIDATION,
+                                "change-password"))
+                .when(authApi)
+                .changePassword(any(), any(), any());
+        open(robot, View.PROFILE, null);
+        fillPasswordChange(robot);
+        robot.interact(() -> robot.lookup("#updatePasswordButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(sessions.isAuthenticated());
+        assertTrue(node(robot, "#passwordErrorBox").isVisible());
+        assertFalse(robot.lookup("#updatePasswordButton").queryButton().isDisabled());
+        assertTrue(field(robot, "#currentPasswordField").getStyleClass().contains("field-invalid"));
     }
 
     private void fillPasswordChange(FxRobot robot) {

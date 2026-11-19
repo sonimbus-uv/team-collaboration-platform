@@ -56,9 +56,6 @@ public final class AuthMessages {
         };
     }
 
-    public static final String RECOVERY_UNAVAILABLE =
-            "La recuperación de contraseña todavía no está disponible en el servidor.";
-
     private AuthMessages() {}
 
     public static String forRegister(RegistrationException failure) {
