@@ -33,6 +33,8 @@ import mx.uv.sonimbus.desktop.data.api.auth.registration.RegistrationAttempt;
 import mx.uv.sonimbus.desktop.data.api.auth.session.HttpAuthenticationGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.session.TokenResponse;
 import mx.uv.sonimbus.desktop.domain.google.GoogleBrowser;
+import mx.uv.sonimbus.desktop.domain.google.GoogleError;
+import mx.uv.sonimbus.desktop.domain.google.GoogleException;
 import mx.uv.sonimbus.desktop.domain.google.GoogleService;
 import mx.uv.sonimbus.desktop.domain.password.PasswordService;
 import mx.uv.sonimbus.desktop.domain.registration.PendingRegistration;
@@ -191,6 +193,55 @@ class AuthScreensTest {
         assertTrue(node(robot, "#errorBox").getStyleClass().contains("alert-error"));
     }
 
+    @Test
+    void googleLoginAndRegistrationOpenMainWithoutRegistrationCode(FxRobot robot) throws Exception {
+        String secret = "A".repeat(43);
+        when(authApi.createGoogleAttempt(any()))
+                .thenReturn(
+                        new GoogleAttemptResponse(
+                                ATTEMPT_ID,
+                                secret,
+                                "https://auth.invalid/api/v1/auth/google/authorize?ticket="
+                                        + secret,
+                                Instant.now().plusSeconds(600).toString()));
+        when(googleBrowser.authorize(any(), any())).thenReturn(secret);
+        when(authApi.exchangeGoogle(any())).thenReturn(tokenResponse());
+        for (View view : new View[] {View.LOGIN, View.REGISTER}) {
+            sessions.invalidate();
+            open(robot, view, null);
+            robot.interact(() -> robot.lookup("#googleButton").queryButton().fire());
+            WaitForAsyncUtils.waitForFxEvents();
+            assertTrue(sessions.isAuthenticated());
+            assertTrue(sessions.email().isEmpty());
+            assertTrue(robot.lookup("#groupsList").tryQuery().isPresent());
+        }
+        verify(authApi, org.mockito.Mockito.never()).register(any(), any());
+        verify(authApi, org.mockito.Mockito.never()).verifyEmail(any(), any());
+    }
+
+    @Test
+    void googleCancellationRestoresButtonsWithoutInstallingSession(FxRobot robot) throws Exception {
+        String secret = "A".repeat(43);
+        when(authApi.createGoogleAttempt(any()))
+                .thenReturn(
+                        new GoogleAttemptResponse(
+                                ATTEMPT_ID,
+                                secret,
+                                "https://auth.invalid/api/v1/auth/google/authorize?ticket="
+                                        + secret,
+                                Instant.now().plusSeconds(600).toString()));
+        when(googleBrowser.authorize(any(), any()))
+                .thenThrow(new GoogleException(GoogleError.CANCELLED));
+        open(robot, View.LOGIN, null);
+        robot.interact(() -> robot.lookup("#googleButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertFalse(sessions.isAuthenticated());
+        assertFalse(robot.lookup("#googleButton").queryButton().isDisabled());
+        assertFalse(node(robot, "#cancelGoogleButton").isVisible());
+        assertTrue(label(robot, "#errorLabel").getText().contains("canceló"));
+        verify(authApi, org.mockito.Mockito.never()).exchangeGoogle(any());
+    }
+
     // --- Verificación (CU-02) ---
 
     @Test
@@ -312,6 +363,55 @@ class AuthScreensTest {
 
     // --- Inicio de sesión (CU-03) y recuperación (CU-05) ---
 
+    @Test
+    void loginRequiresBothFields(FxRobot robot) {
+        open(robot, View.LOGIN, null);
+
+        robot.clickOn("#loginButton");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertEquals(AuthMessages.LOGIN_FIELDS_EMPTY, label(robot, "#errorLabel").getText());
+        assertTrue(node(robot, "#errorBox").getStyleClass().contains("alert-error"));
+        assertTrue(field(robot, "#emailField").getStyleClass().contains("field-invalid"));
+    }
+
+    @Test
+    void loginRejectsInvalidCredentialsWithoutExposingServerDetails(FxRobot robot)
+            throws ApiException {
+        when(authApi.login(EMAIL, PASSWORD))
+                .thenThrow(new ApiException(ApiErrorKind.INVALID_CREDENTIALS, "login", 401, null));
+        open(robot, View.LOGIN, null);
+
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    field(robot, "#passwordField").setText(PASSWORD);
+                });
+        robot.clickOn("#loginButton");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertEquals(AuthMessages.INVALID_LOGIN, label(robot, "#errorLabel").getText());
+        Node box = node(robot, "#errorBox");
+        assertTrue(box.getStyleClass().contains("alert-error"));
+        assertEquals(
+                "!",
+                label(robot, "#errorIconLabel").getText(),
+                "se distingue por icono, no solo color");
+        verify(authApi).login(EMAIL, PASSWORD);
+        assertFalse(sessions.isAuthenticated());
+    }
+
+    @Test
+    void protectedViewsAndDialogsRequireALogin(FxRobot robot) {
+        open(robot, View.MAIN, null);
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+        robot.interact(() -> viewManager.showContent(View.PROFILE));
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+        robot.interact(() -> viewManager.showDialog(View.CREATE_GROUP, "Crear grupo"));
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+        verifyNoInteractions(authApi);
+    }
+
     private static TokenResponse tokenResponse() throws Exception {
         return new ObjectMapper()
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
@@ -361,6 +461,19 @@ class AuthScreensTest {
         assertFalse(node(robot, "#confirmPasswordVisibleField").isVisible());
         assertEquals(PASSWORD, field(robot, "#confirmPasswordField").getText());
         verifyNoInteractions(authApi);
+    }
+
+    @Test
+    void passwordCanBeShown(FxRobot robot) {
+        open(robot, View.LOGIN, null);
+        robot.interact(() -> field(robot, "#passwordField").setText(PASSWORD));
+
+        robot.clickOn("#showPasswordToggle");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertTrue(node(robot, "#passwordVisibleField").isVisible());
+        assertEquals(PASSWORD, field(robot, "#passwordVisibleField").getText());
+        assertEquals("Ocultar", robot.lookup("#showPasswordToggle").queryLabeled().getText());
     }
 
     private void fillPasswordChange(FxRobot robot) {

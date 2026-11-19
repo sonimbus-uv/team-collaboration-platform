@@ -10,48 +10,102 @@ import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 
+import mx.uv.sonimbus.desktop.data.logging.AuthLog;
+import mx.uv.sonimbus.desktop.domain.google.GoogleException;
+import mx.uv.sonimbus.desktop.domain.google.GoogleService;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationException;
+import mx.uv.sonimbus.desktop.domain.session.LoginCredentials;
+import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
+import mx.uv.sonimbus.desktop.ui.auth.common.GoogleMessages;
+import mx.uv.sonimbus.desktop.ui.auth.common.PasswordMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
+import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
+import mx.uv.sonimbus.desktop.ui.common.BusyButton;
 import mx.uv.sonimbus.desktop.ui.common.PasswordVisibility;
+import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
 import java.util.Objects;
 
-/**
- * CU-03. Auth todavía no tiene inicio de sesión: la vista valida los campos y avisa que no está
- * disponible. {@code AuthApi} no tiene método de login a propósito, para no inventar el contrato.
- */
-public class LoginController {
+public class LoginController implements Parameterized<LoginNotice> {
 
     private static final String FIELD_INVALID = "field-invalid";
 
     private final ViewManager viewManager;
+    private final SessionService sessions;
+    private final BackgroundTasks backgroundTasks;
+    private final GoogleService google;
+    private boolean googlePending;
+    @FXML private Button cancelGoogleButton;
+    private boolean submitting;
+    private boolean active = true;
 
     @FXML private TextField emailField;
+
     @FXML private PasswordField passwordField;
     @FXML private TextField passwordVisibleField;
     @FXML private ToggleButton showPasswordToggle;
+
     @FXML private HBox errorBox;
     @FXML private Label errorIconLabel;
     @FXML private Label errorLabel;
+
     @FXML private Button loginButton;
     @FXML private Button googleButton;
     @FXML private Hyperlink forgotPasswordLink;
     @FXML private Hyperlink createAccountLink;
 
-    public LoginController(ViewManager viewManager) {
+    public LoginController(
+            SessionService sessions,
+            BackgroundTasks backgroundTasks,
+            ViewManager viewManager,
+            GoogleService google) {
         this.viewManager = Objects.requireNonNull(viewManager);
+        this.google = Objects.requireNonNull(google);
+        this.sessions = Objects.requireNonNull(sessions);
+        this.backgroundTasks = Objects.requireNonNull(backgroundTasks);
+    }
+
+    @Override
+    public Class<LoginNotice> parametersType() {
+        return LoginNotice.class;
+    }
+
+    @Override
+    public void setParameters(LoginNotice notice) {
+        String message =
+                switch (notice) {
+                    case PASSWORD_UPDATED -> PasswordMessages.UPDATED;
+                    case PASSWORD_UNCERTAIN -> PasswordMessages.UNCERTAIN;
+                    case SESSION_EXPIRED -> "La sesión terminó. Inicia sesión de nuevo.";
+                };
+        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.INFO, message);
     }
 
     @FXML
     private void initialize() {
         PasswordVisibility.bind(passwordField, passwordVisibleField);
-        emailField.textProperty().addListener((obs, old, text) -> clearError(emailField));
+        loginButton
+                .sceneProperty()
+                .addListener(
+                        (observable, previous, current) -> {
+                            if (previous != null && current == null) {
+                                active = false;
+                                if (googlePending) {
+                                    google.cancel();
+                                }
+                                passwordField.clear();
+                            }
+                        });
+        emailField
+                .textProperty()
+                .addListener((observable, previousText, currentText) -> clearError(emailField));
         passwordField
                 .textProperty()
                 .addListener(
-                        (obs, old, text) -> {
+                        (observable, previousText, currentText) -> {
                             clearError(passwordField);
                             clearError(passwordVisibleField);
                         });
@@ -59,6 +113,9 @@ public class LoginController {
 
     @FXML
     private void onLogin() {
+        if (submitting || !active) {
+            return;
+        }
         boolean emailEmpty = emailField.getText() == null || emailField.getText().isBlank();
         boolean passwordEmpty =
                 passwordField.getText() == null || passwordField.getText().isEmpty();
@@ -79,15 +136,55 @@ public class LoginController {
             (emailEmpty ? emailField : visiblePasswordField()).requestFocus();
             return;
         }
-        // TODO CU-03 (#35): autenticar con Auth cuando exista el endpoint; si falla, mensaje
-        //                   genérico «Correo o contraseña incorrectos» (Fig. 10b) y, si funciona,
-        //                   guardar la sesión de forma segura y viewManager.show(View.MAIN).
-        AlertBox.show(
-                errorBox,
-                errorIconLabel,
-                errorLabel,
-                AlertBox.Kind.INFO,
-                AuthMessages.LOGIN_UNAVAILABLE);
+
+        LoginCredentials credentials =
+                new LoginCredentials(emailField.getText(), passwordField.getText());
+        AlertBox.hide(errorBox);
+        setSubmitting(true);
+        backgroundTasks.run(
+                () -> {
+                    sessions.login(credentials);
+                    return null;
+                },
+                ignored -> onAuthenticated(),
+                this::onLoginFailed);
+    }
+
+    private void onAuthenticated() {
+        if (!active) {
+            return;
+        }
+        passwordField.clear();
+        setSubmitting(false);
+        viewManager.show(View.MAIN);
+    }
+
+    private void onLoginFailed(Throwable failure) {
+        if (!active) {
+            return;
+        }
+        setSubmitting(false);
+        passwordField.clear();
+        String message = AuthMessages.UNEXPECTED;
+        if (failure instanceof AuthenticationException authenticationFailure) {
+            message = AuthMessages.forLogin(authenticationFailure);
+        } else {
+            AuthLog.unexpectedFailure("login", failure);
+        }
+        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, message);
+        visiblePasswordField().requestFocus();
+    }
+
+    private void setSubmitting(boolean busy) {
+        submitting = busy;
+        BusyButton.setBusy(loginButton, busy, "Iniciando sesión…");
+        emailField.setEditable(!busy);
+        passwordField.setEditable(!busy);
+        passwordVisibleField.setEditable(!busy);
+        showPasswordToggle.setDisable(busy);
+        googleButton.setDisable(busy);
+        forgotPasswordLink.setDisable(busy);
+        createAccountLink.setDisable(busy);
     }
 
     @FXML
@@ -97,13 +194,50 @@ public class LoginController {
 
     @FXML
     private void onGoogleLogin() {
-        // TODO CU-04: iniciar flujo OAuth con Google cuando Auth tenga el endpoint
-        AlertBox.show(
-                errorBox,
-                errorIconLabel,
-                errorLabel,
-                AlertBox.Kind.INFO,
-                AuthMessages.GOOGLE_UNAVAILABLE);
+        if (submitting || !active) {
+            return;
+        }
+        googlePending = true;
+        setSubmitting(true);
+        AlertBox.hide(errorBox);
+        AlertBox.setShown(cancelGoogleButton, true);
+        BusyButton.setBusy(googleButton, true, "Esperando a Google…");
+        backgroundTasks.run(
+                () -> {
+                    google.signIn();
+                    return null;
+                },
+                ignored -> {
+                    if (active) {
+                        googlePending = false;
+                        viewManager.show(View.MAIN);
+                        viewManager.bringToFront();
+                    }
+                },
+                this::onGoogleFailed);
+    }
+
+    private void onGoogleFailed(Throwable failure) {
+        if (!active) {
+            return;
+        }
+        googlePending = false;
+        BusyButton.setBusy(googleButton, false, null);
+        AlertBox.setShown(cancelGoogleButton, false);
+        setSubmitting(false);
+        String message = AuthMessages.UNEXPECTED;
+        if (failure instanceof GoogleException googleFailure) {
+            message = GoogleMessages.failure(googleFailure);
+        } else {
+            AuthLog.unexpectedFailure("google-login", failure);
+        }
+        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, message);
+        viewManager.bringToFront();
+    }
+
+    @FXML
+    private void onCancelGoogle() {
+        google.cancel();
     }
 
     @FXML

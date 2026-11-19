@@ -56,10 +56,6 @@ public final class AuthMessages {
         };
     }
 
-    public static final String LOGIN_UNAVAILABLE =
-            "El inicio de sesión todavía no está disponible en el servidor.";
-    public static final String GOOGLE_UNAVAILABLE =
-            "El inicio de sesión con Google todavía no está disponible en el servidor.";
     public static final String RECOVERY_UNAVAILABLE =
             "La recuperación de contraseña todavía no está disponible en el servidor.";
 
