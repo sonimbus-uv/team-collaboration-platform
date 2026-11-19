@@ -274,7 +274,12 @@ impl GoogleAuthService {
             .await
         {
             Ok(identity) => identity,
-            Err(_) => {
+            Err(error) => {
+                tracing::warn!(
+                    event = "google_identity_verification_failed",
+                    reason = ?error,
+                    "Google identity verification did not complete"
+                );
                 return self.failed_callback(id, false, redirect).await;
             }
         };

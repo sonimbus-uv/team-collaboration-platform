@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import mx.uv.sonimbus.desktop.ui.theme.ThemeSelector?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
@@ -21,10 +22,8 @@
             styleClass="shell"
             stylesheets="@../../css/theme.css">
 
-    <!-- ================= Izquierda: grupos + canales ================= -->
     <left>
         <HBox>
-            <!-- Columna 1: grupos del usuario -->
             <VBox styleClass="groups-rail" alignment="TOP_CENTER" spacing="10"
                   minWidth="72" prefWidth="72" maxWidth="72"
                   accessibleText="Mis grupos">
@@ -52,12 +51,10 @@
                 </MenuButton>
             </VBox>
 
-            <!-- Columna 2: canales del grupo -->
             <VBox fx:id="channelsColumn" styleClass="channels-column"
                   minWidth="240" prefWidth="240" maxWidth="240"
                   accessibleText="Canales del grupo">
 
-                <!-- Encabezado del grupo -->
                 <HBox styleClass="channels-header" alignment="CENTER_LEFT" spacing="8"
                       minHeight="52" prefHeight="52">
                     <padding>
@@ -94,7 +91,6 @@
                         <Insets top="14" right="8" bottom="14" left="8"/>
                     </padding>
 
-                    <!-- Canales de texto -->
                     <HBox alignment="CENTER_LEFT" styleClass="sidebar-section">
                         <Label text="CANALES DE TEXTO" styleClass="sidebar-section-label"/>
                         <Region HBox.hgrow="ALWAYS"/>
@@ -110,7 +106,6 @@
                               accessibleText="Canales de texto"
                               VBox.vgrow="ALWAYS" minHeight="80"/>
 
-                    <!-- Canales de voz -->
                     <HBox alignment="CENTER_LEFT" styleClass="sidebar-section">
                         <padding>
                             <Insets top="12"/>
@@ -129,7 +124,6 @@
                               accessibleText="Canales de voz y participantes conectados"
                               VBox.vgrow="ALWAYS" minHeight="80"/>
 
-                    <!-- Secciones del grupo -->
                     <HBox styleClass="sidebar-section">
                         <padding>
                             <Insets top="12"/>
@@ -150,7 +144,6 @@
         </HBox>
     </left>
 
-    <!-- ================= Centro: barra superior + contenido ================= -->
     <center>
         <BorderPane>
             <top>
@@ -160,14 +153,15 @@
                         <Insets left="20" right="16"/>
                     </padding>
 
-                    <!-- Título de la vista actual (lo actualiza MainController) -->
                     <Label fx:id="sectionTitleLabel" styleClass="section-title"/>
                     <Separator fx:id="sectionTitleSeparator" orientation="VERTICAL"
                                styleClass="top-bar-separator" visible="false" managed="false"/>
                     <Label fx:id="sectionSubtitleLabel" styleClass="section-subtitle"
                            HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
 
-                    <!-- Notificaciones -->
+                    <Label text="Apariencia" styleClass="hint-text"/>
+                    <ThemeSelector/>
+
                     <Button fx:id="notificationsButton" styleClass="icon-button"
                             accessibleText="Notificaciones" onAction="#onShowNotifications">
                         <graphic>
@@ -185,7 +179,6 @@
                         </tooltip>
                     </Button>
 
-                    <!-- Perfil -->
                     <Button fx:id="profileButton" styleClass="avatar-button"
                             accessibleText="Mi perfil" onAction="#onShowProfile">
                         <graphic>
@@ -203,7 +196,6 @@
             </top>
 
             <center>
-                <!-- Aquí se cargan las demás vistas -->
                 <StackPane fx:id="contentPane" styleClass="content-pane">
                     <Label fx:id="emptyStateLabel" text="Selecciona un canal para empezar"
                            styleClass="empty-state"/>

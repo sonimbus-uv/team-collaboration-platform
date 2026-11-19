@@ -12,14 +12,20 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import mx.uv.sonimbus.desktop.data.api.ApiConfig;
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.Tokens;
 import mx.uv.sonimbus.desktop.data.session.Session;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationGateway;
+import mx.uv.sonimbus.desktop.domain.session.SessionService;
+import mx.uv.sonimbus.desktop.domain.session.SessionTokens;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,14 +46,22 @@ class CoreApiTest {
     private String requestBody;
 
     @BeforeEach
-    void start() throws IOException {
+    void start() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.start();
-        Session session = new Session(refresh -> {
+        Instant now = Instant.parse("2026-10-29T12:00:00Z");
+        SessionTokens.Identity identity = new SessionTokens.Identity(UUID.randomUUID(), UUID.randomUUID());
+        AuthenticationGateway gateway = org.mockito.Mockito.mock(AuthenticationGateway.class);
+        org.mockito.Mockito.when(gateway.refresh("refresh-old")).thenAnswer(call -> {
             refreshes.incrementAndGet();
-            return new Tokens("access-new", "refresh-new", "Bearer", 900, "2026-11-18T00:00:00Z", "s", "u1");
+            return new SessionTokens(new SessionTokens.AccessToken("access-new", now.plusSeconds(900)),
+                    "refresh-new", identity, now.plusSeconds(3600));
         });
-        session.start(new Tokens("access-old", "refresh-old", "Bearer", 900, "2026-11-18T00:00:00Z", "s", "u1"));
+        SessionService sessions = new SessionService(gateway, Clock.fixed(now, ZoneOffset.UTC));
+        sessions.signInFederated(new SessionTokens(
+                new SessionTokens.AccessToken("access-old", now.plusSeconds(900)),
+                "refresh-old", identity, now.plusSeconds(3600)));
+        Session session = new Session(sessions, () -> { });
         URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
         api = new CoreApi(ApiConfig.withUrls(URI.create("http://auth.invalid"), base), session);
     }

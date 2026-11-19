@@ -12,10 +12,17 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.Tokens;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationError;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationException;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationGateway;
+import mx.uv.sonimbus.desktop.domain.session.SessionService;
+import mx.uv.sonimbus.desktop.domain.session.SessionTokens;
 import org.junit.jupiter.api.Test;
 
 class SessionTest {
@@ -24,40 +31,45 @@ class SessionTest {
     private final List<String> refreshedWith = new ArrayList<>();
     private int issued;
 
-    private Tokens tokens(String suffix) {
-        return new Tokens("access-" + suffix, "refresh-" + suffix, "Bearer", 900,
-                "2026-11-18T00:00:00Z", "sid", "user-1");
+    private final SessionTokens.Identity identity =
+            new SessionTokens.Identity(UUID.randomUUID(), UUID.randomUUID());
+    private final SessionTokens initial = tokens("0");
+
+    private SessionTokens tokens(String suffix) {
+        return new SessionTokens(new SessionTokens.AccessToken("access-" + suffix, clock.instant().plusSeconds(900)),
+                "refresh-" + suffix, identity, Instant.parse("2026-11-18T00:00:00Z"));
     }
 
-    private Session session() {
-        Session session = new Session(refresh -> {
-            refreshedWith.add(refresh);
+    private Session session() throws AuthenticationException {
+        AuthenticationGateway gateway = mock(AuthenticationGateway.class);
+        when(gateway.refresh("refresh-0")).thenAnswer(call -> {
+            refreshedWith.add(call.getArgument(0));
             return tokens(Integer.toString(++issued));
-        }, clock);
-        session.start(tokens("0"));
-        return session;
+        });
+        SessionService sessions = new SessionService(gateway, clock);
+        sessions.signInFederated(initial);
+        return new Session(sessions, () -> { });
     }
 
     @Test
-    void freshTokenIsUsedAsIs() throws ApiException {
+    void freshTokenIsUsedAsIs() throws AuthenticationException, ApiException {
         Session session = session();
 
         assertEquals("access-0", session.accessToken());
-        assertEquals("user-1", session.userId());
         assertTrue(refreshedWith.isEmpty());
     }
 
     @Test
-    void tokenCloseToExpiryIsRenewedFirst() throws ApiException {
+    void tokenCloseToExpiryIsRenewedFirst() throws AuthenticationException, ApiException {
         Session session = session();
-        clock.advance(Duration.ofSeconds(900).minus(Session.REFRESH_MARGIN).plusSeconds(1));
+        clock.advance(Duration.ofSeconds(871));
 
         assertEquals("access-1", session.accessToken());
         assertEquals(List.of("refresh-0"), refreshedWith);
     }
 
     @Test
-    void rejectionRenewsOnlyOnceForTheSameToken() throws ApiException {
+    void rejectionRenewsOnlyOnceForTheSameToken() throws AuthenticationException, ApiException {
         Session session = session();
 
         assertEquals("access-1", session.renewAfterRejection("access-0"));
@@ -66,33 +78,34 @@ class SessionTest {
     }
 
     @Test
-    void rejectedRefreshEndsTheSession() {
+    void rejectedRefreshEndsTheSession() throws AuthenticationException {
         AtomicBoolean expired = new AtomicBoolean();
-        Session session = new Session(refresh -> {
-            throw new ApiException(ApiErrorKind.UNAUTHORIZED, "refresh", 401, null);
-        }, clock);
-        session.setOnExpired(() -> expired.set(true));
-        session.start(tokens("0"));
+        AuthenticationGateway gateway = mock(AuthenticationGateway.class);
+        when(gateway.refresh("refresh-0")).thenThrow(new AuthenticationException(AuthenticationError.NO_SESSION));
+        SessionService sessions = new SessionService(gateway, clock);
+        sessions.signInFederated(initial);
+        Session session = new Session(sessions, () -> expired.set(true));
 
         assertThrows(ApiException.class, () -> session.renewAfterRejection("access-0"));
         assertTrue(expired.get());
-        assertFalse(session.isActive());
+        assertFalse(sessions.isAuthenticated());
     }
 
     @Test
-    void networkErrorKeepsTheSession() {
-        Session session = new Session(refresh -> {
-            throw new ApiException(ApiErrorKind.NETWORK, "refresh", null);
-        }, clock);
-        session.start(tokens("0"));
+    void unavailableRefreshKeepsTheSession() throws AuthenticationException {
+        AuthenticationGateway gateway = mock(AuthenticationGateway.class);
+        when(gateway.refresh("refresh-0")).thenThrow(new AuthenticationException(AuthenticationError.UNAVAILABLE));
+        SessionService sessions = new SessionService(gateway, clock);
+        sessions.signInFederated(initial);
+        Session session = new Session(sessions, () -> { });
 
         assertThrows(ApiException.class, () -> session.renewAfterRejection("access-0"));
-        assertTrue(session.isActive());
+        assertTrue(sessions.isAuthenticated());
     }
 
     @Test
     void withoutSessionItIsUnauthorized() {
-        Session session = new Session(refresh -> tokens("x"), clock);
+        Session session = new Session(new SessionService(mock(AuthenticationGateway.class), clock), () -> { });
 
         assertEquals(ApiErrorKind.UNAUTHORIZED,
                 assertThrows(ApiException.class, session::accessToken).kind());

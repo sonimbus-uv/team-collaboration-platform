@@ -42,9 +42,9 @@ planteaba Redis para revocación; se elige PostgreSQL autoritativo y consulta HT
 describe diferencias históricas: ya existe la página HTML de verificación.
 No se decide aquí el contrato completo de registro/verificación.
 
-La [propuesta de escritorio](../../clients/desktop/docs/issues-auth-escritorio.md)
-de refresh deslizante de 30 días y fallback automático a memoria queda sustituida
-por este diseño. Su texto se conserva como propuesta histórica, no normativa.
+La propuesta histórica de escritorio de refresh deslizante de 30 días y fallback
+automático a memoria queda sustituida por este diseño. La implementación vigente
+del cliente se describe en la [guía de Auth de escritorio](../../clients/desktop/docs/registro-actual.md).
 
 ## Decisión
 

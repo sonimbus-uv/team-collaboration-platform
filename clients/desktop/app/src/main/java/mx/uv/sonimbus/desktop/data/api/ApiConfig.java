@@ -1,5 +1,7 @@
 package mx.uv.sonimbus.desktop.data.api;
 
+import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+
 import java.net.URI;
 import java.time.Duration;
 import java.util.Locale;
@@ -8,7 +10,7 @@ import java.util.Objects;
 /**
  * Dirección y tiempos de espera de los servicios.
  *
- * @param authBaseUrl    dirección del Auth Service, sin ruta (las rutas están en {@link AuthPaths})
+ * @param authBaseUrl    dirección del Auth Service, sin ruta (las rutas están en {@link AuthApi})
  * @param coreBaseUrl    dirección del Core Service, sin ruta; el WebSocket usa el mismo host
  * @param connectTimeout espera máxima para abrir la conexión
  * @param requestTimeout espera máxima de la respuesta de cada petición
@@ -17,6 +19,7 @@ public record ApiConfig(URI authBaseUrl, URI coreBaseUrl, Duration connectTimeou
 
     static final String AUTH_URL_PROPERTY = "sonimbus.auth.url";
     static final String AUTH_URL_ENV = "SONIMBUS_AUTH_URL";
+
     /** Auth en la VM de Vagrant ({@code SERVER_ADDR=0.0.0.0:3001}). */
     static final String DEFAULT_AUTH_URL = "http://192.168.33.30:3001";
 
@@ -27,6 +30,7 @@ public record ApiConfig(URI authBaseUrl, URI coreBaseUrl, Duration connectTimeou
 
     /** RNF-REN-01. */
     public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+
     /** RNF-REN-01. */
     public static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
@@ -94,7 +98,8 @@ public record ApiConfig(URI authBaseUrl, URI coreBaseUrl, Duration connectTimeou
         try {
             return URI.create(value.strip().replaceAll("/+$", ""));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("La dirección de " + source + " no es una URL válida", e);
+            throw new IllegalArgumentException(
+                    "La dirección de " + source + " no es una URL válida", e);
         }
     }
 
@@ -108,7 +113,8 @@ public record ApiConfig(URI authBaseUrl, URI coreBaseUrl, Duration connectTimeou
             throw new IllegalArgumentException("La dirección del servicio no tiene host");
         }
         if (url.getRawUserInfo() != null) {
-            throw new IllegalArgumentException("La dirección del servicio no debe incluir credenciales");
+            throw new IllegalArgumentException(
+                    "La dirección del servicio no debe incluir credenciales");
         }
     }
 }

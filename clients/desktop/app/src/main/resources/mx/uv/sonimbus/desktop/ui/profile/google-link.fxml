@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<VBox fx:id="googleLinkBox" xmlns="http://javafx.com/javafx/21"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="mx.uv.sonimbus.desktop.ui.profile.GoogleLinkController"
+    spacing="12" styleClass="card" minHeight="-Infinity">
+    <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+    <Label text="Cuenta Google" styleClass="card-title"/>
+    <Label fx:id="googleConnectionLabel" text="Comprobando vinculación…" wrapText="true"
+        minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"/>
+    <Label text="Vincula Google para entrar a esta misma cuenta. Se abrirá una ventana para elegir la identidad que deseas conectar."
+        styleClass="hint-text" wrapText="true" minHeight="-Infinity" minWidth="0"
+        maxWidth="1.7976931348623157E308"/>
+    <HBox fx:id="googleLinkMessageBox" visible="false" managed="false" spacing="10"
+        alignment="TOP_LEFT" styleClass="alert-error" minHeight="-Infinity">
+        <padding><Insets top="12" right="14" bottom="12" left="14"/></padding>
+        <Label fx:id="googleLinkMessageIcon" text="!" styleClass="alert-icon"/>
+        <Label fx:id="googleLinkMessageLabel" wrapText="true" minHeight="-Infinity"
+            minWidth="0" maxWidth="1.7976931348623157E308" HBox.hgrow="ALWAYS"/>
+    </HBox>
+    <VBox fx:id="googleReauthenticationBox" visible="false" managed="false" spacing="6">
+        <Label text="Confirma tu contraseña de Sonimbus" labelFor="$googlePasswordField"
+            styleClass="field-label"/>
+        <HBox spacing="8">
+            <StackPane HBox.hgrow="ALWAYS">
+                <PasswordField fx:id="googlePasswordField" accessibleText="Contraseña para vincular Google"/>
+                <TextField fx:id="googlePasswordVisibleField" visible="false" managed="false"
+                    accessibleText="Contraseña de confirmación visible"/>
+            </StackPane>
+            <ToggleButton fx:id="showGooglePasswordToggle" text="Mostrar"
+                accessibleText="Mostrar contraseña de confirmación" styleClass="button-secondary"
+                onAction="#onToggleGooglePasswordVisibility"/>
+        </HBox>
+    </VBox>
+    <HBox spacing="10">
+        <Button fx:id="linkGoogleButton" text="Vincular Google" styleClass="button-primary"
+            onAction="#onLinkGoogle"/>
+        <Button fx:id="refreshGoogleConnectionButton" text="Consultar estado"
+            styleClass="button-secondary" onAction="#onRefreshGoogleConnection"/>
+    </HBox>
+    <Button fx:id="cancelGoogleLinkButton" text="Cancelar vinculación" visible="false"
+        managed="false" styleClass="button-secondary" onAction="#onCancelGoogleLink"/>
+</VBox>

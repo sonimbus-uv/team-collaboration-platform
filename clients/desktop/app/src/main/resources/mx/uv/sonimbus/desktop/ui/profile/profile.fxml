@@ -7,6 +7,7 @@
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.ColumnConstraints?>
 <?import javafx.scene.layout.GridPane?>
@@ -16,15 +17,15 @@
 <?import javafx.scene.layout.VBox?>
 
 <StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-           fx:controller="mx.uv.sonimbus.desktop.ui.profile.ProfileController"
-           styleClass="content-view"
-           stylesheets="@../../css/theme.css">
+    fx:controller="mx.uv.sonimbus.desktop.ui.profile.ProfileController" styleClass="content-view"
+    stylesheets="@../../css/theme.css">
 
     <fx:define>
         <ToggleGroup fx:id="avatarGroup"/>
     </fx:define>
 
-    <ScrollPane fx:id="profileScroll" fitToWidth="true" hbarPolicy="NEVER" styleClass="plain-scroll">
+    <ScrollPane fx:id="profileScroll" fitToWidth="true" hbarPolicy="NEVER"
+        styleClass="plain-scroll">
         <GridPane hgap="24" vgap="20">
             <padding>
                 <Insets top="20" right="24" bottom="20" left="24"/>
@@ -35,7 +36,8 @@
             </columnConstraints>
 
             <!-- ================= Datos del perfil (CU-07) ================= -->
-            <VBox styleClass="info-card" spacing="14" GridPane.columnIndex="0" GridPane.valignment="TOP">
+            <VBox styleClass="info-card" spacing="14" GridPane.columnIndex="0"
+                GridPane.valignment="TOP">
                 <padding>
                     <Insets top="18" right="20" bottom="18" left="20"/>
                 </padding>
@@ -43,28 +45,31 @@
 
                 <!-- Resultado de guardar, ocultos por defecto -->
                 <HBox fx:id="profileSavedBox" styleClass="alert-success" spacing="10"
-                      alignment="CENTER_LEFT" visible="false" managed="false">
+                    alignment="TOP_LEFT" visible="false" managed="false" minHeight="-Infinity">
                     <padding>
                         <Insets top="12" right="14" bottom="12" left="14"/>
                     </padding>
                     <Label text="✓" styleClass="success-icon" accessibleText="Listo"/>
                     <Label fx:id="profileSavedLabel" text="Tu perfil se actualizó."
-                           styleClass="success-text" wrapText="true"/>
+                        styleClass="success-text" wrapText="true" minHeight="-Infinity"
+                        minWidth="0" maxWidth="1.7976931348623157E308" HBox.hgrow="ALWAYS"/>
                 </HBox>
                 <HBox fx:id="profileErrorBox" styleClass="alert-error" spacing="10"
-                      alignment="CENTER_LEFT" visible="false" managed="false">
+                    alignment="TOP_LEFT" visible="false" managed="false" minHeight="-Infinity">
                     <padding>
                         <Insets top="12" right="14" bottom="12" left="14"/>
                     </padding>
                     <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
-                    <Label fx:id="profileErrorLabel" styleClass="alert-text" wrapText="true"/>
+                    <Label fx:id="profileErrorLabel" styleClass="alert-text" wrapText="true"
+                        minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"
+                        HBox.hgrow="ALWAYS"/>
                 </HBox>
 
                 <HBox alignment="CENTER_LEFT" spacing="14">
                     <StackPane styleClass="avatar-large" accessibleText="Foto de perfil actual">
                         <Label fx:id="avatarInitialsLabel" text="?" styleClass="avatar-initials"/>
                         <ImageView fx:id="currentAvatarView" fitWidth="84" fitHeight="84"
-                                   preserveRatio="true" pickOnBounds="true"/>
+                            preserveRatio="true" pickOnBounds="true"/>
                     </StackPane>
                     <VBox spacing="2">
                         <Label fx:id="displayNameLabel" styleClass="card-title"/>
@@ -78,22 +83,22 @@
                         <ColumnConstraints hgrow="ALWAYS"/>
                     </columnConstraints>
                     <TextField fx:id="nameField" accessibleText="Nombre visible"
-                               GridPane.rowIndex="1"/>
+                        GridPane.rowIndex="1"/>
                     <Label text="Nombre" labelFor="$nameField" styleClass="field-label"
-                           GridPane.rowIndex="0"/>
+                        GridPane.rowIndex="0"/>
 
                     <!-- Cuadrícula de avatares del paquete predefinido (se llena en código) -->
                     <TilePane fx:id="avatarsPane" hgap="10" vgap="10" prefColumns="6"
-                              accessibleText="Foto de perfil"
-                              accessibleHelp="Elige una de las fotos del paquete."
-                              GridPane.rowIndex="4"/>
+                        accessibleText="Foto de perfil"
+                        accessibleHelp="Elige una de las fotos del paquete." GridPane.rowIndex="4"/>
                     <Label text="Foto de perfil" labelFor="$avatarsPane" styleClass="field-label"
-                           GridPane.rowIndex="2">
+                        GridPane.rowIndex="2">
                         <GridPane.margin>
                             <Insets top="10"/>
                         </GridPane.margin>
                     </Label>
-                    <Label text="Elige una del paquete." styleClass="hint-text" GridPane.rowIndex="3"/>
+                    <Label text="Elige una del paquete." styleClass="hint-text"
+                        GridPane.rowIndex="3"/>
                 </GridPane>
 
                 <HBox spacing="10">
@@ -101,10 +106,9 @@
                         <Insets top="4"/>
                     </padding>
                     <Button fx:id="saveProfileButton" text="Guardar perfil" defaultButton="true"
-                            styleClass="button-primary, button-compact" onAction="#onSaveProfile"/>
+                        styleClass="button-primary, button-compact" onAction="#onSaveProfile"/>
                     <Button fx:id="discardProfileButton" text="Descartar"
-                            styleClass="button-secondary, button-compact"
-                            onAction="#onDiscardProfile"/>
+                        styleClass="button-secondary, button-compact" onAction="#onDiscardProfile"/>
                 </HBox>
             </VBox>
 
@@ -117,21 +121,24 @@
                     <Label text="Cambiar contraseña" styleClass="card-title"/>
 
                     <HBox fx:id="passwordSavedBox" styleClass="alert-success" spacing="10"
-                          alignment="CENTER_LEFT" visible="false" managed="false">
+                        alignment="TOP_LEFT" visible="false" managed="false" minHeight="-Infinity">
                         <padding>
                             <Insets top="12" right="14" bottom="12" left="14"/>
                         </padding>
                         <Label text="✓" styleClass="success-icon" accessibleText="Listo"/>
                         <Label fx:id="passwordSavedLabel" text="Tu contraseña se actualizó."
-                               styleClass="success-text" wrapText="true"/>
+                            styleClass="success-text" wrapText="true" minHeight="-Infinity"
+                            minWidth="0" maxWidth="1.7976931348623157E308" HBox.hgrow="ALWAYS"/>
                     </HBox>
                     <HBox fx:id="passwordErrorBox" styleClass="alert-error" spacing="10"
-                          alignment="CENTER_LEFT" visible="false" managed="false">
+                        alignment="TOP_LEFT" visible="false" managed="false" minHeight="-Infinity">
                         <padding>
                             <Insets top="12" right="14" bottom="12" left="14"/>
                         </padding>
                         <Label text="!" styleClass="alert-icon" accessibleText="Error"/>
-                        <Label fx:id="passwordErrorLabel" styleClass="alert-text" wrapText="true"/>
+                        <Label fx:id="passwordErrorLabel" styleClass="alert-text" wrapText="true"
+                            minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"
+                            HBox.hgrow="ALWAYS"/>
                     </HBox>
 
                     <GridPane vgap="6">
@@ -139,46 +146,80 @@
                             <ColumnConstraints hgrow="ALWAYS"/>
                         </columnConstraints>
 
-                        <PasswordField fx:id="currentPasswordField" accessibleText="Contraseña actual"
-                                       GridPane.rowIndex="1"/>
+                        <HBox spacing="8" GridPane.rowIndex="1">
+                            <StackPane HBox.hgrow="ALWAYS">
+                                <PasswordField fx:id="currentPasswordField"
+                                    accessibleText="Contraseña actual"/>
+                                <TextField fx:id="currentPasswordVisibleField"
+                                    visible="false" managed="false"
+                                    accessibleText="Contraseña actual visible"/>
+                            </StackPane>
+                            <ToggleButton fx:id="showCurrentPasswordToggle" text="Mostrar"
+                                accessibleText="Mostrar contraseña actual" styleClass="button-secondary"
+                                onAction="#onToggleCurrentPasswordVisibility"/>
+                        </HBox>
                         <Label text="Contraseña actual" labelFor="$currentPasswordField"
-                               styleClass="field-label" GridPane.rowIndex="0"/>
+                            styleClass="field-label" GridPane.rowIndex="0"/>
 
-                        <PasswordField fx:id="newPasswordField" accessibleText="Nueva contraseña"
-                                       accessibleHelp="Mínimo 8 caracteres, con al menos una letra y un número."
-                                       GridPane.rowIndex="3"/>
+                        <HBox spacing="8" GridPane.rowIndex="3">
+                            <StackPane HBox.hgrow="ALWAYS">
+                                <PasswordField fx:id="newPasswordField"
+                                    accessibleText="Nueva contraseña"
+                                    accessibleHelp="Mínimo 8 caracteres, con al menos una letra y un número."/>
+                                <TextField fx:id="newPasswordVisibleField"
+                                    visible="false" managed="false"
+                                    accessibleText="Nueva contraseña visible"/>
+                            </StackPane>
+                            <ToggleButton fx:id="showNewPasswordToggle" text="Mostrar"
+                                accessibleText="Mostrar nueva contraseña" styleClass="button-secondary"
+                                onAction="#onToggleNewPasswordVisibility"/>
+                        </HBox>
                         <Label text="Nueva contraseña" labelFor="$newPasswordField"
-                               styleClass="field-label" GridPane.rowIndex="2">
+                            styleClass="field-label" GridPane.rowIndex="2">
                             <GridPane.margin>
                                 <Insets top="6"/>
                             </GridPane.margin>
                         </Label>
                         <Label text="Mínimo 8 caracteres, con al menos una letra y un número."
-                               styleClass="hint-text" wrapText="true" GridPane.rowIndex="4"/>
+                            styleClass="hint-text" wrapText="true" GridPane.rowIndex="4"
+                            minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"/>
 
-                        <PasswordField fx:id="confirmPasswordField"
-                                       accessibleText="Confirmar nueva contraseña"
-                                       GridPane.rowIndex="6"/>
+                        <HBox spacing="8" GridPane.rowIndex="6">
+                            <StackPane HBox.hgrow="ALWAYS">
+                                <PasswordField fx:id="confirmPasswordField"
+                                    accessibleText="Confirmar nueva contraseña"/>
+                                <TextField fx:id="confirmPasswordVisibleField"
+                                    visible="false" managed="false"
+                                    accessibleText="Confirmación de contraseña visible"/>
+                            </StackPane>
+                            <ToggleButton fx:id="showConfirmPasswordToggle" text="Mostrar"
+                                accessibleText="Mostrar confirmación de contraseña" styleClass="button-secondary"
+                                onAction="#onToggleConfirmPasswordVisibility"/>
+                        </HBox>
                         <Label text="Confirmar nueva contraseña" labelFor="$confirmPasswordField"
-                               styleClass="field-label" GridPane.rowIndex="5">
+                            styleClass="field-label" GridPane.rowIndex="5">
                             <GridPane.margin>
                                 <Insets top="6"/>
                             </GridPane.margin>
                         </Label>
                         <HBox fx:id="confirmPasswordErrorBox" spacing="6" alignment="CENTER_LEFT"
-                              visible="false" managed="false" GridPane.rowIndex="7">
+                            visible="false" managed="false" GridPane.rowIndex="7">
                             <Label text="!" styleClass="alert-icon-small" accessibleText="Error"/>
-                            <Label fx:id="confirmPasswordErrorLabel" text="Las contraseñas no coinciden."
-                                   styleClass="field-error-text" wrapText="true"/>
+                            <Label fx:id="confirmPasswordErrorLabel"
+                                text="Las contraseñas no coinciden." styleClass="field-error-text"
+                                wrapText="true" minHeight="-Infinity" minWidth="0"
+                                maxWidth="1.7976931348623157E308" HBox.hgrow="ALWAYS"/>
                         </HBox>
                     </GridPane>
 
                     <HBox>
                         <Button fx:id="updatePasswordButton" text="Actualizar contraseña"
-                                styleClass="button-secondary, button-compact"
-                                onAction="#onUpdatePassword"/>
+                            styleClass="button-secondary, button-compact"
+                            onAction="#onUpdatePassword"/>
                     </HBox>
                 </VBox>
+
+                <fx:include fx:id="googleLink" source="google-link.fxml"/>
 
                 <!-- ================= Sesión (CU-06) ================= -->
                 <HBox styleClass="session-card" alignment="CENTER_LEFT" spacing="16">
@@ -187,18 +228,20 @@
                     </padding>
                     <VBox spacing="2" HBox.hgrow="ALWAYS">
                         <Label text="Sesión" styleClass="card-title"/>
-                        <Label text="Sales de Sonimbus en este equipo." styleClass="section-subtitle"
-                               wrapText="true"/>
+                        <Label text="Sales de Sonimbus en este equipo."
+                            styleClass="section-subtitle" wrapText="true" minHeight="-Infinity"
+                            minWidth="0" maxWidth="1.7976931348623157E308"/>
                     </VBox>
                     <Button fx:id="logoutButton" text="Cerrar sesión" minWidth="-Infinity"
-                            styleClass="button-primary, button-compact" onAction="#onLogout"/>
+                        styleClass="button-primary, button-compact" onAction="#onLogout"/>
                 </HBox>
             </VBox>
         </GridPane>
     </ScrollPane>
 
     <!-- ===== Confirmación de cerrar sesión (Perfil-cerrar-sesion), oculta por defecto ===== -->
-    <StackPane fx:id="logoutConfirmOverlay" styleClass="modal-scrim" visible="false" managed="false">
+    <StackPane fx:id="logoutConfirmOverlay" styleClass="modal-scrim" visible="false"
+        managed="false">
         <padding>
             <Insets top="24" right="24" bottom="24" left="24"/>
         </padding>
@@ -207,16 +250,29 @@
                 <Insets top="24" right="24" bottom="24" left="24"/>
             </padding>
             <Label text="¿Cerrar sesión?" styleClass="dialog-title"/>
-            <Label text="Tendrás que volver a iniciar sesión para ver tus grupos y mensajes en este equipo."
-                   styleClass="dialog-text" wrapText="true"/>
+            <Label
+                text="Tendrás que volver a iniciar sesión para ver tus grupos y mensajes en este equipo."
+                styleClass="dialog-text" wrapText="true" minHeight="-Infinity" minWidth="0"
+                maxWidth="1.7976931348623157E308"/>
+            <HBox fx:id="logoutErrorBox" styleClass="alert-error" spacing="10"
+                alignment="TOP_LEFT" minHeight="-Infinity" visible="false" managed="false">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label fx:id="logoutErrorIconLabel" text="!" styleClass="alert-icon"
+                    accessibleText="Error"/>
+                <Label fx:id="logoutErrorLabel" styleClass="alert-text" wrapText="true"
+                    minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"
+                    HBox.hgrow="ALWAYS"/>
+            </HBox>
             <HBox styleClass="dialog-actions" alignment="CENTER_RIGHT" spacing="10">
                 <padding>
                     <Insets top="16"/>
                 </padding>
                 <Button fx:id="cancelLogoutButton" text="Cancelar" cancelButton="true"
-                        styleClass="button-secondary, button-compact" onAction="#onCancelLogout"/>
+                    styleClass="button-secondary, button-compact" onAction="#onCancelLogout"/>
                 <Button fx:id="confirmLogoutButton" text="Cerrar sesión"
-                        styleClass="button-primary, button-compact" onAction="#onConfirmLogout"/>
+                    styleClass="button-primary, button-compact" onAction="#onConfirmLogout"/>
             </HBox>
         </VBox>
     </StackPane>

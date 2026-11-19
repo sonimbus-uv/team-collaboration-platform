@@ -1,26 +1,59 @@
 package mx.uv.sonimbus.desktop;
 
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.scene.control.Alert;
+import javafx.stage.Stage;
+
+import mx.uv.sonimbus.desktop.data.api.ApiConfig;
+import mx.uv.sonimbus.desktop.data.instance.SingleInstance;
+import mx.uv.sonimbus.desktop.data.logging.AuthLog;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.prefs.Preferences;
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.stage.Stage;
-import mx.uv.sonimbus.desktop.data.api.ApiConfig;
-import mx.uv.sonimbus.desktop.ui.navigation.View;
-import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
 public class App extends Application {
 
     private static final String DEMO_INDEX_KEY = "demoViewIndex";
 
     private AppContext context;
+    private SingleInstance instance;
 
     @Override
     public void start(Stage stage) {
-        context = new AppContext(stage, ApiConfig.fromEnvironment());
+        try {
+            instance =
+                    SingleInstance.acquire(
+                            Path.of(System.getProperty("user.home"), ".sonimbus"),
+                            () ->
+                                    Platform.runLater(
+                                            () -> {
+                                                stage.setIconified(false);
+                                                stage.toFront();
+                                                stage.requestFocus();
+                                            }));
+            if (instance == null) {
+                Platform.exit();
+                return;
+            }
+        } catch (IOException failure) {
+            AuthLog.unexpectedFailure("client-instance", failure);
+            new Alert(
+                            Alert.AlertType.ERROR,
+                            "No se pudo activar Sonimbus. Cierra la instancia anterior e intenta de"
+                                + " nuevo.")
+                    .showAndWait();
+            Platform.exit();
+            return;
+        }
         List<String> args = getParameters().getRaw();
         Optional<View> demoView = DemoNavigation.requestedView(args, App::nextDemoIndex);
+        context = new AppContext(stage, ApiConfig.fromEnvironment(), demoView.isPresent());
         if (demoView.isEmpty() && !args.isEmpty() && !args.get(0).isBlank()) {
             System.err.println(DemoNavigation.usage(args.get(0)));
         }
@@ -29,8 +62,18 @@ public class App extends Application {
 
     @Override
     public void stop() {
-        if (context != null) {
-            context.close();
+        try {
+            if (context != null) {
+                context.close();
+            }
+        } finally {
+            if (instance != null) {
+                try {
+                    instance.close();
+                } catch (IOException failure) {
+                    AuthLog.unexpectedFailure("client-instance-cleanup", failure);
+                }
+            }
         }
     }
 

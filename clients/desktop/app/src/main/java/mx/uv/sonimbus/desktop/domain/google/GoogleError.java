@@ -1,0 +1,21 @@
+package mx.uv.sonimbus.desktop.domain.google;
+
+public enum GoogleError {
+    REAUTHENTICATION_REQUIRED,
+    INVALID_PASSWORD,
+    ALREADY_LINKED,
+    LINK_CONFLICT,
+    NO_SESSION,
+    CANCELLED,
+    EXPIRED,
+    INVALID_RESPONSE,
+    LINK_REQUIRED,
+    ACCOUNT_BLOCKED,
+    RATE_LIMITED,
+    UNAVAILABLE,
+    NETWORK,
+    UNCERTAIN,
+    BROWSER,
+    PLATFORM,
+    BUSY
+}

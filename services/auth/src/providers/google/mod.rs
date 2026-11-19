@@ -23,9 +23,9 @@ const ISSUER: &str = "https://accounts.google.com";
 const AUTHORIZATION_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const JWKS_ENDPOINT: &str = "https://www.googleapis.com/oauth2/v3/certs";
-const TOTAL_TIMEOUT: Duration = Duration::from_secs(8);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const TOTAL_TIMEOUT: Duration = Duration::from_secs(12);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_AUTHORIZATION_CODE_BYTES: usize = 4096;
 const MAX_ID_TOKEN_BYTES: usize = 16384;
 const MAX_KEY_ID_BYTES: usize = 256;
@@ -113,7 +113,24 @@ impl GoogleOidcProvider {
             ])
             .send()
             .await
-            .map_err(|_| FederatedIdentityError::Unavailable)?;
+            .map_err(|failure| {
+                tracing::warn!(
+                    event = "google_provider_request_failed",
+                    stage = "token",
+                    timeout = failure.is_timeout(),
+                    connect = failure.is_connect(),
+                    "Google token endpoint could not be reached"
+                );
+                FederatedIdentityError::Unavailable
+            })?;
+        if response.status() != reqwest::StatusCode::OK {
+            tracing::warn!(
+                event = "google_provider_response_rejected",
+                stage = "token",
+                http_status = response.status().as_u16(),
+                "Google token endpoint rejected the request"
+            );
+        }
         if response.status() == reqwest::StatusCode::BAD_REQUEST {
             return Err(FederatedIdentityError::AuthorizationRejected);
         }

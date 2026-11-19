@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acceder a Sonimbus con Google</title>
+    <style>
+        body { margin: 0; background: #FAF8FF; color: #211B2E; font: 16px system-ui, sans-serif; }
+        main { max-width: 520px; margin: 12vh auto; padding: 32px; background: #FFF;
+               border: 1px solid #786989; border-radius: 16px; }
+        h1 { font-size: 24px; }
+        p { line-height: 1.6; }
+        button { background: #5B21B6; color: #FFF; border: 0; border-radius: 8px;
+                 padding: 12px 20px; font: inherit; cursor: pointer; }
+        button:focus-visible { outline: 3px solid #5B21B6; outline-offset: 4px; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Acceder a Sonimbus con Google</h1>
+    <p id="status" role="status" aria-live="polite">Abriendo la ventana de Google…</p>
+    <button id="continue" type="button">Continuar con Google</button>
+    <p>Mantén esta página abierta durante el acceso con Google.</p>
+</main>
+<script nonce="__BROWSER_KEY__">
+    "use strict";
+    const authorizationUrl = __AUTHORIZATION_URL__;
+    const browserKey = "__BROWSER_KEY__";
+    const status = document.getElementById("status");
+    const button = document.getElementById("continue");
+    let authenticationWindow = null;
+    let finished = false;
+
+    function openAuthentication() {
+        if (authenticationWindow && !authenticationWindow.closed) {
+            authenticationWindow.focus();
+            return;
+        }
+        authenticationWindow = window.open(authorizationUrl, "sonimbus-google-" + browserKey,
+            "popup,width=560,height=740");
+        if (authenticationWindow) {
+            status.textContent = "Completa el acceso en la ventana de Google.";
+            button.hidden = true;
+        } else {
+            status.textContent = "Pulsa Continuar con Google para permitir la ventana de autenticación.";
+            button.hidden = false;
+        }
+    }
+
+    async function checkReturn() {
+        if (finished) return;
+        try {
+            const response = await fetch("/status", {
+                method: "POST", headers: {"X-Sonimbus-Browser": browserKey}, cache: "no-store"
+            });
+            if (!response.ok) throw new Error("Return channel unavailable");
+            const result = await response.json();
+            if (result.received) {
+                finished = true;
+                if (authenticationWindow) authenticationWindow.close();
+                button.hidden = true;
+                status.textContent = "Sonimbus recibió el retorno. Ya puedes cerrar esta página y volver al cliente.";
+                window.close();
+                return;
+            }
+            setTimeout(checkReturn, 350);
+        } catch {
+            finished = true;
+            if (authenticationWindow) authenticationWindow.close();
+            button.hidden = true;
+            status.textContent = "El intento terminó. Vuelve a Sonimbus para ver el resultado o iniciar otro.";
+        }
+    }
+
+    button.addEventListener("click", openAuthentication);
+    openAuthentication();
+    checkReturn();
+</script>
+</body>
+</html>
