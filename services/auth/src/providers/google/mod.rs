@@ -113,7 +113,24 @@ impl GoogleOidcProvider {
             ])
             .send()
             .await
-            .map_err(|_| FederatedIdentityError::Unavailable)?;
+            .map_err(|failure| {
+                tracing::warn!(
+                    event = "google_provider_request_failed",
+                    stage = "token",
+                    timeout = failure.is_timeout(),
+                    connect = failure.is_connect(),
+                    "Google token endpoint could not be reached"
+                );
+                FederatedIdentityError::Unavailable
+            })?;
+        if response.status() != reqwest::StatusCode::OK {
+            tracing::warn!(
+                event = "google_provider_response_rejected",
+                stage = "token",
+                http_status = response.status().as_u16(),
+                "Google token endpoint rejected the request"
+            );
+        }
         if response.status() == reqwest::StatusCode::BAD_REQUEST {
             return Err(FederatedIdentityError::AuthorizationRejected);
         }

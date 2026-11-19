@@ -91,7 +91,16 @@ impl SigningKeyCache {
             .get(endpoint.clone())
             .send()
             .await
-            .map_err(|_| FederatedIdentityError::Unavailable)?;
+            .map_err(|failure| {
+                tracing::warn!(
+                    event = "google_provider_request_failed",
+                    stage = "jwks",
+                    timeout = failure.is_timeout(),
+                    connect = failure.is_connect(),
+                    "Google signing keys could not be retrieved"
+                );
+                FederatedIdentityError::Unavailable
+            })?;
         if response.status() != reqwest::StatusCode::OK {
             return Err(FederatedIdentityError::Unavailable);
         }
