@@ -12,6 +12,12 @@ Formato de nombre: `<recurso>.<evento>` (por ejemplo, `message.created`). Cada e
 }
 ```
 
+## Eventos WebSocket hacia los clientes
+
+| Evento | Productor | Estado |
+|---|---|---|
+| [`message.created` v1](message.created.md) | Core | Candidato; implementado en Core para la expo |
+
 ## Eventos entre servicios (RabbitMQ, D-04)
 
 - *Exchange* `topic`: `sonimbus.events`. La clave de ruteo es el nombre del evento.
