@@ -46,13 +46,13 @@ Cada módulo tiene un responsable principal, indicado también en su `README.md`
 
 ## Calendario hacia la expo
 
-Expo: **jueves 2026-12-10**. Congelamiento del código: **lunes 2026-12-07** (después solo se corrigen errores y se ensaya). Alcance de la demo: recorrido completo de Fase 5, voz con LiveKit (CU-22) y archivos; las videollamadas son una extensión **si alcanza el tiempo** (no cambian el alcance oficial: ver «Fuera del alcance» en [`docs/requirements/`](requirements/README.md#alcance-del-mvp)).
+Expo: **jueves 2026-12-10**. Congelamiento del código: **lunes 2026-12-07** (después solo se corrigen errores y se ensaya). Alcance de la demo: recorrido completo de Fase 5, voz y video de cámara con LiveKit (CU-22, D-31) y archivos. La voz va primero y la cámara después, cuando el cierre del fork esté confirmado. La pantalla compartida queda aparte (T-15).
 
 | Semana | Fechas | Objetivo | Hito |
 |---|---|---|---|
 | 1 | 2026-11-18 a 11-23 | Integrar `main` en escritorio; cola local SQLite y reconexión; LiveKit en Compose con puertos validados (T-03 RabbitMQ en paralelo) | Dos clientes conversan con reconexión |
-| 2 | 2026-11-24 a 11-30 | Voz: token de LiveKit en Core (D-15), participantes y micrófono; fork de LiveKit en el escritorio (SIM-05); File Service con MinIO (SIM-04) | Llamada de voz entre dos clientes |
-| 3 | 2026-12-01 a 12-07 | Roles y permisos (CU-14, CU-15); perfil de producción del `compose`, TLS y puertos; extensión de video si alcanza; congelamiento el 12-07 | `docker compose up` en *healthy* |
+| 2 | 2026-11-24 a 11-30 | Voz: token de LiveKit en Core (D-15) con permisos explícitos, participantes y micrófono; fork de LiveKit con el cierre corregido (T-14) en el escritorio (SIM-05); File Service con MinIO (SIM-04) | Llamada de voz entre dos clientes |
+| 3 | 2026-12-01 a 12-07 | Roles y permisos (CU-14, CU-15); perfil de producción del `compose`, TLS y puertos; video de cámara (D-31) si T-14 queda confirmada; congelamiento el 12-07 | `docker compose up` en *healthy* |
 | Ensayo | 2026-12-08 y 12-09 | Ensayo completo en la laptop servidor, respaldos y plan de contingencia | Demo ensayada |
 | Expo | 2026-12-10 | Demostración | — |
 
@@ -115,7 +115,7 @@ CU-01, CU-03, CU-08, CU-11, CU-16 y CU-20.
 
 - Auth: inicio con Google (CU-04), recuperación de contraseña (CU-05), perfil y evento `user.updated` (CU-07).
 - Core: roles, permisos y moderación con invalidación de la caché de permisos (CU-14, CU-15); configurar, archivar, eliminar y abandonar grupo (CU-09, CU-12); invitaciones y canales (CU-10, CU-13); respuestas, reacciones, edición y eliminación (CU-17 a CU-19); proyectos y tareas con control optimista por versión (CU-25 a CU-28); notificaciones internas (CU-31).
-- Voz (CU-22): VoiceService emite el token de LiveKit; lista de participantes y estado del micrófono; desconexión al expulsar.
+- Voz y video (CU-22, D-31): VoiceService emite el token de LiveKit con `canPublish`, `canSubscribe` y `canPublishSources` explícitos (micrófono y cámara); lista de participantes, estado del micrófono y de la cámara; desconexión al expulsar. Sin pantalla compartida (T-15).
 - File Service (CU-23, CU-24): MinIO, vistas previas, estado pendiente con limpieza periódica, listado de archivos compartidos.
 - Report Service (CU-29, CU-30): consumo de eventos, agregados y consultas; exportación a PDF y CSV (prioridad baja).
 
@@ -163,3 +163,5 @@ Detectadas en la revisión del repositorio del 2026-10-07. Cada una debe convert
 | T-11 | Crear el tablero de GitHub Projects con un *issue* por caso de uso del MVP | — | Por asignar |
 | T-12 | Actualizar el documento de diseño (4+1) con D-01, D-04, D-05 y D-13, que cambian respecto a la AR02 | `docs` | Por asignar |
 | T-13 | Redis: no pasar la contraseña con `--requirepass` en `command` de `compose.yaml` (visible con `ps` y `docker inspect`); leerla desde un archivo de configuración | `infrastructure` | @Maple-M136279841 |
+| T-14 | Adoptar el fork de LiveKit con `PeerConnectionEngine.close()` serializado e idempotente (causa del aborto y del cuelgue al cerrar, ver D-31). Punto de partida: la copia parcheada de la PoC. Confirmar con más pares de sesiones largas y con sesiones largas con video; corregir también lo de las secciones 7.1 a 7.3, 7.5 y 7.6 del `REPORT.md` de la PoC (publicación, orden de cierre, expulsión, errores tragados, fuente de la cámara) | `desktop` | @Maple-M136279841 |
+| T-15 | Pantalla compartida, aparte del MVP: el SDK no expone la publicación y la captura de `webrtc-java` falló en Wayland (50 de 50). Probar bajo X11 y el diálogo del portal, o resolverla con navegador embebido; recibirla ya funciona | `desktop` | @Maple-M136279841 |
