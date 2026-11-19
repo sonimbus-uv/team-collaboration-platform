@@ -1,4 +1,4 @@
-package mx.uv.sonimbus.desktop.domain.session;
+package mx.uv.sonimbus.desktop.domain.registration;
 
 import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
@@ -6,15 +6,15 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Validación del formulario de registro (CU-01), idéntica a la de Auth
- * ({@code services/auth/src/validators/auth_validator.rs}) para que el servidor no rechace lo
- * que el cliente aceptó. Si Auth cambia su política (#20), hay que cambiar esta clase y su prueba.
+ * Validación del formulario de registro (CU-01), idéntica a la de Auth ({@code
+ * services/auth/src/validators/auth_validator.rs}) para que el servidor no rechace lo que el
+ * cliente aceptó. Si Auth cambia su política (#20), hay que cambiar esta clase y su prueba.
  *
- * <p>Equivalencias con Rust: la longitud de la contraseña se cuenta en puntos de código
- * ({@code chars().count()}); {@code is_uppercase}/{@code is_lowercase} son las propiedades
- * Unicode Uppercase/Lowercase ({@link Character#isUpperCase(int)}); el dígito es ASCII; y
- * {@code is_alphanumeric} es Alphabetic o categoría Nd/Nl/No, más amplio que
- * {@link Character#isLetterOrDigit(int)}.
+ * <p>Equivalencias con Rust: la longitud de la contraseña se cuenta en puntos de código ({@code
+ * chars().count()}); {@code is_uppercase}/{@code is_lowercase} son las propiedades Unicode
+ * Uppercase/Lowercase ({@link Character#isUpperCase(int)}); el dígito es ASCII; y {@code
+ * is_alphanumeric} es Alphabetic o categoría Nd/Nl/No, más amplio que {@link
+ * Character#isLetterOrDigit(int)}.
  */
 public final class RegistrationValidator {
 
@@ -54,8 +54,8 @@ public final class RegistrationValidator {
     }
 
     /**
-     * @param email    correo normalizado como lo guarda Auth (sin espacios a los lados y en
-     *                 minúsculas); es el que se envía
+     * @param email correo normalizado como lo guarda Auth (sin espacios a los lados y en
+     *     minúsculas); es el que se envía
      * @param problems vacío si el formulario es válido; ordenado como {@link Problem}
      */
     public record Result(String email, Set<Problem> problems) {
@@ -64,8 +64,7 @@ public final class RegistrationValidator {
         }
     }
 
-    private RegistrationValidator() {
-    }
+    private RegistrationValidator() {}
 
     public static Result validate(String email, String password, String confirmation) {
         String normalized = normalizeEmail(email == null ? "" : email);
@@ -100,7 +99,8 @@ public final class RegistrationValidator {
 
     /** {@code is_valid_email_format} de Auth; espera el correo ya normalizado. */
     public static boolean isValidEmailFormat(String email) {
-        if (utf8Length(email) > EMAIL_MAX_BYTES || email.codePoints().anyMatch(RegistrationValidator::isRustWhitespace)) {
+        if (utf8Length(email) > EMAIL_MAX_BYTES
+                || email.codePoints().anyMatch(RegistrationValidator::isRustWhitespace)) {
             return false;
         }
         int at = email.indexOf('@');
@@ -140,11 +140,15 @@ public final class RegistrationValidator {
     }
 
     private static boolean isValidLocalPart(String local) {
-        if (local.isEmpty() || local.length() > LOCAL_MAX_BYTES
-                || local.startsWith(".") || local.endsWith(".") || local.contains("..")) {
+        if (local.isEmpty()
+                || local.length() > LOCAL_MAX_BYTES
+                || local.startsWith(".")
+                || local.endsWith(".")
+                || local.contains("..")) {
             return false;
         }
-        return local.chars().allMatch(c -> isAsciiAlphanumeric(c) || LOCAL_SPECIALS.indexOf(c) >= 0);
+        return local.chars()
+                .allMatch(c -> isAsciiAlphanumeric(c) || LOCAL_SPECIALS.indexOf(c) >= 0);
     }
 
     private static boolean isValidDomain(String domain) {
@@ -153,8 +157,10 @@ public final class RegistrationValidator {
         }
         // split con límite -1 para conservar etiquetas vacías, como split('.') de Rust.
         for (String label : domain.split("\\.", -1)) {
-            if (label.isEmpty() || label.length() > LABEL_MAX_BYTES
-                    || label.startsWith("-") || label.endsWith("-")
+            if (label.isEmpty()
+                    || label.length() > LABEL_MAX_BYTES
+                    || label.startsWith("-")
+                    || label.endsWith("-")
                     || !label.chars().allMatch(c -> isAsciiAlphanumeric(c) || c == '-')) {
                 return false;
             }
@@ -178,14 +184,22 @@ public final class RegistrationValidator {
     }
 
     /**
-     * {@code char::is_whitespace}: propiedad Unicode White_Space. No coincide con
-     * {@link Character#isWhitespace(int)}, que excluye los espacios de no separación e incluye
+     * {@code char::is_whitespace}: propiedad Unicode White_Space. No coincide con {@link
+     * Character#isWhitespace(int)}, que excluye los espacios de no separación e incluye
      * U+001C–U+001F.
      */
     static boolean isRustWhitespace(int cp) {
-        return (cp >= 0x09 && cp <= 0x0D) || cp == 0x20 || cp == 0x85 || cp == 0xA0 || cp == 0x1680
-                || (cp >= 0x2000 && cp <= 0x200A) || cp == 0x2028 || cp == 0x2029 || cp == 0x202F
-                || cp == 0x205F || cp == 0x3000;
+        return (cp >= 0x09 && cp <= 0x0D)
+                || cp == 0x20
+                || cp == 0x85
+                || cp == 0xA0
+                || cp == 0x1680
+                || (cp >= 0x2000 && cp <= 0x200A)
+                || cp == 0x2028
+                || cp == 0x2029
+                || cp == 0x202F
+                || cp == 0x205F
+                || cp == 0x3000;
     }
 
     private static String rustTrim(String text) {

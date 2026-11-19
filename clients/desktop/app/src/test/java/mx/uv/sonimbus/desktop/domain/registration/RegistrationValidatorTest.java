@@ -1,17 +1,19 @@
-package mx.uv.sonimbus.desktop.domain.session;
+package mx.uv.sonimbus.desktop.domain.registration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
-import mx.uv.sonimbus.desktop.domain.session.RegistrationValidator.Problem;
-import mx.uv.sonimbus.desktop.domain.session.RegistrationValidator.Result;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator.Problem;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator.Result;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 
 class RegistrationValidatorTest {
 
@@ -28,7 +30,8 @@ class RegistrationValidatorTest {
 
     @Test
     void emailIsNormalizedLikeAuth() {
-        assertEquals("test@example.com",
+        assertEquals(
+                "test@example.com",
                 RegistrationValidator.validate(" TEST@Example.COM ", VALID, VALID).email());
     }
 
@@ -82,10 +85,19 @@ class RegistrationValidatorTest {
 
     @Test
     void allRequirementsAreReportedTogether() {
-        assertEquals(EnumSet.of(Problem.PASSWORD_MISSING_UPPERCASE, Problem.PASSWORD_MISSING_DIGIT,
-                Problem.PASSWORD_MISSING_SYMBOL), passwordProblems("invalidpassword"));
-        assertEquals(EnumSet.of(Problem.PASSWORD_TOO_SHORT, Problem.PASSWORD_MISSING_UPPERCASE,
-                Problem.PASSWORD_MISSING_DIGIT, Problem.PASSWORD_MISSING_SYMBOL), passwordProblems("abc"));
+        assertEquals(
+                EnumSet.of(
+                        Problem.PASSWORD_MISSING_UPPERCASE,
+                        Problem.PASSWORD_MISSING_DIGIT,
+                        Problem.PASSWORD_MISSING_SYMBOL),
+                passwordProblems("invalidpassword"));
+        assertEquals(
+                EnumSet.of(
+                        Problem.PASSWORD_TOO_SHORT,
+                        Problem.PASSWORD_MISSING_UPPERCASE,
+                        Problem.PASSWORD_MISSING_DIGIT,
+                        Problem.PASSWORD_MISSING_SYMBOL),
+                passwordProblems("abc"));
     }
 
     @Test
@@ -106,7 +118,8 @@ class RegistrationValidatorTest {
 
     @Test
     void numbersOutsideNdAreNotSymbolsAsInRust() {
-        // «²» (No) y «Ⅻ» (Nl) son alfanuméricos para Rust, aunque Character.isLetterOrDigit diga que no.
+        // «²» (No) y «Ⅻ» (Nl) son alfanuméricos para Rust, aunque Character.isLetterOrDigit diga
+        // que no.
         assertFalse(Character.isLetterOrDigit('²'));
         assertTrue(RegistrationValidator.isRustAlphanumeric('²'));
         assertTrue(RegistrationValidator.isRustAlphanumeric('Ⅻ'));
@@ -122,9 +135,27 @@ class RegistrationValidatorTest {
     // --- Correo ---
 
     @ParameterizedTest
-    @ValueSource(strings = {"invalid-email", "a@b", "a@@b.com", "a@b@c.com", "@b.com", "a@.com", "a@b.com.",
-            "a@b..com", "a@-b.com", "a@b-.com", ".a@b.com", "a.@b.com", "a..b@b.com", "a@b_com.com",
-            "a\u0000@b.com", "a b@c.com", "ñ@b.com", "a@ñ.com"})
+    @ValueSource(
+            strings = {
+                "invalid-email",
+                "a@b",
+                "a@@b.com",
+                "a@b@c.com",
+                "@b.com",
+                "a@.com",
+                "a@b.com.",
+                "a@b..com",
+                "a@-b.com",
+                "a@b-.com",
+                ".a@b.com",
+                "a.@b.com",
+                "a..b@b.com",
+                "a@b_com.com",
+                "a\u0000@b.com",
+                "a b@c.com",
+                "ñ@b.com",
+                "a@ñ.com"
+            })
     void rejectsMalformedAddresses(String email) {
         assertEquals(Set.of(Problem.EMAIL_INVALID), emailProblems(email), email);
     }
@@ -145,7 +176,10 @@ class RegistrationValidatorTest {
         assertEquals(Set.of(), emailProblems("a@" + label63 + ".mx"));
         assertEquals(Set.of(Problem.EMAIL_INVALID), emailProblems("a@" + label63 + "d.mx"));
 
-        String domain = String.join(".", List.of("d".repeat(63), "d".repeat(63), "d".repeat(63), "d".repeat(60)));
+        String domain =
+                String.join(
+                        ".",
+                        List.of("d".repeat(63), "d".repeat(63), "d".repeat(63), "d".repeat(60)));
         assertEquals(254, ("a@" + domain).length());
         assertEquals(Set.of(), emailProblems("a@" + domain));
         assertEquals(Set.of(Problem.EMAIL_INVALID), emailProblems("ab@" + domain));
@@ -169,17 +203,21 @@ class RegistrationValidatorTest {
 
     @Test
     void emptyFormReportsEachField() {
-        assertEquals(EnumSet.of(Problem.EMAIL_EMPTY, Problem.PASSWORD_EMPTY, Problem.CONFIRMATION_EMPTY),
+        assertEquals(
+                EnumSet.of(Problem.EMAIL_EMPTY, Problem.PASSWORD_EMPTY, Problem.CONFIRMATION_EMPTY),
                 RegistrationValidator.validate("  ", "", "").problems());
-        assertEquals(EnumSet.of(Problem.EMAIL_EMPTY, Problem.PASSWORD_EMPTY, Problem.CONFIRMATION_EMPTY),
+        assertEquals(
+                EnumSet.of(Problem.EMAIL_EMPTY, Problem.PASSWORD_EMPTY, Problem.CONFIRMATION_EMPTY),
                 RegistrationValidator.validate(null, null, null).problems());
     }
 
     @Test
     void confirmationMustMatch() {
-        assertEquals(Set.of(Problem.CONFIRMATION_MISMATCH),
+        assertEquals(
+                Set.of(Problem.CONFIRMATION_MISMATCH),
                 RegistrationValidator.validate(EMAIL, VALID, VALID + " ").problems());
-        assertEquals(Set.of(Problem.CONFIRMATION_MISMATCH),
+        assertEquals(
+                Set.of(Problem.CONFIRMATION_MISMATCH),
                 RegistrationValidator.validate(EMAIL, VALID, "validpass123!").problems());
     }
 

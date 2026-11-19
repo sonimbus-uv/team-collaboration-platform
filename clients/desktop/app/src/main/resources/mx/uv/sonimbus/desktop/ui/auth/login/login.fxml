@@ -16,9 +16,9 @@
 <?import javafx.scene.layout.VBox?>
 
 <StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-           fx:controller="mx.uv.sonimbus.desktop.ui.auth.LoginController"
+           fx:controller="mx.uv.sonimbus.desktop.ui.auth.login.LoginController"
            styleClass="auth-background"
-           stylesheets="@../../css/theme.css">
+           stylesheets="@../../../css/theme.css">
     <padding>
         <Insets top="24" right="24" bottom="24" left="24"/>
     </padding>

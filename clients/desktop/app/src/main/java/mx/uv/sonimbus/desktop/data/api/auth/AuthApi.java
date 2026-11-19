@@ -1,9 +1,15 @@
-package mx.uv.sonimbus.desktop.data.api;
+package mx.uv.sonimbus.desktop.data.api.auth;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+
+import mx.uv.sonimbus.desktop.data.api.ApiConfig;
+import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
+import mx.uv.sonimbus.desktop.data.api.ApiException;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,12 +22,14 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 /**
- * Cliente HTTP del Auth Service. Las llamadas bloquean: deben hacerse fuera del hilo de JavaFX
- * (ver {@code ui.common.BackgroundTasks}).
+ * Cliente HTTP del Auth Service. Las llamadas bloquean: deben hacerse fuera del hilo de JavaFX (ver
+ * {@code ui.common.BackgroundTasks}).
  */
 public class AuthApi {
 
-    /** Operaciones del servicio; el mismo código HTTP puede significar cosas distintas en cada una. */
+    /**
+     * Operaciones del servicio; el mismo código HTTP puede significar cosas distintas en cada una.
+     */
     enum Operation {
         REGISTER("register", AuthPaths.REGISTER),
         VERIFY_EMAIL("verify-email", AuthPaths.VERIFY_EMAIL),
@@ -52,15 +60,15 @@ public class AuthApi {
         }
     }
 
-    record ResendVerificationRequest(String email) {
-    }
+    record ResendVerificationRequest(String email) {}
 
     private final HttpClient http;
     private final String baseUrl;
     private final Duration requestTimeout;
-    private final ObjectMapper json = new ObjectMapper()
-            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final ObjectMapper json =
+            new ObjectMapper()
+                    .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public AuthApi(ApiConfig config) {
         this(HttpClient.newBuilder().connectTimeout(config.connectTimeout()).build(), config);
@@ -74,17 +82,20 @@ public class AuthApi {
 
     /** CU-01. Si {@code verificationEmailSent} es falso, hay que ofrecer el reenvío. */
     public Account register(String email, String password) throws ApiException {
-        return read(Operation.REGISTER, post(Operation.REGISTER, new RegisterRequest(email, password)));
+        return read(
+                Operation.REGISTER, post(Operation.REGISTER, new RegisterRequest(email, password)));
     }
 
     /** CU-02. El escritorio todavía no lo usa: la verificación se hace con el enlace del correo. */
     public Account verifyEmail(String token) throws ApiException {
-        return read(Operation.VERIFY_EMAIL, post(Operation.VERIFY_EMAIL, new VerifyEmailRequest(token)));
+        return read(
+                Operation.VERIFY_EMAIL,
+                post(Operation.VERIFY_EMAIL, new VerifyEmailRequest(token)));
     }
 
     /**
-     * CU-02. El servicio responde igual aunque la cuenta no exista, ya esté verificada o el
-     * reenvío anterior tenga menos de 60 segundos.
+     * CU-02. El servicio responde igual aunque la cuenta no exista, ya esté verificada o el reenvío
+     * anterior tenga menos de 60 segundos.
      */
     public void resendVerification(String email) throws ApiException {
         post(Operation.RESEND_VERIFICATION, new ResendVerificationRequest(email));
@@ -93,12 +104,15 @@ public class AuthApi {
     private HttpResponse<String> post(Operation operation, Object body) throws ApiException {
         HttpRequest request;
         try {
-            request = HttpRequest.newBuilder(URI.create(baseUrl + operation.path))
-                    .timeout(requestTimeout)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
-                    .build();
+            request =
+                    HttpRequest.newBuilder(URI.create(baseUrl + operation.path))
+                            .timeout(requestTimeout)
+                            .header("Content-Type", "application/json")
+                            .header("Accept", "application/json")
+                            .POST(
+                                    HttpRequest.BodyPublishers.ofString(
+                                            json.writeValueAsString(body)))
+                            .build();
         } catch (JsonProcessingException e) {
             // Sin la causa: el mensaje de Jackson podría citar el cuerpo con la contraseña.
             throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
@@ -118,10 +132,13 @@ public class AuthApi {
 
         int status = response.statusCode();
         if (status / 100 != 2) {
-            Duration retryAfter = response.headers().firstValue("Retry-After")
-                    .map(AuthApi::parseRetryAfter)
-                    .orElse(null);
-            throw new ApiException(classify(operation, status), operation.label, status, retryAfter);
+            Duration retryAfter =
+                    response.headers()
+                            .firstValue("Retry-After")
+                            .map(AuthApi::parseRetryAfter)
+                            .orElse(null);
+            throw new ApiException(
+                    classify(operation, status), operation.label, status, retryAfter);
         }
         return response;
     }
@@ -135,22 +152,28 @@ public class AuthApi {
     }
 
     /**
-     * Decide el caso solo con el código HTTP y la operación. El servicio envía
-     * {@code type: "about:blank"} en todos sus errores y su {@code detail} no es contrato (#14).
+     * Decide el caso solo con el código HTTP y la operación. El servicio envía {@code type:
+     * "about:blank"} en todos sus errores y su {@code detail} no es contrato (#14).
      */
     static ApiErrorKind classify(Operation operation, int status) {
         return switch (status) {
             case 400 -> ApiErrorKind.VALIDATION;
-            case 409 -> operation == Operation.REGISTER ? ApiErrorKind.EMAIL_TAKEN : ApiErrorKind.UNEXPECTED;
+            case 409 ->
+                    operation == Operation.REGISTER
+                            ? ApiErrorKind.EMAIL_TAKEN
+                            : ApiErrorKind.UNEXPECTED;
             case 429 -> ApiErrorKind.RATE_LIMITED;
             case 500 -> ApiErrorKind.SERVER;
             case 502, 503, 504 -> ApiErrorKind.UNAVAILABLE;
-            // 422 y 415 los produce Axum cuando el JSON enviado no es válido: es un error del cliente.
+            // 422 y 415 los produce Axum cuando el JSON enviado no es válido: es un error del
+            // cliente.
             default -> ApiErrorKind.UNEXPECTED;
         };
     }
 
-    /** {@code Retry-After} en segundos o como fecha HTTP (RFC 9110); {@code null} si no se entiende. */
+    /**
+     * {@code Retry-After} en segundos o como fecha HTTP (RFC 9110); {@code null} si no se entiende.
+     */
     static Duration parseRetryAfter(String value) {
         String text = value.strip();
         try {
@@ -159,8 +182,10 @@ public class AuthApi {
             // No son segundos: puede ser una fecha.
         }
         try {
-            Duration wait = Duration.between(ZonedDateTime.now(),
-                    ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME));
+            Duration wait =
+                    Duration.between(
+                            ZonedDateTime.now(),
+                            ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME));
             return wait.isNegative() ? Duration.ZERO : wait;
         } catch (DateTimeParseException e) {
             return null;

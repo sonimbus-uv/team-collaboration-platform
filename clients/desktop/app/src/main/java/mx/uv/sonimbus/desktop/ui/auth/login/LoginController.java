@@ -1,6 +1,5 @@
-package mx.uv.sonimbus.desktop.ui.auth;
+package mx.uv.sonimbus.desktop.ui.auth.login;
 
-import java.util.Objects;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -10,10 +9,14 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.common.PasswordVisibility;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
+import java.util.Objects;
 
 /**
  * CU-03. Auth todavía no tiene inicio de sesión: la vista valida los campos y avisa que no está
@@ -45,16 +48,20 @@ public class LoginController {
     private void initialize() {
         PasswordVisibility.bind(passwordField, passwordVisibleField);
         emailField.textProperty().addListener((obs, old, text) -> clearError(emailField));
-        passwordField.textProperty().addListener((obs, old, text) -> {
-            clearError(passwordField);
-            clearError(passwordVisibleField);
-        });
+        passwordField
+                .textProperty()
+                .addListener(
+                        (obs, old, text) -> {
+                            clearError(passwordField);
+                            clearError(passwordVisibleField);
+                        });
     }
 
     @FXML
     private void onLogin() {
         boolean emailEmpty = emailField.getText() == null || emailField.getText().isBlank();
-        boolean passwordEmpty = passwordField.getText() == null || passwordField.getText().isEmpty();
+        boolean passwordEmpty =
+                passwordField.getText() == null || passwordField.getText().isEmpty();
         if (emailEmpty || passwordEmpty) {
             if (emailEmpty) {
                 markInvalid(emailField);
@@ -63,14 +70,24 @@ public class LoginController {
                 markInvalid(passwordField);
                 markInvalid(passwordVisibleField);
             }
-            AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, AuthMessages.LOGIN_FIELDS_EMPTY);
+            AlertBox.show(
+                    errorBox,
+                    errorIconLabel,
+                    errorLabel,
+                    AlertBox.Kind.ERROR,
+                    AuthMessages.LOGIN_FIELDS_EMPTY);
             (emailEmpty ? emailField : visiblePasswordField()).requestFocus();
             return;
         }
         // TODO CU-03 (#35): autenticar con Auth cuando exista el endpoint; si falla, mensaje
         //                   genérico «Correo o contraseña incorrectos» (Fig. 10b) y, si funciona,
         //                   guardar la sesión de forma segura y viewManager.show(View.MAIN).
-        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.INFO, AuthMessages.LOGIN_UNAVAILABLE);
+        AlertBox.show(
+                errorBox,
+                errorIconLabel,
+                errorLabel,
+                AlertBox.Kind.INFO,
+                AuthMessages.LOGIN_UNAVAILABLE);
     }
 
     @FXML
@@ -81,7 +98,12 @@ public class LoginController {
     @FXML
     private void onGoogleLogin() {
         // TODO CU-04: iniciar flujo OAuth con Google cuando Auth tenga el endpoint
-        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.INFO, AuthMessages.GOOGLE_UNAVAILABLE);
+        AlertBox.show(
+                errorBox,
+                errorIconLabel,
+                errorLabel,
+                AlertBox.Kind.INFO,
+                AuthMessages.GOOGLE_UNAVAILABLE);
     }
 
     @FXML

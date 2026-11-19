@@ -1,8 +1,9 @@
 package mx.uv.sonimbus.desktop;
 
 import javafx.stage.Stage;
+
 import mx.uv.sonimbus.desktop.data.api.ApiConfig;
-import mx.uv.sonimbus.desktop.data.api.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;

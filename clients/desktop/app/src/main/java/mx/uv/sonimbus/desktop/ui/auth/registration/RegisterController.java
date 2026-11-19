@@ -1,9 +1,5 @@
-package mx.uv.sonimbus.desktop.ui.auth;
+package mx.uv.sonimbus.desktop.ui.auth.registration;
 
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -13,18 +9,25 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
-import mx.uv.sonimbus.desktop.data.api.Account;
+
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.AuthApi;
-import mx.uv.sonimbus.desktop.domain.session.RegistrationValidator;
-import mx.uv.sonimbus.desktop.domain.session.RegistrationValidator.Problem;
+import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator.Problem;
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.common.BusyButton;
 import mx.uv.sonimbus.desktop.ui.common.PasswordVisibility;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** CU-01: registro con correo y contraseña. */
 public class RegisterController {
@@ -37,12 +40,14 @@ public class RegisterController {
 
     /** Evita dobles envíos (Enter repetido o doble clic) mientras la petición está en curso. */
     private boolean submitting;
+
     /** Falso al salir de la vista: una respuesta tardía ya no debe navegar ni tocar la interfaz. */
     private boolean active = true;
+
     /** Correo normalizado del último 409, para el enlace de reenvío. */
     private String takenEmail;
 
-    @FXML private TextField nameField;      // Oculto hasta resolver #14 (Auth no recibe el nombre)
+    @FXML private TextField nameField; // Oculto hasta resolver #14 (Auth no recibe el nombre)
     @FXML private TextField emailField;
     @FXML private PasswordField passwordField;
     @FXML private TextField passwordVisibleField;
@@ -70,11 +75,16 @@ public class RegisterController {
         PasswordVisibility.bind(passwordField, passwordVisibleField);
         passwordHintLabel.setText(AuthMessages.PASSWORD_RULE);
         emailField.textProperty().addListener((obs, old, text) -> clearError(emailField));
-        passwordField.textProperty().addListener((obs, old, text) -> {
-            clearError(passwordField);
-            clearError(passwordVisibleField);
-        });
-        confirmPasswordField.textProperty().addListener((obs, old, text) -> clearError(confirmPasswordField));
+        passwordField
+                .textProperty()
+                .addListener(
+                        (obs, old, text) -> {
+                            clearError(passwordField);
+                            clearError(passwordVisibleField);
+                        });
+        confirmPasswordField
+                .textProperty()
+                .addListener((obs, old, text) -> clearError(confirmPasswordField));
     }
 
     @FXML
@@ -82,8 +92,11 @@ public class RegisterController {
         if (submitting) {
             return;
         }
-        RegistrationValidator.Result result = RegistrationValidator.validate(
-                emailField.getText(), passwordField.getText(), confirmPasswordField.getText());
+        RegistrationValidator.Result result =
+                RegistrationValidator.validate(
+                        emailField.getText(),
+                        passwordField.getText(),
+                        confirmPasswordField.getText());
         if (!result.isValid()) {
             showValidationProblems(result.problems());
             return;
@@ -92,7 +105,8 @@ public class RegisterController {
         setSubmitting(true);
         String email = result.email();
         String password = passwordField.getText();
-        tasks.run(() -> authApi.register(email, password),
+        tasks.run(
+                () -> authApi.register(email, password),
                 account -> onRegistered(email, account),
                 this::onRegisterFailed);
     }
@@ -102,9 +116,12 @@ public class RegisterController {
             return;
         }
         setSubmitting(false);
-        String sentTo = account.email() == null || account.email().isBlank() ? email : account.email();
+        String sentTo =
+                account.email() == null || account.email().isBlank() ? email : account.email();
         leave();
-        viewManager.show(View.VERIFY_ACCOUNT, VerifyAccountParams.afterRegistration(sentTo, account.verificationEmailSent()));
+        viewManager.show(
+                View.VERIFY_ACCOUNT,
+                VerifyAccountParams.afterRegistration(sentTo, account.verificationEmailSent()));
     }
 
     private void onRegisterFailed(Throwable error) {
@@ -153,13 +170,16 @@ public class RegisterController {
 
     private void showValidationProblems(Set<Problem> problems) {
         hideMessages();
-        for (TextInputControl field : new TextInputControl[] {
-                emailField, passwordField, passwordVisibleField, confirmPasswordField}) {
+        for (TextInputControl field :
+                new TextInputControl[] {
+                    emailField, passwordField, passwordVisibleField, confirmPasswordField
+                }) {
             field.getStyleClass().remove(FIELD_INVALID);
         }
-        String message = Stream.of(AuthMessages.forEmail(problems), AuthMessages.forPassword(problems))
-                .filter(Objects::nonNull)
-                .collect(Collectors.joining("\n"));
+        String message =
+                Stream.of(AuthMessages.forEmail(problems), AuthMessages.forPassword(problems))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.joining("\n"));
         if (message.isEmpty()) {
             AlertBox.hide(errorBox);
         } else {
@@ -205,8 +225,10 @@ public class RegisterController {
     private void setSubmitting(boolean value) {
         submitting = value;
         BusyButton.setBusy(registerButton, value, "Creando cuenta…");
-        for (TextInputControl field : new TextInputControl[] {
-                emailField, passwordField, passwordVisibleField, confirmPasswordField}) {
+        for (TextInputControl field :
+                new TextInputControl[] {
+                    emailField, passwordField, passwordVisibleField, confirmPasswordField
+                }) {
             field.setEditable(!value);
         }
         googleButton.setDisable(value);

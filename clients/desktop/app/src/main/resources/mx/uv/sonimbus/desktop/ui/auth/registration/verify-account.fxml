@@ -14,10 +14,10 @@
 <?import javafx.scene.text.TextFlow?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="mx.uv.sonimbus.desktop.ui.auth.VerifyAccountController"
+            fx:controller="mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountController"
             fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER"
             styleClass="auth-scroll"
-            stylesheets="@../../css/theme.css">
+            stylesheets="@../../../css/theme.css">
     <StackPane styleClass="auth-background">
         <padding>
             <Insets top="24" right="24" bottom="24" left="24"/>

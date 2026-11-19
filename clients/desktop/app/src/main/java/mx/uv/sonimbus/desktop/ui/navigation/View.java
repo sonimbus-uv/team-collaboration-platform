@@ -2,10 +2,10 @@ package mx.uv.sonimbus.desktop.ui.navigation;
 
 /** Vistas de la aplicación; la ruta es relativa a resources/mx/uv/sonimbus/desktop/ui/. */
 public enum View {
-    LOGIN("auth/login.fxml"),
-    REGISTER("auth/register.fxml"),
-    VERIFY_ACCOUNT("auth/verify-account.fxml"),
-    RECOVER_PASSWORD("auth/recover-password.fxml"),
+    LOGIN("auth/login/login.fxml"),
+    REGISTER("auth/registration/register.fxml"),
+    VERIFY_ACCOUNT("auth/registration/verify-account.fxml"),
+    RECOVER_PASSWORD("auth/recovery/recover-password.fxml"),
     MAIN("shell/main.fxml"),
     TEXT_CHANNEL("chat/text-channel.fxml"),
     VOICE_CHANNEL("voice/voice-channel.fxml"),

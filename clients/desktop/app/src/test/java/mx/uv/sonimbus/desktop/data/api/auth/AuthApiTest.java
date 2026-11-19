@@ -1,4 +1,4 @@
-package mx.uv.sonimbus.desktop.data.api;
+package mx.uv.sonimbus.desktop.data.api.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,6 +11,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+
+import mx.uv.sonimbus.desktop.data.api.ApiConfig;
+import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
+import mx.uv.sonimbus.desktop.data.api.ApiException;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -24,15 +35,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.function.Executable;
 
 class AuthApiTest {
 
     private static final String PASSWORD = "ValidPass123!";
-    private static final String ACCOUNT = """
+    private static final String ACCOUNT =
+            """
             {"user_id":"7b0c","email":"ana@uv.mx","email_verified":%s,"status":"active",\
             "verification_email_sent":%s}""";
 
@@ -132,14 +140,17 @@ class AuthApiTest {
 
     @Test
     void anyBadRequestIsValidationWhateverTheDetail() {
-        for (String detail : new String[] {"Invalid email format", "Password is too short", "Something new"}) {
+        for (String detail :
+                new String[] {"Invalid email format", "Password is too short", "Something new"}) {
             respond(400, problem(400, "Invalid request", detail));
             assertEquals(ApiErrorKind.VALIDATION, registerFails().kind(), detail);
         }
         respond(400, problem(400, "Invalid request", "Invalid email format"));
         assertEquals(ApiErrorKind.VALIDATION, resendFails().kind());
         respond(400, problem(400, "Invalid request", "Invalid or expired verification token"));
-        assertEquals(ApiErrorKind.VALIDATION, assertThrows(ApiException.class, () -> api.verifyEmail("x")).kind());
+        assertEquals(
+                ApiErrorKind.VALIDATION,
+                assertThrows(ApiException.class, () -> api.verifyEmail("x")).kind());
     }
 
     @Test
@@ -154,10 +165,12 @@ class AuthApiTest {
 
     @Test
     void tooManyRequestsCarriesRetryAfterSeconds() {
-        server.createContext("/", exchange -> {
-            exchange.getResponseHeaders().add("Retry-After", "60");
-            send(exchange, 429, problem(429, "Too many requests", "Please retry later."));
-        });
+        server.createContext(
+                "/",
+                exchange -> {
+                    exchange.getResponseHeaders().add("Retry-After", "60");
+                    send(exchange, 429, problem(429, "Too many requests", "Please retry later."));
+                });
 
         ApiException e = registerFails();
 
@@ -180,16 +193,20 @@ class AuthApiTest {
         assertEquals(Duration.ofSeconds(60), AuthApi.parseRetryAfter(" 60 "));
         assertEquals(Duration.ZERO, AuthApi.parseRetryAfter("-5"));
         assertNull(AuthApi.parseRetryAfter("pronto"));
-        String inTwoMinutes = DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now().plusMinutes(2));
+        String inTwoMinutes =
+                DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now().plusMinutes(2));
         long seconds = AuthApi.parseRetryAfter(inTwoMinutes).toSeconds();
         assertTrue(seconds > 100 && seconds <= 120, "segundos: " + seconds);
-        String past = DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now().minusMinutes(2));
+        String past =
+                DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now().minusMinutes(2));
         assertEquals(Duration.ZERO, AuthApi.parseRetryAfter(past));
     }
 
     @Test
     void internalErrorIsServer() {
-        respond(500, problem(500, "Internal server error", "The service cannot complete the request."));
+        respond(
+                500,
+                problem(500, "Internal server error", "The service cannot complete the request."));
 
         ApiException e = registerFails();
 
@@ -206,7 +223,12 @@ class AuthApiTest {
 
     @Test
     void serviceUnavailableIsUnavailable() {
-        respond(503, problem(503, "Database error", "The service cannot complete the database operation."));
+        respond(
+                503,
+                problem(
+                        503,
+                        "Database error",
+                        "The service cannot complete the database operation."));
 
         assertEquals(ApiErrorKind.UNAVAILABLE, resendFails().kind());
     }
@@ -221,7 +243,8 @@ class AuthApiTest {
     @Test
     void classificationTable() {
         assertEquals(ApiErrorKind.EMAIL_TAKEN, AuthApi.classify(AuthApi.Operation.REGISTER, 409));
-        assertEquals(ApiErrorKind.UNEXPECTED, AuthApi.classify(AuthApi.Operation.VERIFY_EMAIL, 409));
+        assertEquals(
+                ApiErrorKind.UNEXPECTED, AuthApi.classify(AuthApi.Operation.VERIFY_EMAIL, 409));
         assertEquals(ApiErrorKind.UNAVAILABLE, AuthApi.classify(AuthApi.Operation.REGISTER, 502));
         assertEquals(ApiErrorKind.UNAVAILABLE, AuthApi.classify(AuthApi.Operation.REGISTER, 504));
         assertEquals(ApiErrorKind.UNEXPECTED, AuthApi.classify(AuthApi.Operation.REGISTER, 404));
@@ -249,14 +272,16 @@ class AuthApiTest {
 
     @Test
     void slowServiceTimesOut() {
-        server.createContext("/", exchange -> {
-            try {
-                release.await(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            send(exchange, 201, ACCOUNT.formatted(false, true));
-        });
+        server.createContext(
+                "/",
+                exchange -> {
+                    try {
+                        release.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    send(exchange, 201, ACCOUNT.formatted(false, true));
+                });
         api = new AuthApi(new ApiConfig(baseUrl(), Duration.ofSeconds(1), Duration.ofMillis(200)));
 
         ApiException e = registerFails();
@@ -283,7 +308,9 @@ class AuthApiTest {
     void tokenNeverAppearsInExceptions() {
         respond(400, problem(400, "Invalid request", "Invalid or expired verification token"));
 
-        assertSecretAbsent(assertThrows(ApiException.class, () -> api.verifyEmail("tok-secret-42")), "tok-secret-42");
+        assertSecretAbsent(
+                assertThrows(ApiException.class, () -> api.verifyEmail("tok-secret-42")),
+                "tok-secret-42");
     }
 
     @Test
@@ -303,7 +330,8 @@ class AuthApiTest {
     }
 
     private ApiException resendFails() {
-        return assertThrows(ApiException.class, (Executable) () -> api.resendVerification("ana@uv.mx"));
+        return assertThrows(
+                ApiException.class, (Executable) () -> api.resendVerification("ana@uv.mx"));
     }
 
     /** Revisa el mensaje, la cadena de causas y la traza completa. */
@@ -348,6 +376,6 @@ class AuthApiTest {
     }
 
     private Map<String, String> sentJson() throws IOException {
-        return new ObjectMapper().readValue(requestBody, new TypeReference<>() { });
+        return new ObjectMapper().readValue(requestBody, new TypeReference<>() {});
     }
 }

@@ -1,4 +1,6 @@
-package mx.uv.sonimbus.desktop.data.api;
+package mx.uv.sonimbus.desktop.data.api.auth;
+
+import mx.uv.sonimbus.desktop.data.api.ApiConfig;
 
 /** Rutas del Auth Service, relativas a {@link ApiConfig#authBaseUrl()}. */
 final class AuthPaths {
@@ -10,6 +12,5 @@ final class AuthPaths {
     static final String VERIFY_EMAIL = PREFIX + "/auth/verify-email";
     static final String RESEND_VERIFICATION = PREFIX + "/auth/resend-verification";
 
-    private AuthPaths() {
-    }
+    private AuthPaths() {}
 }

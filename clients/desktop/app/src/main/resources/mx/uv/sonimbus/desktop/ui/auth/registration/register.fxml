@@ -16,10 +16,10 @@
 <?import javafx.scene.layout.VBox?>
 
 <ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="mx.uv.sonimbus.desktop.ui.auth.RegisterController"
+            fx:controller="mx.uv.sonimbus.desktop.ui.auth.registration.RegisterController"
             fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER"
             styleClass="auth-scroll"
-            stylesheets="@../../css/theme.css">
+            stylesheets="@../../../css/theme.css">
     <StackPane styleClass="auth-background">
         <padding>
             <Insets top="24" right="24" bottom="24" left="24"/>

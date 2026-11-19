@@ -1,7 +1,5 @@
-package mx.uv.sonimbus.desktop.ui.auth;
+package mx.uv.sonimbus.desktop.ui.auth.registration;
 
-import java.time.Duration;
-import java.util.Objects;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.fxml.FXML;
@@ -10,15 +8,20 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Text;
+
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.common.BusyButton;
 import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
+import java.time.Duration;
+import java.util.Objects;
 
 /**
  * CU-02 adaptado al enlace: Auth envía un enlace de verificación (no un código) y el usuario lo
@@ -28,6 +31,7 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
 
     /** Igual al cooldown de reenvío de Auth. */
     static final int RESEND_COOLDOWN_SECONDS = 60;
+
     private static final String RESEND_TEXT = "Reenviar correo";
     private static final String RESEND_ACCESSIBLE_TEXT = "Reenviar correo de verificación";
 
@@ -37,6 +41,7 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
 
     /** Correo recibido como parámetro; {@code null} si la vista se abrió sin él (demostración). */
     private String email;
+
     private boolean sending;
     private boolean active = true;
     private Timeline cooldown;
@@ -52,7 +57,8 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
     @FXML private Button resendButton;
     @FXML private Hyperlink backToLoginLink;
 
-    public VerifyAccountController(AuthApi authApi, BackgroundTasks tasks, ViewManager viewManager) {
+    public VerifyAccountController(
+            AuthApi authApi, BackgroundTasks tasks, ViewManager viewManager) {
         this.authApi = Objects.requireNonNull(authApi);
         this.tasks = Objects.requireNonNull(tasks);
         this.viewManager = Objects.requireNonNull(viewManager);
@@ -76,12 +82,18 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         sentToEmailText.setText(email);
         resendButton.setDisable(false);
         switch (parameters.delivery()) {
-            // Auth acaba de enviar el correo: su cooldown ya corre, así que el botón también espera.
+            // Auth acaba de enviar el correo: su cooldown ya corre, así que el botón también
+            // espera.
             case SENT -> startCooldown(RESEND_COOLDOWN_SECONDS);
-            case FAILED -> AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR,
-                    AuthMessages.VERIFICATION_NOT_SENT);
+            case FAILED ->
+                    AlertBox.show(
+                            errorBox,
+                            errorIconLabel,
+                            errorLabel,
+                            AlertBox.Kind.ERROR,
+                            AuthMessages.VERIFICATION_NOT_SENT);
             // Desde un 409 no se sabe nada del envío: el reenvío queda disponible de inmediato.
-            case UNKNOWN -> { }
+            case UNKNOWN -> {}
         }
     }
 
@@ -95,10 +107,13 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         AlertBox.setShown(infoBox, false);
         BusyButton.setBusy(resendButton, true, "Enviando…");
         String to = email;
-        tasks.run(() -> {
-            authApi.resendVerification(to);
-            return null;
-        }, ignored -> onResent(), this::onResendFailed);
+        tasks.run(
+                () -> {
+                    authApi.resendVerification(to);
+                    return null;
+                },
+                ignored -> onResent(),
+                this::onResendFailed);
     }
 
     private void onResent() {
@@ -118,12 +133,26 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         sending = false;
         BusyButton.setBusy(resendButton, false, null);
         if (!(error instanceof ApiException e)) {
-            AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, AuthMessages.UNEXPECTED);
+            AlertBox.show(
+                    errorBox,
+                    errorIconLabel,
+                    errorLabel,
+                    AlertBox.Kind.ERROR,
+                    AuthMessages.UNEXPECTED);
             return;
         }
-        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, AuthMessages.forResendVerification(e));
+        AlertBox.show(
+                errorBox,
+                errorIconLabel,
+                errorLabel,
+                AlertBox.Kind.ERROR,
+                AuthMessages.forResendVerification(e));
         if (e.kind() == ApiErrorKind.RATE_LIMITED) {
-            long wait = e.retryAfter().map(Duration::toSeconds).filter(s -> s > 0).orElse((long) RESEND_COOLDOWN_SECONDS);
+            long wait =
+                    e.retryAfter()
+                            .map(Duration::toSeconds)
+                            .filter(s -> s > 0)
+                            .orElse((long) RESEND_COOLDOWN_SECONDS);
             startCooldown((int) Math.min(wait, Integer.MAX_VALUE));
         }
     }
@@ -146,10 +175,14 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         stopCooldown();
         cooldownRemaining = seconds;
         showCooldown();
-        cooldown = new Timeline(new KeyFrame(javafx.util.Duration.seconds(1), event -> {
-            cooldownRemaining--;
-            showCooldown();
-        }));
+        cooldown =
+                new Timeline(
+                        new KeyFrame(
+                                javafx.util.Duration.seconds(1),
+                                event -> {
+                                    cooldownRemaining--;
+                                    showCooldown();
+                                }));
         cooldown.setCycleCount(seconds);
         cooldown.play();
     }
@@ -158,7 +191,8 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         if (cooldownRemaining > 0) {
             resendButton.setDisable(true);
             resendButton.setText(cooldownText(cooldownRemaining));
-            resendButton.setAccessibleText(RESEND_ACCESSIBLE_TEXT + ", disponible en " + cooldownRemaining + " segundos");
+            resendButton.setAccessibleText(
+                    RESEND_ACCESSIBLE_TEXT + ", disponible en " + cooldownRemaining + " segundos");
         } else {
             resendButton.setDisable(false);
             resendButton.setText(RESEND_TEXT);

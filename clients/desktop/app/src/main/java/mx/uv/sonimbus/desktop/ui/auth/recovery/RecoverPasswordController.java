@@ -1,6 +1,5 @@
-package mx.uv.sonimbus.desktop.ui.auth;
+package mx.uv.sonimbus.desktop.ui.auth.recovery;
 
-import java.util.Objects;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -11,9 +10,13 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
+import java.util.Objects;
 
 /**
  * CU-05. Auth todavía no tiene recuperación de contraseña: el paso 1 valida el correo y avisa que
@@ -64,11 +67,15 @@ public class RecoverPasswordController {
 
     @FXML
     private void initialize() {
-        emailField.textProperty().addListener((obs, old, text) -> {
-            emailField.getStyleClass().remove(FIELD_INVALID);
-            AlertBox.hide(sentInfoBox);
-        });
-        // TODO CU-05: enlazar newPasswordVisibleField.textProperty() con newPasswordField.textProperty()
+        emailField
+                .textProperty()
+                .addListener(
+                        (obs, old, text) -> {
+                            emailField.getStyleClass().remove(FIELD_INVALID);
+                            AlertBox.hide(sentInfoBox);
+                        });
+        // TODO CU-05: enlazar newPasswordVisibleField.textProperty() con
+        // newPasswordField.textProperty()
         // TODO CU-05: TextFormatter en codeField para aceptar solo 6 dígitos
         // TODO CU-05: ocultar errores y quitar "field-invalid" al editar los campos
     }
@@ -79,7 +86,11 @@ public class RecoverPasswordController {
             if (!emailField.getStyleClass().contains(FIELD_INVALID)) {
                 emailField.getStyleClass().add(FIELD_INVALID);
             }
-            AlertBox.show(sentInfoBox, sentInfoIconLabel, sentInfoLabel, AlertBox.Kind.ERROR,
+            AlertBox.show(
+                    sentInfoBox,
+                    sentInfoIconLabel,
+                    sentInfoLabel,
+                    AlertBox.Kind.ERROR,
                     "Escribe tu correo electrónico.");
             emailField.requestFocus();
             return;
@@ -125,7 +136,11 @@ public class RecoverPasswordController {
     }
 
     private void showUnavailable() {
-        AlertBox.show(sentInfoBox, sentInfoIconLabel, sentInfoLabel, AlertBox.Kind.INFO,
+        AlertBox.show(
+                sentInfoBox,
+                sentInfoIconLabel,
+                sentInfoLabel,
+                AlertBox.Kind.INFO,
                 AuthMessages.RECOVERY_UNAVAILABLE);
     }
 }

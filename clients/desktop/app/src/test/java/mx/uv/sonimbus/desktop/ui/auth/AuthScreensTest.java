@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.Duration;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -18,20 +17,26 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
-import mx.uv.sonimbus.desktop.data.api.Account;
+
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
+import mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountParams;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testfx.api.FxRobot;
 import org.testfx.framework.junit5.ApplicationExtension;
 import org.testfx.framework.junit5.Start;
 import org.testfx.util.WaitForAsyncUtils;
+
+import java.time.Duration;
 
 /** Pantallas de autenticación con JavaFX real (Monocle sin pantalla) y Auth simulado. */
 @ExtendWith(ApplicationExtension.class)
@@ -51,8 +56,11 @@ class AuthScreensTest {
         viewManager = new ViewManager(stage, controllers);
         controllers
                 .register(AuthApi.class, authApi)
-                // El trabajo corre en el mismo hilo; la respuesta llega con runLater, como en la app.
-                .register(BackgroundTasks.class, new BackgroundTasks(Runnable::run, Platform::runLater))
+                // El trabajo corre en el mismo hilo; la respuesta llega con runLater, como en la
+                // app.
+                .register(
+                        BackgroundTasks.class,
+                        new BackgroundTasks(Runnable::run, Platform::runLater))
                 .register(ViewManager.class, viewManager);
     }
 
@@ -67,8 +75,10 @@ class AuthScreensTest {
     }
 
     @Test
-    void successfulRegistrationNavigatesToVerificationWithTheEmail(FxRobot robot) throws ApiException {
-        when(authApi.register(EMAIL, PASSWORD)).thenReturn(new Account("7b0c", EMAIL, false, "active", true));
+    void successfulRegistrationNavigatesToVerificationWithTheEmail(FxRobot robot)
+            throws ApiException {
+        when(authApi.register(EMAIL, PASSWORD))
+                .thenReturn(new Account("7b0c", EMAIL, false, "active", true));
         open(robot, View.REGISTER, null);
 
         fillRegistration(robot, "  Ana@UV.mx ", PASSWORD, PASSWORD);
@@ -92,7 +102,8 @@ class AuthScreensTest {
         robot.clickOn("#registerButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals("Ya existe una cuenta con este correo.", label(robot, "#errorLabel").getText());
+        assertEquals(
+                "Ya existe una cuenta con este correo.", label(robot, "#errorLabel").getText());
         assertTrue(field(robot, "#emailField").getStyleClass().contains("field-invalid"));
         assertTrue(node(robot, "#resendVerificationLink").isVisible());
 
@@ -123,14 +134,19 @@ class AuthScreensTest {
     @Test
     void connectionErrorShowsSpanishMessage(FxRobot robot) throws ApiException {
         when(authApi.register(EMAIL, PASSWORD))
-                .thenThrow(new ApiException(ApiErrorKind.TIMEOUT, "register", new java.net.http.HttpTimeoutException("x")));
+                .thenThrow(
+                        new ApiException(
+                                ApiErrorKind.TIMEOUT,
+                                "register",
+                                new java.net.http.HttpTimeoutException("x")));
         open(robot, View.REGISTER, null);
 
         fillRegistration(robot, EMAIL, PASSWORD, PASSWORD);
         robot.clickOn("#registerButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals("No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.",
+        assertEquals(
+                "No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.",
                 label(robot, "#errorLabel").getText());
         Button register = robot.lookup("#registerButton").queryButton();
         assertFalse(register.isDisabled(), "se puede reintentar");
@@ -171,14 +187,22 @@ class AuthScreensTest {
 
     @Test
     void rateLimitedResendWaitsWhatTheServerSays(FxRobot robot) throws ApiException {
-        doThrow(new ApiException(ApiErrorKind.RATE_LIMITED, "resend-verification", 429, Duration.ofSeconds(30)))
-                .when(authApi).resendVerification(anyString());
+        doThrow(
+                        new ApiException(
+                                ApiErrorKind.RATE_LIMITED,
+                                "resend-verification",
+                                429,
+                                Duration.ofSeconds(30)))
+                .when(authApi)
+                .resendVerification(anyString());
         open(robot, View.VERIFY_ACCOUNT, VerifyAccountParams.forExistingAccount(EMAIL));
 
         robot.clickOn("#resendButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals("Demasiadas solicitudes. Intenta de nuevo en 30 segundos.", label(robot, "#errorLabel").getText());
+        assertEquals(
+                "Demasiadas solicitudes. Intenta de nuevo en 30 segundos.",
+                label(robot, "#errorLabel").getText());
         Button resend = robot.lookup("#resendButton").queryButton();
         assertTrue(resend.isDisabled());
         assertTrue(resend.getText().matches("Reenviar en (30|29) s"), resend.getText());
@@ -220,10 +244,11 @@ class AuthScreensTest {
     void loginIsNotAvailableYet(FxRobot robot) {
         open(robot, View.LOGIN, null);
 
-        robot.interact(() -> {
-            field(robot, "#emailField").setText(EMAIL);
-            field(robot, "#passwordField").setText(PASSWORD);
-        });
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(EMAIL);
+                    field(robot, "#passwordField").setText(PASSWORD);
+                });
         robot.clickOn("#loginButton");
         WaitForAsyncUtils.waitForFxEvents();
 
@@ -231,7 +256,10 @@ class AuthScreensTest {
         Node box = node(robot, "#errorBox");
         assertTrue(box.getStyleClass().contains("alert-info"));
         assertFalse(box.getStyleClass().contains("alert-error"));
-        assertEquals("i", label(robot, "#errorIconLabel").getText(), "se distingue por icono, no solo color");
+        assertEquals(
+                "i",
+                label(robot, "#errorIconLabel").getText(),
+                "se distingue por icono, no solo color");
         verifyNoInteractions(authApi);
     }
 
@@ -262,20 +290,23 @@ class AuthScreensTest {
     // --- Utilidades ---
 
     private void open(FxRobot robot, View view, Object parameters) {
-        robot.interact(() -> {
-            viewManager.show(view, parameters);
-            stage.show();
-            stage.toFront();
-        });
+        robot.interact(
+                () -> {
+                    viewManager.show(view, parameters);
+                    stage.show();
+                    stage.toFront();
+                });
         WaitForAsyncUtils.waitForFxEvents();
     }
 
-    private void fillRegistration(FxRobot robot, String email, String password, String confirmation) {
-        robot.interact(() -> {
-            field(robot, "#emailField").setText(email);
-            field(robot, "#passwordField").setText(password);
-            field(robot, "#confirmPasswordField").setText(confirmation);
-        });
+    private void fillRegistration(
+            FxRobot robot, String email, String password, String confirmation) {
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText(email);
+                    field(robot, "#passwordField").setText(password);
+                    field(robot, "#confirmPasswordField").setText(confirmation);
+                });
     }
 
     private static TextInputControl field(FxRobot robot, String query) {
