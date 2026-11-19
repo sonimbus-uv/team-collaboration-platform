@@ -114,6 +114,7 @@ struct MockState {
     key_response: StdMutex<(StatusCode, String)>,
     token_requests: AtomicUsize,
     key_requests: AtomicUsize,
+    key_delay_millis: AtomicUsize,
     form: StdMutex<HashMap<String, String>>,
 }
 
@@ -139,6 +140,7 @@ impl TestProvider {
             key_response: StdMutex::new((StatusCode::OK, signing_material().1.to_string())),
             token_requests: AtomicUsize::new(0),
             key_requests: AtomicUsize::new(0),
+            key_delay_millis: AtomicUsize::new(0),
             form: StdMutex::new(HashMap::new()),
         });
         let router = Router::new()
@@ -157,6 +159,10 @@ impl TestProvider {
                 "/keys",
                 get(|State(state): State<Arc<MockState>>| async move {
                     state.key_requests.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(
+                        state.key_delay_millis.load(Ordering::SeqCst) as u64,
+                    ))
+                    .await;
                     let (status, body) = state.key_response.lock().unwrap().clone();
                     (status, [("cache-control", "public, max-age=3600")], body)
                 }),
@@ -170,7 +176,8 @@ impl TestProvider {
         let mut provider = GoogleOidcProvider::new(config()).unwrap();
         provider.client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(2))
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
             .build()
             .unwrap();
         provider.token_endpoint = Url::parse(&format!("http://{address}/token")).unwrap();
@@ -524,4 +531,33 @@ async fn invalid_jwks_fail_closed_and_do_not_trigger_repeated_downloads() {
         }
         assert_eq!(fixture.state.key_requests.load(Ordering::SeqCst), 1);
     }
+}
+
+#[tokio::test]
+async fn slower_signing_key_download_can_complete_without_replaying_the_code() {
+    let fixture = TestProvider::new(&sign_identity_token(&claims(), "test-key")).await;
+    fixture
+        .state
+        .key_delay_millis
+        .store(6_000, Ordering::SeqCst);
+
+    assert!(fixture.exchange().await.is_ok());
+    assert_eq!(fixture.state.token_requests.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.state.key_requests.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn stalled_signing_key_download_remains_bounded_and_is_not_retried() {
+    let fixture = TestProvider::new(&sign_identity_token(&claims(), "test-key")).await;
+    fixture
+        .state
+        .key_delay_millis
+        .store(30_000, Ordering::SeqCst);
+
+    let result = tokio::time::timeout(Duration::from_secs(14), fixture.exchange())
+        .await
+        .expect("OIDC requests must finish before the gateway deadline");
+    assert!(matches!(result, Err(FederatedIdentityError::Unavailable)));
+    assert_eq!(fixture.state.token_requests.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.state.key_requests.load(Ordering::SeqCst), 1);
 }
