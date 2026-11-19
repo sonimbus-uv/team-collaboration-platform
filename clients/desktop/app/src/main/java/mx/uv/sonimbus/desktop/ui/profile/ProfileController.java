@@ -43,6 +43,8 @@ public class ProfileController {
     private boolean active = true;
 
     @FXML private ScrollPane profileScroll;
+    @FXML private javafx.scene.Node googleLink;
+    @FXML private GoogleLinkController googleLinkController;
 
     // Datos del perfil
     @FXML private HBox profileSavedBox;
@@ -143,8 +145,24 @@ public class ProfileController {
                                 }
                             });
         }
-        logoutButton.setDisable(!sessions.isAuthenticated());
-        updatePasswordButton.setDisable(!sessions.isAuthenticated());
+        googleLinkController
+                .busyProperty()
+                .addListener(
+                        (observable, previous, busy) -> {
+                            logoutButton.setDisable(
+                                    busy
+                                            || changingPassword
+                                            || loggingOut
+                                            || !sessions.isAuthenticated());
+                            updatePasswordButton.setDisable(
+                                    busy
+                                            || changingPassword
+                                            || loggingOut
+                                            || !sessions.isAuthenticated());
+                        });
+        logoutButton.setDisable(googleLinkController.isBusy() || !sessions.isAuthenticated());
+        updatePasswordButton.setDisable(
+                googleLinkController.isBusy() || !sessions.isAuthenticated());
         // TODO CU-07: cargar displayNameLabel, emailLabel, nameField y la foto actual
         //             (currentAvatarView con clip circular, o iniciales en avatarInitialsLabel)
         // TODO CU-07: llenar avatarsPane con un ToggleButton ("avatar-option") por cada imagen
@@ -200,7 +218,7 @@ public class ProfileController {
 
     @FXML
     private void onUpdatePassword() {
-        if (changingPassword || loggingOut || !active) {
+        if (changingPassword || loggingOut || googleLinkController.isBusy() || !active) {
             return;
         }
         ChangePasswordRequest request =
@@ -264,6 +282,7 @@ public class ProfileController {
 
     private void setChangingPassword(boolean busy) {
         changingPassword = busy;
+        googleLink.setDisable(busy);
         AlertBox.hide(passwordErrorBox);
         AlertBox.hide(confirmPasswordErrorBox);
         AlertBox.hide(passwordSavedBox);
@@ -290,7 +309,7 @@ public class ProfileController {
 
     @FXML
     private void onLogout() {
-        if (changingPassword || loggingOut) {
+        if (changingPassword || loggingOut || googleLinkController.isBusy()) {
             return;
         }
         AlertBox.hide(logoutErrorBox);

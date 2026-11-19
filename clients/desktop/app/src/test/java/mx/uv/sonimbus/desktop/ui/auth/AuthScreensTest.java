@@ -732,6 +732,92 @@ class AuthScreensTest {
         when(googleBrowser.authorize(any(), any())).thenReturn("A".repeat(43));
     }
 
+    @Test
+    void profileLinksGoogleAndKeepsTheSameLocalSession(FxRobot robot) throws Exception {
+        signInForLink();
+        when(authApi.googleConnections(any()))
+                .thenReturn(
+                        new mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse(
+                                java.util.List.of()),
+                        linkedGoogleResponse());
+        open(robot, View.PROFILE, null);
+        robot.interact(() -> robot.lookup("#linkGoogleButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi)
+                .createGoogleLinkAttempt(
+                        org.mockito.ArgumentMatchers.eq("private-access-token"), any());
+        verify(authApi).exchangeGoogleLink(any());
+        verify(authApi, org.mockito.Mockito.never()).reauthenticateGoogle(any(), any());
+        verify(authApi, org.mockito.Mockito.never()).exchangeGoogle(any());
+        assertEquals("private-access-token", sessions.accessToken());
+        assertEquals(EMAIL, sessions.email().orElseThrow());
+        assertTrue(
+                label(robot, "#googleConnectionLabel").getText().contains("reference@gmail.com"));
+        assertTrue(node(robot, "#googleLinkMessageBox").getStyleClass().contains("alert-success"));
+        assertTrue(robot.lookup("#linkGoogleButton").queryButton().isDisabled());
+    }
+
+    @Test
+    void profileOnlyAsksPasswordWhenServerRequiresRecentAuthentication(FxRobot robot)
+            throws Exception {
+        signInForLink();
+        when(authApi.createGoogleLinkAttempt(any(), any()))
+                .thenThrow(
+                        new ApiException(
+                                new ApiException.ResponseDetails(
+                                        401, null, "/problems/reauthentication-required"),
+                                ApiErrorKind.UNEXPECTED,
+                                "google-link"))
+                .thenReturn(linkAttempt());
+        open(robot, View.PROFILE, null);
+        robot.interact(() -> robot.lookup("#linkGoogleButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(node(robot, "#googleReauthenticationBox").isVisible());
+        assertTrue(sessions.isAuthenticated());
+        verify(authApi, org.mockito.Mockito.never()).reauthenticateGoogle(any(), any());
+        robot.interact(
+                () -> {
+                    robot.lookup("#showGooglePasswordToggle")
+                            .queryAs(javafx.scene.control.ToggleButton.class)
+                            .fire();
+                    field(robot, "#googlePasswordVisibleField").setText(PASSWORD);
+                    robot.lookup("#linkGoogleButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi).reauthenticateGoogle("private-access-token", PASSWORD);
+        verify(authApi).exchangeGoogleLink(any());
+        assertEquals("private-access-token", sessions.accessToken());
+        assertEquals("", field(robot, "#googlePasswordField").getText());
+        assertFalse(node(robot, "#googleReauthenticationBox").isVisible());
+    }
+
+    @Test
+    void cancellingProfileGoogleLinkPreservesSessionAndAllowsRetry(FxRobot robot) throws Exception {
+        signInForLink();
+        when(googleBrowser.authorize(any(), any()))
+                .thenThrow(new GoogleException(GoogleError.CANCELLED));
+        open(robot, View.PROFILE, null);
+        robot.interact(() -> robot.lookup("#linkGoogleButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(sessions.isAuthenticated());
+        verify(authApi, org.mockito.Mockito.never()).exchangeGoogleLink(any());
+        assertFalse(robot.lookup("#linkGoogleButton").queryButton().isDisabled());
+        assertFalse(robot.lookup("#logoutButton").queryButton().isDisabled());
+        assertTrue(label(robot, "#googleLinkMessageLabel").getText().contains("canceló"));
+    }
+
+    @Test
+    void profileShowsAlreadyLinkedGoogleWithoutCreatingAnotherAttempt(FxRobot robot)
+            throws Exception {
+        signInForLink();
+        when(authApi.googleConnections(any())).thenReturn(linkedGoogleResponse());
+        open(robot, View.PROFILE, null);
+        assertTrue(robot.lookup("#linkGoogleButton").queryButton().isDisabled());
+        assertTrue(
+                label(robot, "#googleConnectionLabel").getText().contains("reference@gmail.com"));
+        verify(authApi, org.mockito.Mockito.never()).createGoogleLinkAttempt(any(), any());
+    }
+
     private static mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse
             linkedGoogleResponse() {
         return new mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse(

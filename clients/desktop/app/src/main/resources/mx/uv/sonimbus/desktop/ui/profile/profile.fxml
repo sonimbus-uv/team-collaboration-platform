@@ -219,6 +219,7 @@
                     </HBox>
                 </VBox>
 
+                <fx:include fx:id="googleLink" source="google-link.fxml"/>
 
                 <!-- ================= Sesión (CU-06) ================= -->
                 <HBox styleClass="session-card" alignment="CENTER_LEFT" spacing="16">
