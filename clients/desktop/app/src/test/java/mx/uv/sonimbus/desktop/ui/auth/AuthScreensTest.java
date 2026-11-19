@@ -412,6 +412,64 @@ class AuthScreensTest {
         verifyNoInteractions(authApi);
     }
 
+    @Test
+    void loginAndConfirmedLogoutNavigateAndClearTheSession(FxRobot robot) throws Exception {
+        when(authApi.login(EMAIL, PASSWORD)).thenReturn(tokenResponse());
+        open(robot, View.LOGIN, null);
+        robot.interact(
+                () -> {
+                    field(robot, "#emailField").setText("  ANA@UV.MX ");
+                    field(robot, "#passwordField").setText(PASSWORD);
+                    robot.lookup("#loginButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(sessions.isAuthenticated());
+        assertTrue(robot.lookup("#groupsList").tryQuery().isPresent());
+        verify(authApi).login(EMAIL, PASSWORD);
+
+        robot.clickOn("#profileButton");
+        WaitForAsyncUtils.waitForFxEvents();
+        robot.interact(() -> robot.lookup("#logoutButton").queryButton().fire());
+        assertTrue(node(robot, "#logoutConfirmOverlay").isVisible());
+        robot.interact(() -> robot.lookup("#cancelLogoutButton").queryButton().fire());
+        assertFalse(node(robot, "#logoutConfirmOverlay").isVisible());
+        assertTrue(sessions.isAuthenticated());
+
+        robot.interact(
+                () -> {
+                    robot.lookup("#logoutButton").queryButton().fire();
+                    robot.lookup("#confirmLogoutButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        verify(authApi).logout("private-refresh-token");
+        assertFalse(sessions.isAuthenticated());
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+    }
+
+    @Test
+    void failedLogoutKeepsTheSessionAndAllowsRetry(FxRobot robot) throws Exception {
+        when(authApi.login(EMAIL, PASSWORD)).thenReturn(tokenResponse());
+        sessions.login(new mx.uv.sonimbus.desktop.domain.session.LoginCredentials(EMAIL, PASSWORD));
+        doThrow(new ApiException(ApiErrorKind.NETWORK, "logout", null))
+                .doNothing()
+                .when(authApi)
+                .logout("private-refresh-token");
+        open(robot, View.PROFILE, null);
+        robot.interact(
+                () -> {
+                    robot.lookup("#logoutButton").queryButton().fire();
+                    robot.lookup("#confirmLogoutButton").queryButton().fire();
+                });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertTrue(sessions.isAuthenticated());
+        assertTrue(label(robot, "#logoutErrorLabel").getText().contains("No se confirmó"));
+        assertFalse(robot.lookup("#confirmLogoutButton").queryButton().isDisabled());
+        robot.interact(() -> robot.lookup("#confirmLogoutButton").queryButton().fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertFalse(sessions.isAuthenticated());
+        assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
+    }
+
     private static TokenResponse tokenResponse() throws Exception {
         return new ObjectMapper()
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)

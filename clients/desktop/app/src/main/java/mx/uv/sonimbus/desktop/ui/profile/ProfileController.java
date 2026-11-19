@@ -12,7 +12,31 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.TilePane;
 
+import mx.uv.sonimbus.desktop.data.logging.AuthLog;
+import mx.uv.sonimbus.desktop.domain.session.AuthenticationException;
+import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
+import mx.uv.sonimbus.desktop.ui.common.AlertBox;
+import mx.uv.sonimbus.desktop.ui.common.BusyButton;
+import mx.uv.sonimbus.desktop.ui.navigation.View;
+
 public class ProfileController {
+    private final mx.uv.sonimbus.desktop.domain.session.SessionService sessions;
+    private final mx.uv.sonimbus.desktop.ui.common.BackgroundTasks backgroundTasks;
+    private final mx.uv.sonimbus.desktop.ui.navigation.ViewManager viewManager;
+    private boolean loggingOut;
+    private boolean active = true;
+    @FXML private HBox logoutErrorBox;
+    @FXML private Label logoutErrorIconLabel;
+    @FXML private Label logoutErrorLabel;
+
+    public ProfileController(
+            mx.uv.sonimbus.desktop.domain.session.SessionService sessions,
+            mx.uv.sonimbus.desktop.ui.common.BackgroundTasks backgroundTasks,
+            mx.uv.sonimbus.desktop.ui.navigation.ViewManager viewManager) {
+        this.sessions = sessions;
+        this.backgroundTasks = backgroundTasks;
+        this.viewManager = viewManager;
+    }
 
     @FXML private ScrollPane profileScroll;
 
@@ -51,17 +75,21 @@ public class ProfileController {
 
     @FXML
     private void initialize() {
-        // TODO CU-07: cargar displayNameLabel, emailLabel, nameField y la foto actual
-        //             (currentAvatarView con clip circular, o iniciales en avatarInitialsLabel)
-        // TODO CU-07: llenar avatarsPane con un ToggleButton ("avatar-option") por cada imagen
-        //             del paquete predefinido (resources/.../images/avatars), todos en
-        //             avatarGroup, con accessibleText "Avatar N" y Tooltip; la opción elegida
-        //             se distingue por el borde y una palomita, no solo por color. No se
-        //             permite subir archivos
-        // TODO CU-07: ocultar los avisos y quitar "field-invalid" al editar los campos
-        // TODO: saveProfileButton es el defaultButton; pasarlo a updatePasswordButton mientras
-        //       el foco esté en los campos de contraseña y a confirmLogoutButton mientras
-        //       logoutConfirmOverlay esté visible
+        sessions.email()
+                .ifPresent(
+                        email -> {
+                            emailLabel.setText(email);
+                            displayNameLabel.setText(email);
+                        });
+        logoutButton.setDisable(!sessions.isAuthenticated());
+        profileScroll
+                .sceneProperty()
+                .addListener(
+                        (observable, previous, current) -> {
+                            if (previous != null && current == null) {
+                                active = false;
+                            }
+                        });
     }
 
     @FXML
@@ -84,18 +112,71 @@ public class ProfileController {
 
     @FXML
     private void onLogout() {
-        // TODO CU-06: mostrar logoutConfirmOverlay (visible + managed), deshabilitar
-        //             profileScroll y dar el foco a cancelLogoutButton
+        if (loggingOut) {
+            return;
+        }
+        AlertBox.hide(logoutErrorBox);
+        AlertBox.setShown(logoutConfirmOverlay, true);
+        profileScroll.setDisable(true);
+        saveProfileButton.setDefaultButton(false);
+        confirmLogoutButton.setDefaultButton(true);
+        cancelLogoutButton.requestFocus();
     }
 
     @FXML
     private void onCancelLogout() {
-        // TODO CU-06: ocultar logoutConfirmOverlay y devolver el foco a logoutButton
+        if (loggingOut) {
+            return;
+        }
+        AlertBox.setShown(logoutConfirmOverlay, false);
+        profileScroll.setDisable(false);
+        confirmLogoutButton.setDefaultButton(false);
+        saveProfileButton.setDefaultButton(true);
+        logoutButton.requestFocus();
     }
 
     @FXML
     private void onConfirmLogout() {
-        // TODO CU-06: cerrar sesión (invalidar el token de renovación) y
-        //             ViewManager.show(View.LOGIN)
+        if (loggingOut || !active) {
+            return;
+        }
+        setLoggingOut(true);
+        AlertBox.hide(logoutErrorBox);
+        backgroundTasks.run(
+                () -> {
+                    sessions.logout();
+                    return null;
+                },
+                ignored -> {
+                    if (!sessions.isAuthenticated()) {
+                        viewManager.show(View.LOGIN);
+                    }
+                },
+                this::onLogoutFailed);
+    }
+
+    private void onLogoutFailed(Throwable failure) {
+        if (!active) {
+            return;
+        }
+        setLoggingOut(false);
+        String message = "No se confirmó el cierre de sesión. Intenta de nuevo.";
+        if (failure instanceof AuthenticationException authenticationFailure) {
+            message = AuthMessages.forLogout(authenticationFailure);
+        } else {
+            AuthLog.unexpectedFailure("logout", failure);
+        }
+        AlertBox.show(
+                logoutErrorBox,
+                logoutErrorIconLabel,
+                logoutErrorLabel,
+                AlertBox.Kind.ERROR,
+                message);
+    }
+
+    private void setLoggingOut(boolean busy) {
+        loggingOut = busy;
+        BusyButton.setBusy(confirmLogoutButton, busy, "Cerrando sesión…");
+        cancelLogoutButton.setDisable(busy);
     }
 }

@@ -209,6 +209,17 @@
             <Label text="¿Cerrar sesión?" styleClass="dialog-title"/>
             <Label text="Tendrás que volver a iniciar sesión para ver tus grupos y mensajes en este equipo."
                    styleClass="dialog-text" wrapText="true"/>
+            <HBox fx:id="logoutErrorBox" styleClass="alert-error" spacing="10"
+                alignment="TOP_LEFT" minHeight="-Infinity" visible="false" managed="false">
+                <padding>
+                    <Insets top="12" right="14" bottom="12" left="14"/>
+                </padding>
+                <Label fx:id="logoutErrorIconLabel" text="!" styleClass="alert-icon"
+                    accessibleText="Error"/>
+                <Label fx:id="logoutErrorLabel" styleClass="alert-text" wrapText="true"
+                    minHeight="-Infinity" minWidth="0" maxWidth="1.7976931348623157E308"
+                    HBox.hgrow="ALWAYS"/>
+            </HBox>
             <HBox styleClass="dialog-actions" alignment="CENTER_RIGHT" spacing="10">
                 <padding>
                     <Insets top="16"/>
