@@ -1,12 +1,11 @@
 package mx.uv.sonimbus.desktop.ui.auth.common;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
-import mx.uv.sonimbus.desktop.data.api.ApiException;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationError;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationException;
 import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator;
 import mx.uv.sonimbus.desktop.domain.registration.RegistrationValidator.Problem;
 
@@ -29,14 +28,14 @@ class AuthMessagesTest {
     void registerConflict() {
         assertEquals(
                 "Ya existe una cuenta con este correo.",
-                AuthMessages.forRegister(http(ApiErrorKind.EMAIL_TAKEN, 409, null)));
+                AuthMessages.forRegister(failure(RegistrationError.EMAIL_TAKEN, null)));
     }
 
     @Test
     void registerValidation() {
         assertEquals(
                 "Revisa el correo y la contraseña.",
-                AuthMessages.forRegister(http(ApiErrorKind.VALIDATION, 400, null)));
+                AuthMessages.forRegister(failure(RegistrationError.VALIDATION, null)));
     }
 
     @Test
@@ -44,56 +43,57 @@ class AuthMessagesTest {
         assertEquals(
                 "Demasiadas solicitudes. Intenta de nuevo en 60 segundos.",
                 AuthMessages.forRegister(
-                        http(ApiErrorKind.RATE_LIMITED, 429, Duration.ofSeconds(60))));
+                        failure(RegistrationError.RATE_LIMITED, Duration.ofSeconds(60))));
         assertEquals(
                 "Demasiadas solicitudes. Intenta de nuevo en 1 segundo.",
                 AuthMessages.forRegister(
-                        http(ApiErrorKind.RATE_LIMITED, 429, Duration.ofSeconds(1))));
+                        failure(RegistrationError.RATE_LIMITED, Duration.ofSeconds(1))));
     }
 
     @Test
     void registerRateLimitedWithoutUsableWait() {
         String expected = "Demasiadas solicitudes. Intenta de nuevo en unos momentos.";
         assertEquals(
-                expected, AuthMessages.forRegister(http(ApiErrorKind.RATE_LIMITED, 429, null)));
+                expected, AuthMessages.forRegister(failure(RegistrationError.RATE_LIMITED, null)));
         assertEquals(
                 expected,
-                AuthMessages.forRegister(http(ApiErrorKind.RATE_LIMITED, 429, Duration.ZERO)));
+                AuthMessages.forRegister(failure(RegistrationError.RATE_LIMITED, Duration.ZERO)));
     }
 
     @Test
     void registerConnectionProblems() {
-        assertEquals(CONNECTION, AuthMessages.forRegister(noResponse(ApiErrorKind.NETWORK)));
-        assertEquals(CONNECTION, AuthMessages.forRegister(noResponse(ApiErrorKind.TIMEOUT)));
-        assertEquals(CONNECTION, AuthMessages.forRegister(http(ApiErrorKind.SERVER, 500, null)));
+        assertEquals(CONNECTION, AuthMessages.forRegister(noResponse(RegistrationError.NETWORK)));
+        assertEquals(CONNECTION, AuthMessages.forRegister(noResponse(RegistrationError.TIMEOUT)));
+        assertEquals(CONNECTION, AuthMessages.forRegister(failure(RegistrationError.SERVER, null)));
         assertEquals(
-                CONNECTION, AuthMessages.forRegister(http(ApiErrorKind.UNAVAILABLE, 503, null)));
+                CONNECTION, AuthMessages.forRegister(failure(RegistrationError.UNAVAILABLE, null)));
     }
 
     @Test
     void resendMessages() {
         assertEquals(
-                "Revisa el correo.",
-                AuthMessages.forResendVerification(http(ApiErrorKind.VALIDATION, 400, null)));
+                AuthMessages.INVALID_CODE,
+                AuthMessages.forResendVerification(failure(RegistrationError.VALIDATION, null)));
         assertEquals(
                 "No pudimos enviar el correo de verificación. Intenta de nuevo más tarde.",
-                AuthMessages.forResendVerification(http(ApiErrorKind.SERVER, 500, null)));
+                AuthMessages.forResendVerification(failure(RegistrationError.SERVER, null)));
         assertEquals(
                 "Demasiadas solicitudes. Intenta de nuevo en 60 segundos.",
                 AuthMessages.forResendVerification(
-                        http(ApiErrorKind.RATE_LIMITED, 429, Duration.ofSeconds(60))));
+                        failure(RegistrationError.RATE_LIMITED, Duration.ofSeconds(60))));
         assertEquals(
-                CONNECTION, AuthMessages.forResendVerification(noResponse(ApiErrorKind.TIMEOUT)));
+                CONNECTION,
+                AuthMessages.forResendVerification(noResponse(RegistrationError.TIMEOUT)));
     }
 
     /** Ningún mensaje deja ver el código, el caso interno ni texto en inglés. */
     @ParameterizedTest
-    @EnumSource(ApiErrorKind.class)
-    void messagesHaveNoInternals(ApiErrorKind kind) {
+    @EnumSource(RegistrationError.class)
+    void messagesHaveNoInternals(RegistrationError kind) {
         for (String message :
                 new String[] {
-                    AuthMessages.forRegister(http(kind, 418, null)),
-                    AuthMessages.forResendVerification(http(kind, 418, null))
+                    AuthMessages.forRegister(failure(kind, null)),
+                    AuthMessages.forResendVerification(failure(kind, null))
                 }) {
             assertFalse(message.contains("418"), message);
             assertFalse(message.contains(kind.name()), message);
@@ -106,7 +106,7 @@ class AuthMessagesTest {
     void passwordRuleMatchesTheServer() {
         assertEquals(
                 "De 8 a 128 caracteres, con al menos una mayúscula, una minúscula, un número y un"
-                    + " símbolo.",
+                        + " símbolo.",
                 AuthMessages.PASSWORD_RULE);
     }
 
@@ -125,7 +125,7 @@ class AuthMessagesTest {
     void passwordMessageListsEverythingMissing() {
         assertEquals(
                 "La contraseña necesita al menos 8 caracteres, una mayúscula y un símbolo (por"
-                    + " ejemplo ! o #).",
+                        + " ejemplo ! o #).",
                 AuthMessages.forPassword(
                         EnumSet.of(
                                 Problem.PASSWORD_TOO_SHORT,
@@ -177,22 +177,21 @@ class AuthMessagesTest {
 
     @Test
     void unavailableNotices() {
-        assertEquals(
-                "El inicio de sesión todavía no está disponible en el servidor.",
-                AuthMessages.LOGIN_UNAVAILABLE);
+        assertEquals("Correo o contraseña incorrectos.", AuthMessages.INVALID_LOGIN);
         assertEquals(
                 "No pudimos enviar el correo de verificación. Usa Reenviar correo.",
                 AuthMessages.VERIFICATION_NOT_SENT);
         assertEquals(
-                "Si la cuenta existe y no está verificada, te enviamos un nuevo enlace.",
+                "Enviamos un nuevo código. Usa el más reciente; el plazo original no cambia.",
                 AuthMessages.RESEND_DONE);
     }
 
-    private static ApiException http(ApiErrorKind kind, int status, Duration retryAfter) {
-        return new ApiException(kind, "test", status, retryAfter);
+    private static RegistrationException failure(RegistrationError kind, Duration retryAfter) {
+        return new RegistrationException(kind, retryAfter, Set.of(), null);
     }
 
-    private static ApiException noResponse(ApiErrorKind kind) {
-        return new ApiException(kind, "test", new IOException("Connection refused"));
+    private static RegistrationException noResponse(RegistrationError kind) {
+        return new RegistrationException(
+                kind, null, Set.of(), new IOException("Connection refused"));
     }
 }

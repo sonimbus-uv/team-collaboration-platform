@@ -3,12 +3,15 @@ package mx.uv.sonimbus.desktop.ui.auth;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -21,13 +24,27 @@ import javafx.stage.Stage;
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
 import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+import mx.uv.sonimbus.desktop.data.api.auth.google.GoogleAttemptResponse;
+import mx.uv.sonimbus.desktop.data.api.auth.google.HttpGoogleGateway;
+import mx.uv.sonimbus.desktop.data.api.auth.password.HttpPasswordGateway;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.HttpRegistrationGateway;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.RegistrationAttempt;
+import mx.uv.sonimbus.desktop.data.api.auth.session.HttpAuthenticationGateway;
+import mx.uv.sonimbus.desktop.data.api.auth.session.TokenResponse;
+import mx.uv.sonimbus.desktop.domain.google.GoogleBrowser;
+import mx.uv.sonimbus.desktop.domain.google.GoogleService;
+import mx.uv.sonimbus.desktop.domain.password.PasswordService;
+import mx.uv.sonimbus.desktop.domain.registration.PendingRegistration;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
+import mx.uv.sonimbus.desktop.domain.session.SessionService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.auth.registration.VerifyAccountParams;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
+import mx.uv.sonimbus.desktop.ui.theme.ThemeManager;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +54,8 @@ import org.testfx.framework.junit5.Start;
 import org.testfx.util.WaitForAsyncUtils;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
 
 /** Pantallas de autenticación con JavaFX real (Monocle sin pantalla) y Auth simulado. */
 @ExtendWith(ApplicationExtension.class)
@@ -48,14 +67,32 @@ class AuthScreensTest {
     private final AuthApi authApi = mock(AuthApi.class);
     private Stage stage;
     private ViewManager viewManager;
+    private final SessionService sessions =
+            new SessionService(new HttpAuthenticationGateway(authApi));
+
+    private final GoogleBrowser googleBrowser = mock(GoogleBrowser.class);
+    private final GoogleService google =
+            new GoogleService(new HttpGoogleGateway(authApi), googleBrowser, sessions);
 
     @Start
-    void start(Stage stage) {
+    void start(Stage stage) throws Exception {
+        when(authApi.googleConnections(any()))
+                .thenReturn(
+                        new mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse(
+                                java.util.List.of()));
         this.stage = stage;
         ControllerFactory controllers = new ControllerFactory();
-        viewManager = new ViewManager(stage, controllers);
+        viewManager =
+                new ViewManager(stage, controllers, new ThemeManager(), sessions::isAuthenticated);
         controllers
-                .register(AuthApi.class, authApi)
+                .register(GoogleService.class, google)
+                .register(
+                        RegistrationService.class,
+                        new RegistrationService(new HttpRegistrationGateway(authApi)))
+                .register(SessionService.class, sessions)
+                .register(
+                        PasswordService.class,
+                        new PasswordService(new HttpPasswordGateway(authApi), sessions))
                 // El trabajo corre en el mismo hilo; la respuesta llega con runLater, como en la
                 // app.
                 .register(
@@ -77,8 +114,7 @@ class AuthScreensTest {
     @Test
     void successfulRegistrationNavigatesToVerificationWithTheEmail(FxRobot robot)
             throws ApiException {
-        when(authApi.register(EMAIL, PASSWORD))
-                .thenReturn(new Account("7b0c", EMAIL, false, "active", true));
+        when(authApi.register(EMAIL, PASSWORD)).thenReturn(pendingAttempt(true));
         open(robot, View.REGISTER, null);
 
         fillRegistration(robot, "  Ana@UV.mx ", PASSWORD, PASSWORD);
@@ -93,26 +129,15 @@ class AuthScreensTest {
     }
 
     @Test
-    void takenEmailShowsMessageAndLeadsToResend(FxRobot robot) throws ApiException {
+    void takenEmailDoesNotOfferResendWithoutAnAttempt(FxRobot robot) throws ApiException {
         when(authApi.register(EMAIL, PASSWORD))
                 .thenThrow(new ApiException(ApiErrorKind.EMAIL_TAKEN, "register", 409, null));
         open(robot, View.REGISTER, null);
-
         fillRegistration(robot, EMAIL, PASSWORD, PASSWORD);
         robot.clickOn("#registerButton");
         WaitForAsyncUtils.waitForFxEvents();
-
-        assertEquals(
-                "Ya existe una cuenta con este correo.", label(robot, "#errorLabel").getText());
-        assertTrue(field(robot, "#emailField").getStyleClass().contains("field-invalid"));
-        assertTrue(node(robot, "#resendVerificationLink").isVisible());
-
-        robot.clickOn("#resendVerificationLink");
-        WaitForAsyncUtils.waitForFxEvents();
-
-        assertEquals(EMAIL, robot.lookup("#sentToEmailText").queryAs(Text.class).getText());
-        assertFalse(node(robot, "#errorBox").isVisible(), "no se afirma que el envío falló");
-        assertFalse(robot.lookup("#resendButton").queryButton().isDisabled());
+        assertEquals(AuthMessages.EMAIL_TAKEN, label(robot, "#errorLabel").getText());
+        assertTrue(robot.lookup("#resendVerificationLink").tryQuery().isEmpty());
     }
 
     @Test
@@ -154,21 +179,24 @@ class AuthScreensTest {
     }
 
     @Test
-    void googleRegistrationIsNotAvailableYet(FxRobot robot) {
+    void disabledGoogleProviderShowsRetryableError(FxRobot robot) throws Exception {
+        when(authApi.createGoogleAttempt(any()))
+                .thenThrow(new ApiException(ApiErrorKind.UNAVAILABLE, "google-attempt", 503, null));
         open(robot, View.REGISTER, null);
 
         robot.clickOn("#googleButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals(AuthMessages.GOOGLE_UNAVAILABLE, label(robot, "#errorLabel").getText());
-        assertTrue(node(robot, "#errorBox").getStyleClass().contains("alert-info"));
+        assertTrue(label(robot, "#errorLabel").getText().contains("no está disponible"));
+        assertTrue(node(robot, "#errorBox").getStyleClass().contains("alert-error"));
     }
 
     // --- Verificación (CU-02) ---
 
     @Test
     void failedDeliveryWarnsAndAllowsResend(FxRobot robot) throws ApiException {
-        open(robot, View.VERIFY_ACCOUNT, VerifyAccountParams.afterRegistration(EMAIL, false));
+        when(authApi.resendVerification(ATTEMPT_ID)).thenReturn(pendingAttempt(true));
+        open(robot, View.VERIFY_ACCOUNT, verificationParams(false));
 
         assertEquals(AuthMessages.VERIFICATION_NOT_SENT, label(robot, "#errorLabel").getText());
         assertFalse(robot.lookup("#resendButton").queryButton().isDisabled());
@@ -176,7 +204,7 @@ class AuthScreensTest {
         robot.clickOn("#resendButton");
         WaitForAsyncUtils.waitForFxEvents();
 
-        verify(authApi).resendVerification(EMAIL);
+        verify(authApi).resendVerification(ATTEMPT_ID);
         assertTrue(node(robot, "#infoBox").isVisible());
         assertEquals(AuthMessages.RESEND_DONE, label(robot, "#infoLabel").getText());
         assertFalse(node(robot, "#errorBox").isVisible());
@@ -194,8 +222,8 @@ class AuthScreensTest {
                                 429,
                                 Duration.ofSeconds(30)))
                 .when(authApi)
-                .resendVerification(anyString());
-        open(robot, View.VERIFY_ACCOUNT, VerifyAccountParams.forExistingAccount(EMAIL));
+                .resendVerification(any());
+        open(robot, View.VERIFY_ACCOUNT, verificationParams(false));
 
         robot.clickOn("#resendButton");
         WaitForAsyncUtils.waitForFxEvents();
@@ -217,77 +245,182 @@ class AuthScreensTest {
     }
 
     @Test
-    void alreadyVerifiedGoesToLogin(FxRobot robot) {
-        open(robot, View.VERIFY_ACCOUNT, VerifyAccountParams.forExistingAccount(EMAIL));
-
+    void correctCodeCompletesRegistrationAndOffersLogin(FxRobot robot) throws ApiException {
+        when(authApi.register(EMAIL, PASSWORD)).thenReturn(pendingAttempt(true));
+        when(authApi.verifyEmail(ATTEMPT_ID, "00123456"))
+                .thenReturn(new Account("7b0c", EMAIL, true, "active"));
+        open(robot, View.REGISTER, null);
+        fillRegistration(robot, EMAIL, PASSWORD, PASSWORD);
+        robot.clickOn("#registerButton");
+        WaitForAsyncUtils.waitForFxEvents();
+        robot.interact(() -> field(robot, "#codeField").setText("00123456"));
         robot.clickOn("#verifyButton");
         WaitForAsyncUtils.waitForFxEvents();
-
+        verify(authApi).verifyEmail(ATTEMPT_ID, "00123456");
+        assertEquals(AuthMessages.REGISTRATION_COMPLETE, label(robot, "#infoLabel").getText());
+        robot.clickOn("#backToLoginLink");
         assertTrue(robot.lookup("#loginButton").tryQuery().isPresent());
     }
 
-    // --- Inicio de sesión (CU-03) y recuperación (CU-05) ---
-
     @Test
-    void loginRequiresBothFields(FxRobot robot) {
-        open(robot, View.LOGIN, null);
-
-        robot.clickOn("#loginButton");
-        WaitForAsyncUtils.waitForFxEvents();
-
-        assertEquals(AuthMessages.LOGIN_FIELDS_EMPTY, label(robot, "#errorLabel").getText());
-        assertTrue(node(robot, "#errorBox").getStyleClass().contains("alert-error"));
-        assertTrue(field(robot, "#emailField").getStyleClass().contains("field-invalid"));
-    }
-
-    @Test
-    void loginIsNotAvailableYet(FxRobot robot) {
-        open(robot, View.LOGIN, null);
-
-        robot.interact(
-                () -> {
-                    field(robot, "#emailField").setText(EMAIL);
-                    field(robot, "#passwordField").setText(PASSWORD);
-                });
-        robot.clickOn("#loginButton");
-        WaitForAsyncUtils.waitForFxEvents();
-
-        assertEquals(AuthMessages.LOGIN_UNAVAILABLE, label(robot, "#errorLabel").getText());
-        Node box = node(robot, "#errorBox");
-        assertTrue(box.getStyleClass().contains("alert-info"));
-        assertFalse(box.getStyleClass().contains("alert-error"));
-        assertEquals(
-                "i",
-                label(robot, "#errorIconLabel").getText(),
-                "se distingue por icono, no solo color");
+    void expiredAttemptCannotVerifyOrResend(FxRobot robot) {
+        open(
+                robot,
+                View.VERIFY_ACCOUNT,
+                new VerifyAccountParams(EMAIL, ATTEMPT_ID, Instant.now().minusSeconds(1), true));
+        assertTrue(robot.lookup("#verifyButton").queryButton().isDisabled());
+        assertTrue(robot.lookup("#resendButton").queryButton().isDisabled());
+        assertEquals(AuthMessages.REGISTRATION_EXPIRED, label(robot, "#expirationLabel").getText());
         verifyNoInteractions(authApi);
     }
 
     @Test
-    void passwordCanBeShown(FxRobot robot) {
-        open(robot, View.LOGIN, null);
-        robot.interact(() -> field(robot, "#passwordField").setText(PASSWORD));
-
-        robot.clickOn("#showPasswordToggle");
-        WaitForAsyncUtils.waitForFxEvents();
-
-        assertTrue(node(robot, "#passwordVisibleField").isVisible());
-        assertEquals(PASSWORD, field(robot, "#passwordVisibleField").getText());
-        assertEquals("Ocultar", robot.lookup("#showPasswordToggle").queryLabeled().getText());
+    void incompleteCodeIsNotSubmitted(FxRobot robot) {
+        open(robot, View.VERIFY_ACCOUNT, verificationParams(true));
+        robot.interact(() -> field(robot, "#codeField").setText("123"));
+        robot.clickOn("#verifyButton");
+        assertEquals(AuthMessages.CODE_REQUIRED, label(robot, "#errorLabel").getText());
+        verifyNoInteractions(authApi);
     }
 
     @Test
-    void recoveryIsNotAvailableYet(FxRobot robot) {
-        open(robot, View.RECOVER_PASSWORD, null);
-        robot.interact(() -> field(robot, "#emailField").setText(EMAIL));
+    void rejectedCodeKeepsTheAttemptAvailableForCorrection(FxRobot robot) throws ApiException {
+        when(authApi.verifyEmail(ATTEMPT_ID, "12345678"))
+                .thenThrow(new ApiException(ApiErrorKind.VALIDATION, "verify-email", 400, null));
+        open(robot, View.VERIFY_ACCOUNT, verificationParams(true));
+        robot.interact(() -> field(robot, "#codeField").setText("12345678"));
+        robot.clickOn("#verifyButton");
+        WaitForAsyncUtils.waitForFxEvents();
+        assertEquals(AuthMessages.INVALID_CODE, label(robot, "#errorLabel").getText());
+        assertFalse(robot.lookup("#verifyButton").queryButton().isDisabled());
+        assertFalse(field(robot, "#codeField").isDisabled());
+    }
 
-        robot.clickOn("#sendCodeButton");
+    @Test
+    void codeFieldRejectsNonAsciiDigitsAndMoreThanEightCharacters(FxRobot robot) {
+        open(robot, View.VERIFY_ACCOUNT, verificationParams(true));
+        robot.interact(
+                () -> {
+                    field(robot, "#codeField").setText("00123456");
+                    field(robot, "#codeField").appendText("9");
+                    assertEquals("00123456", field(robot, "#codeField").getText());
+                    field(robot, "#codeField").setText("not-code");
+                    assertEquals("00123456", field(robot, "#codeField").getText());
+                });
+        verifyNoInteractions(authApi);
+    }
+
+    // --- Inicio de sesión (CU-03) y recuperación (CU-05) ---
+
+    private static TokenResponse tokenResponse() throws Exception {
+        return new ObjectMapper()
+                .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                .readValue(
+                        """
+{"access_token":"private-access-token","refresh_token":"private-refresh-token",
+"token_type":"Bearer","access_expires_in":900,
+"session_expires_at":"2030-01-01T00:00:00Z",
+"sid":"2f862636-cf2f-4c18-820e-7c29dc449ba0",
+"account_id":"3f862636-cf2f-4c18-820e-7c29dc449ba0"}
+""",
+                        TokenResponse.class);
+    }
+
+    @Test
+    void confirmationPasswordCanBeShownAndEditedIndependently(FxRobot robot) {
+        open(robot, View.REGISTER, null);
+        fillRegistration(robot, EMAIL, PASSWORD, "Different123!");
+
+        robot.clickOn("#showConfirmPasswordToggle");
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertEquals(AuthMessages.RECOVERY_UNAVAILABLE, label(robot, "#sentInfoLabel").getText());
+        assertTrue(node(robot, "#confirmPasswordVisibleField").isVisible());
+        assertFalse(node(robot, "#confirmPasswordField").isVisible());
+        assertFalse(node(robot, "#passwordVisibleField").isVisible());
+        assertEquals("Different123!", field(robot, "#confirmPasswordVisibleField").getText());
+        assertEquals(
+                "Ocultar", robot.lookup("#showConfirmPasswordToggle").queryLabeled().getText());
+
+        robot.interact(() -> robot.lookup("#registerButton").queryButton().fire());
+        assertTrue(node(robot, "#confirmPasswordErrorBox").isVisible());
+        assertTrue(
+                field(robot, "#confirmPasswordVisibleField")
+                        .getStyleClass()
+                        .contains("field-invalid"));
+
+        robot.interact(() -> field(robot, "#confirmPasswordVisibleField").setText(PASSWORD));
+        assertEquals(PASSWORD, field(robot, "#confirmPasswordField").getText());
+        assertFalse(node(robot, "#confirmPasswordErrorBox").isVisible());
+        assertFalse(
+                field(robot, "#confirmPasswordVisibleField")
+                        .getStyleClass()
+                        .contains("field-invalid"));
+
+        robot.clickOn("#showConfirmPasswordToggle");
+        assertTrue(node(robot, "#confirmPasswordField").isVisible());
+        assertFalse(node(robot, "#confirmPasswordVisibleField").isVisible());
+        assertEquals(PASSWORD, field(robot, "#confirmPasswordField").getText());
+        verifyNoInteractions(authApi);
+    }
+
+    private void fillPasswordChange(FxRobot robot) {
+        robot.interact(
+                () -> {
+                    field(robot, "#currentPasswordField").setText(PASSWORD);
+                    robot.lookup("#showCurrentPasswordToggle")
+                            .queryAs(javafx.scene.control.ToggleButton.class)
+                            .fire();
+                    assertEquals(PASSWORD, field(robot, "#currentPasswordVisibleField").getText());
+                    assertFalse(node(robot, "#newPasswordVisibleField").isVisible());
+                    assertFalse(node(robot, "#confirmPasswordVisibleField").isVisible());
+                    robot.lookup("#showNewPasswordToggle")
+                            .queryAs(javafx.scene.control.ToggleButton.class)
+                            .fire();
+                    robot.lookup("#showConfirmPasswordToggle")
+                            .queryAs(javafx.scene.control.ToggleButton.class)
+                            .fire();
+                    field(robot, "#newPasswordVisibleField").setText("DifferentPass456!");
+                    field(robot, "#confirmPasswordVisibleField").setText("DifferentPass456!");
+                });
+    }
+
+    private GoogleAttemptResponse linkAttempt() {
+        String secret = "A".repeat(43);
+        return new GoogleAttemptResponse(
+                ATTEMPT_ID,
+                secret,
+                "https://auth.invalid/api/v1/auth/google/authorize?ticket=" + secret,
+                Instant.now().plusSeconds(600).toString());
+    }
+
+    private void signInForLink() throws Exception {
+        when(authApi.login(EMAIL, PASSWORD)).thenReturn(tokenResponse());
+        sessions.login(new mx.uv.sonimbus.desktop.domain.session.LoginCredentials(EMAIL, PASSWORD));
+        when(authApi.createGoogleLinkAttempt(any(), any())).thenReturn(linkAttempt());
+        when(googleBrowser.authorize(any(), any())).thenReturn("A".repeat(43));
+    }
+
+    private static mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse
+            linkedGoogleResponse() {
+        return new mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse(
+                java.util.List.of(
+                        new mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse
+                                .Connection(
+                                "google", "reference@gmail.com", Instant.now().toString())));
     }
 
     // --- Utilidades ---
+
+    private static final UUID ATTEMPT_ID = UUID.fromString("2f862636-cf2f-4c18-820e-7c29dc449ba0");
+
+    private static VerifyAccountParams verificationParams(boolean sent) {
+        return VerifyAccountParams.afterRegistration(
+                EMAIL, new PendingRegistration(ATTEMPT_ID, Instant.now().plusSeconds(600), sent));
+    }
+
+    private static RegistrationAttempt pendingAttempt(boolean sent) {
+        return new RegistrationAttempt(ATTEMPT_ID, Instant.now().plusSeconds(600).toString(), sent);
+    }
 
     private void open(FxRobot robot, View view, Object parameters) {
         robot.interact(

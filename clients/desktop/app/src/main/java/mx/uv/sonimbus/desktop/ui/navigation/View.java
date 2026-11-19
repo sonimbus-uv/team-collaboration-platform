@@ -1,6 +1,5 @@
 package mx.uv.sonimbus.desktop.ui.navigation;
 
-/** Vistas de la aplicación; la ruta es relativa a resources/mx/uv/sonimbus/desktop/ui/. */
 public enum View {
     LOGIN("auth/login/login.fxml"),
     REGISTER("auth/registration/register.fxml"),
@@ -27,5 +26,12 @@ public enum View {
 
     public String fxml() {
         return fxml;
+    }
+
+    public boolean requiresSession() {
+        return switch (this) {
+            case LOGIN, REGISTER, VERIFY_ACCOUNT, RECOVER_PASSWORD -> false;
+            default -> true;
+        };
     }
 }

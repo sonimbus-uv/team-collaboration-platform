@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URL;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 public final class ViewManager {
 
@@ -22,6 +23,7 @@ public final class ViewManager {
     private final Stage stage;
     private final Callback<Class<?>, Object> controllerFactory;
     private final ThemeManager themeManager;
+    private final BooleanSupplier authenticated;
     private ContentHost contentHost;
 
     public ViewManager(Stage stage, Callback<Class<?>, Object> controllerFactory) {
@@ -30,9 +32,18 @@ public final class ViewManager {
 
     public ViewManager(
             Stage stage, Callback<Class<?>, Object> controllerFactory, ThemeManager themeManager) {
+        this(stage, controllerFactory, themeManager, () -> true);
+    }
+
+    public ViewManager(
+            Stage stage,
+            Callback<Class<?>, Object> controllerFactory,
+            ThemeManager themeManager,
+            BooleanSupplier authenticated) {
         this.stage = Objects.requireNonNull(stage);
         this.controllerFactory = Objects.requireNonNull(controllerFactory);
         this.themeManager = Objects.requireNonNull(themeManager);
+        this.authenticated = Objects.requireNonNull(authenticated);
     }
 
     public void bringToFront() {
@@ -46,6 +57,10 @@ public final class ViewManager {
     }
 
     public void show(View view, Object parameters) {
+        if (!hasAccess(view)) {
+            view = View.LOGIN;
+            parameters = null;
+        }
         FXMLLoader loader = load(view, parameters);
         Parent root = loader.getRoot();
         contentHost = loader.getController() instanceof ContentHost host ? host : null;
@@ -64,6 +79,10 @@ public final class ViewManager {
     }
 
     public void showContent(View view, Object parameters) {
+        if (!hasAccess(view)) {
+            show(View.LOGIN);
+            return;
+        }
         ContentHost host = requireContentHost();
         host.setContent(view, load(view, parameters).getRoot());
     }
@@ -77,6 +96,10 @@ public final class ViewManager {
     }
 
     public void showDialog(View view, String title, Object parameters) {
+        if (!hasAccess(view)) {
+            show(View.LOGIN);
+            return;
+        }
         Scene scene = new Scene(load(view, parameters).getRoot());
         scene.getStylesheets().add(resource(THEME).toExternalForm());
         Stage dialog = new Stage();
@@ -95,6 +118,10 @@ public final class ViewManager {
         }
 
         return contentHost;
+    }
+
+    private boolean hasAccess(View view) {
+        return !view.requiresSession() || authenticated.getAsBoolean();
     }
 
     private FXMLLoader load(View view, Object parameters) {

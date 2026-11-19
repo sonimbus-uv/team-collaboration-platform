@@ -3,42 +3,46 @@ package mx.uv.sonimbus.desktop.data.api;
 import java.time.Duration;
 import java.util.Optional;
 
-/**
- * Una llamada a un servicio no terminó bien. {@link #kind()} indica el caso.
- *
- * <p>El mensaje solo dice la operación y el código HTTP: nunca incluye el {@code detail} del
- * servicio, ni datos enviados como contraseñas o tokens (RNF-SEG-04).
- */
 public class ApiException extends Exception {
-
     private final ApiErrorKind kind;
     private final int status;
     private final Duration retryAfter;
+    private final String problemType;
+
+    public record ResponseDetails(int status, Duration retryAfter, String problemType) {}
 
     public ApiException(ApiErrorKind kind, String operation, int status, Duration retryAfter) {
-        super(operation + ": HTTP " + status + " (" + kind + ")");
+        this(new ResponseDetails(status, retryAfter, null), kind, operation);
+    }
+
+    public ApiException(ResponseDetails response, ApiErrorKind kind, String operation) {
+        super(operation + ": HTTP " + response.status() + " (" + kind + ")");
         this.kind = kind;
-        this.status = status;
-        this.retryAfter = retryAfter;
+        this.status = response.status();
+        this.retryAfter = response.retryAfter();
+        this.problemType = response.problemType();
     }
 
     public ApiException(ApiErrorKind kind, String operation, Throwable cause) {
         super(operation + ": " + kind, cause);
         this.kind = kind;
+        this.problemType = null;
         this.status = 0;
         this.retryAfter = null;
+    }
+
+    public Optional<String> problemType() {
+        return Optional.ofNullable(problemType);
     }
 
     public ApiErrorKind kind() {
         return kind;
     }
 
-    /** Código HTTP de la respuesta, o 0 si no hubo respuesta. */
     public int status() {
         return status;
     }
 
-    /** Espera indicada por el servicio en {@code Retry-After}, si la envió. */
     public Optional<Duration> retryAfter() {
         return Optional.ofNullable(retryAfter);
     }

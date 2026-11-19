@@ -8,7 +8,14 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import mx.uv.sonimbus.desktop.data.api.ApiConfig;
 import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
+import mx.uv.sonimbus.desktop.data.api.auth.google.GoogleAttemptResponse;
+import mx.uv.sonimbus.desktop.data.api.auth.google.GoogleConnectionsResponse;
+import mx.uv.sonimbus.desktop.data.api.auth.password.RecoveryResponse;
 import mx.uv.sonimbus.desktop.data.api.auth.registration.Account;
+import mx.uv.sonimbus.desktop.data.api.auth.registration.RegistrationAttempt;
+import mx.uv.sonimbus.desktop.data.api.auth.session.TokenResponse;
+import mx.uv.sonimbus.desktop.data.logging.AuthLog;
+import mx.uv.sonimbus.desktop.domain.google.GoogleExchange;
 
 import java.io.IOException;
 import java.net.URI;
@@ -20,20 +27,27 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Set;
+import java.util.UUID;
 
-/**
- * Cliente HTTP del Auth Service. Las llamadas bloquean: deben hacerse fuera del hilo de JavaFX (ver
- * {@code ui.common.BackgroundTasks}).
- */
 public class AuthApi {
 
-    /**
-     * Operaciones del servicio; el mismo código HTTP puede significar cosas distintas en cada una.
-     */
     enum Operation {
         REGISTER("register", AuthPaths.REGISTER),
         VERIFY_EMAIL("verify-email", AuthPaths.VERIFY_EMAIL),
-        RESEND_VERIFICATION("resend-verification", AuthPaths.RESEND_VERIFICATION);
+        RESEND_VERIFICATION("resend-verification", AuthPaths.RESEND_VERIFICATION),
+        LOGIN("login", AuthPaths.LOGIN),
+        REFRESH("refresh", AuthPaths.REFRESH),
+        LOGOUT("logout", AuthPaths.LOGOUT),
+        FORGOT_PASSWORD("forgot-password", AuthPaths.FORGOT_PASSWORD),
+        RESET_PASSWORD("reset-password", AuthPaths.RESET_PASSWORD),
+        CHANGE_PASSWORD("change-password", AuthPaths.CHANGE_PASSWORD),
+        GOOGLE_ATTEMPT("google-attempt", AuthPaths.GOOGLE_ATTEMPT),
+        GOOGLE_EXCHANGE("google-exchange", AuthPaths.GOOGLE_EXCHANGE),
+        GOOGLE_LINK("google-link", AuthPaths.GOOGLE_LINK),
+        GOOGLE_LINK_EXCHANGE("google-link-exchange", AuthPaths.GOOGLE_EXCHANGE),
+        GOOGLE_REAUTHENTICATE("google-reauthenticate", AuthPaths.GOOGLE_REAUTHENTICATE),
+        GOOGLE_CONNECTIONS("google-connections", AuthPaths.GOOGLE_CONNECTIONS);
 
         private final String label;
         private final String path;
@@ -44,28 +58,103 @@ public class AuthApi {
         }
     }
 
-    /** Cuerpo de {@code POST /api/v1/auth/register}. {@link #toString()} oculta la contraseña. */
     record RegisterRequest(String email, String password) {
         @Override
         public String toString() {
-            return "RegisterRequest[email=" + email + ", password=[REDACTED]]";
+            return "RegisterRequest[email=[REDACTED], password=[REDACTED]]";
         }
     }
 
-    /** Cuerpo de {@code POST /api/v1/auth/verify-email}. {@link #toString()} oculta el token. */
-    record VerifyEmailRequest(String token) {
+    record VerifyEmailRequest(UUID registrationAttemptId, String code) {
         @Override
         public String toString() {
-            return "VerifyEmailRequest[token=[REDACTED]]";
+            return "VerifyEmailRequest[code=[REDACTED]]";
         }
     }
 
-    record ResendVerificationRequest(String email) {}
+    record ResendVerificationRequest(UUID registrationAttemptId) {}
 
-    private final HttpClient http;
+    record LoginRequest(String email, String password, String clientType) {
+        @Override
+        public String toString() {
+            return "LoginRequest[REDACTED]";
+        }
+    }
+
+    record RefreshRequest(String refreshToken) {
+        @Override
+        public String toString() {
+            return "RefreshRequest[REDACTED]";
+        }
+    }
+
+    record ForgotPasswordRequest(String email) {
+        @Override
+        public String toString() {
+            return "ForgotPasswordRequest[REDACTED]";
+        }
+    }
+
+    record ResetPasswordBody(UUID recoveryAttemptId, String code, String newPassword) {
+        @Override
+        public String toString() {
+            return "ResetPasswordBody[REDACTED]";
+        }
+    }
+
+    record ChangePasswordBody(String currentPassword, String newPassword) {
+        @Override
+        public String toString() {
+            return "ChangePasswordBody[REDACTED]";
+        }
+    }
+
+    record GoogleAttemptBody(String clientType, String redirectTarget, String codeChallenge) {}
+
+    record GoogleLinkBody(String redirectTarget, String codeChallenge) {}
+
+    record GoogleReauthenticateBody(String password) {
+        @Override
+        public String toString() {
+            return "GoogleReauthenticateBody[REDACTED]";
+        }
+    }
+
+    record GoogleExchangeBody(UUID attemptId, String completionCode, String codeVerifier) {
+        @Override
+        public String toString() {
+            return "GoogleExchangeBody[REDACTED]";
+        }
+    }
+
+    record RequestAuthorization(String name, String value) {
+        @Override
+        public String toString() {
+            return "RequestAuthorization[REDACTED]";
+        }
+    }
+
+    private static final Set<String> AUTH_PROBLEMS =
+            Set.of(
+                    "/problems/invalid-current-password",
+                    "/problems/invalid-recovery-code",
+                    "/problems/invalid-password",
+                    "/problems/malformed-request",
+                    "/problems/password-unchanged",
+                    "/problems/password-change-not-allowed",
+                    "/problems/credentials-changed",
+                    "/problems/account-link-required",
+                    "/problems/reauthentication-required",
+                    "/problems/identity-already-linked",
+                    "/problems/provider-already-linked",
+                    "/problems/account-link-conflict",
+                    "/problems/invalid-credentials",
+                    "/problems/invalid-access-token");
+
+    private final HttpClient httpClient;
     private final String baseUrl;
     private final Duration requestTimeout;
-    private final ObjectMapper json =
+    private final ObjectMapper objectMapper =
             new ObjectMapper()
                     .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -74,90 +163,293 @@ public class AuthApi {
         this(HttpClient.newBuilder().connectTimeout(config.connectTimeout()).build(), config);
     }
 
-    AuthApi(HttpClient http, ApiConfig config) {
-        this.http = http;
+    AuthApi(HttpClient httpClient, ApiConfig config) {
+        this.httpClient = httpClient;
         this.baseUrl = config.authBaseUrl().toString().replaceAll("/+$", "");
         this.requestTimeout = config.requestTimeout();
     }
 
-    /** CU-01. Si {@code verificationEmailSent} es falso, hay que ofrecer el reenvío. */
-    public Account register(String email, String password) throws ApiException {
-        return read(
-                Operation.REGISTER, post(Operation.REGISTER, new RegisterRequest(email, password)));
+    public RegistrationAttempt register(String email, String password) throws ApiException {
+        return execute(
+                Operation.REGISTER,
+                new RegisterRequest(email, password),
+                RegistrationAttempt.class);
     }
 
-    /** CU-02. El escritorio todavía no lo usa: la verificación se hace con el enlace del correo. */
-    public Account verifyEmail(String token) throws ApiException {
-        return read(
-                Operation.VERIFY_EMAIL,
-                post(Operation.VERIFY_EMAIL, new VerifyEmailRequest(token)));
+    public Account verifyEmail(UUID attemptId, String code) throws ApiException {
+        return execute(
+                Operation.VERIFY_EMAIL, new VerifyEmailRequest(attemptId, code), Account.class);
     }
 
-    /**
-     * CU-02. El servicio responde igual aunque la cuenta no exista, ya esté verificada o el reenvío
-     * anterior tenga menos de 60 segundos.
-     */
-    public void resendVerification(String email) throws ApiException {
-        post(Operation.RESEND_VERIFICATION, new ResendVerificationRequest(email));
+    public RegistrationAttempt resendVerification(UUID attemptId) throws ApiException {
+        return execute(
+                Operation.RESEND_VERIFICATION,
+                new ResendVerificationRequest(attemptId),
+                RegistrationAttempt.class);
     }
 
-    private HttpResponse<String> post(Operation operation, Object body) throws ApiException {
-        HttpRequest request;
+    public TokenResponse login(String email, String password) throws ApiException {
+        return execute(
+                Operation.LOGIN, new LoginRequest(email, password, "desktop"), TokenResponse.class);
+    }
+
+    public TokenResponse refresh(String refreshToken) throws ApiException {
+        return execute(Operation.REFRESH, new RefreshRequest(refreshToken), TokenResponse.class);
+    }
+
+    public void logout(String refreshToken) throws ApiException {
+        execute(Operation.LOGOUT, new RefreshRequest(refreshToken), Void.class);
+    }
+
+    public RecoveryResponse forgotPassword(String email) throws ApiException {
+        return execute(
+                Operation.FORGOT_PASSWORD,
+                new ForgotPasswordRequest(email),
+                RecoveryResponse.class);
+    }
+
+    public void resetPassword(UUID attemptId, String code, String newPassword) throws ApiException {
+        execute(
+                Operation.RESET_PASSWORD,
+                new ResetPasswordBody(attemptId, code, newPassword),
+                Void.class);
+    }
+
+    public void changePassword(String accessToken, String currentPassword, String newPassword)
+            throws ApiException {
+        execute(
+                Operation.CHANGE_PASSWORD,
+                new ChangePasswordBody(currentPassword, newPassword),
+                Void.class,
+                new RequestAuthorization("Authorization", "Bearer " + accessToken));
+    }
+
+    public GoogleAttemptResponse createGoogleAttempt(String challenge) throws ApiException {
+        String target = googleTarget();
+        return execute(
+                Operation.GOOGLE_ATTEMPT,
+                new GoogleAttemptBody("desktop", target, challenge),
+                GoogleAttemptResponse.class);
+    }
+
+    public TokenResponse exchangeGoogle(GoogleExchange proof) throws ApiException {
+        return execute(
+                Operation.GOOGLE_EXCHANGE,
+                new GoogleExchangeBody(
+                        proof.attemptId(), proof.completionCode(), proof.codeVerifier()),
+                TokenResponse.class,
+                new RequestAuthorization("X-Auth-Attempt-Secret", proof.attemptSecret()));
+    }
+
+    public GoogleAttemptResponse createGoogleLinkAttempt(String accessToken, String challenge)
+            throws ApiException {
+        return execute(
+                Operation.GOOGLE_LINK,
+                new GoogleLinkBody(googleTarget(), challenge),
+                GoogleAttemptResponse.class,
+                new RequestAuthorization("Authorization", "Bearer " + accessToken));
+    }
+
+    public void exchangeGoogleLink(GoogleExchange proof) throws ApiException {
+        execute(
+                Operation.GOOGLE_LINK_EXCHANGE,
+                new GoogleExchangeBody(
+                        proof.attemptId(), proof.completionCode(), proof.codeVerifier()),
+                Void.class,
+                new RequestAuthorization("X-Auth-Attempt-Secret", proof.attemptSecret()));
+    }
+
+    public void reauthenticateGoogle(String accessToken, String password) throws ApiException {
+        execute(
+                Operation.GOOGLE_REAUTHENTICATE,
+                new GoogleReauthenticateBody(password),
+                Void.class,
+                new RequestAuthorization("Authorization", "Bearer " + accessToken));
+    }
+
+    public GoogleConnectionsResponse googleConnections(String accessToken) throws ApiException {
+        return execute(
+                Operation.GOOGLE_CONNECTIONS,
+                null,
+                GoogleConnectionsResponse.class,
+                new RequestAuthorization("Authorization", "Bearer " + accessToken));
+    }
+
+    private String googleTarget() throws ApiException {
+        String target =
+                System.getProperty(
+                        "sonimbus.auth.google.target",
+                        System.getenv().getOrDefault("SONIMBUS_AUTH_GOOGLE_TARGET", "desktop"));
+        if (!target.matches("[A-Za-z0-9_-]{1,64}")) {
+            throw new ApiException(ApiErrorKind.VALIDATION, "google-attempt", null);
+        }
+        return target;
+    }
+
+    private <T> T execute(Operation operation, Object requestBody, Class<T> responseType)
+            throws ApiException {
+
+        return execute(operation, requestBody, responseType, null);
+    }
+
+    private <T> T execute(
+            Operation operation,
+            Object requestBody,
+            Class<T> responseType,
+            RequestAuthorization authorization)
+            throws ApiException {
+
+        AuthLog.requestStarted(operation.label);
+
         try {
-            request =
+
+            HttpRequest request = createRequest(operation, requestBody, authorization);
+            HttpResponse<String> response = sendRequest(operation, request);
+
+            validateStatus(operation, response);
+
+            T responseBody = readResponse(operation, response, responseType);
+            AuthLog.requestSucceeded(operation.label, response.statusCode());
+
+            return responseBody;
+
+        } catch (ApiException failure) {
+            AuthLog.requestFailed(operation.label, failure);
+            throw failure;
+        }
+    }
+
+    private HttpRequest createRequest(
+            Operation operation, Object requestBody, RequestAuthorization authorization)
+            throws ApiException {
+
+        try {
+
+            HttpRequest.Builder builder =
                     HttpRequest.newBuilder(URI.create(baseUrl + operation.path))
                             .timeout(requestTimeout)
-                            .header("Content-Type", "application/json")
-                            .header("Accept", "application/json")
-                            .POST(
-                                    HttpRequest.BodyPublishers.ofString(
-                                            json.writeValueAsString(body)))
-                            .build();
-        } catch (JsonProcessingException e) {
+                            .header("Accept", "application/json");
+            if (operation == Operation.GOOGLE_CONNECTIONS) {
+                builder.GET();
+            } else {
+                builder.header("Content-Type", "application/json")
+                        .POST(
+                                HttpRequest.BodyPublishers.ofString(
+                                        objectMapper.writeValueAsString(requestBody)));
+            }
+            if (authorization != null) {
+                builder.header(authorization.name(), authorization.value());
+            }
+            return builder.build();
+
+        } catch (JsonProcessingException serializationFailure) {
             // Sin la causa: el mensaje de Jackson podría citar el cuerpo con la contraseña.
             throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
         }
+    }
 
-        HttpResponse<String> response;
+    private HttpResponse<String> sendRequest(Operation operation, HttpRequest request)
+            throws ApiException {
+
         try {
-            response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (HttpTimeoutException e) {
-            throw new ApiException(ApiErrorKind.TIMEOUT, operation.label, e);
-        } catch (IOException e) {
-            throw new ApiException(ApiErrorKind.NETWORK, operation.label, e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new ApiException(ApiErrorKind.NETWORK, operation.label, e);
-        }
 
-        int status = response.statusCode();
-        if (status / 100 != 2) {
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        } catch (HttpTimeoutException timeoutFailure) {
+            throw new ApiException(ApiErrorKind.TIMEOUT, operation.label, timeoutFailure);
+        } catch (IOException connectionFailure) {
+            throw new ApiException(ApiErrorKind.NETWORK, operation.label, connectionFailure);
+        } catch (InterruptedException interruption) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(ApiErrorKind.NETWORK, operation.label, interruption);
+        }
+    }
+
+    private void validateStatus(Operation operation, HttpResponse<String> response)
+            throws ApiException {
+
+        int statusCode = response.statusCode();
+
+        if (statusCode / 100 != 2) {
             Duration retryAfter =
                     response.headers()
                             .firstValue("Retry-After")
                             .map(AuthApi::parseRetryAfter)
                             .orElse(null);
+
             throw new ApiException(
-                    classify(operation, status), operation.label, status, retryAfter);
+                    new ApiException.ResponseDetails(
+                            statusCode, retryAfter, recognizedProblem(operation, response)),
+                    classify(operation, statusCode),
+                    operation.label);
         }
-        return response;
+        int expected =
+                switch (operation) {
+                    case REGISTER, GOOGLE_ATTEMPT, GOOGLE_LINK -> 201;
+                    case RESEND_VERIFICATION, FORGOT_PASSWORD -> 202;
+                    case LOGOUT,
+                                    RESET_PASSWORD,
+                                    CHANGE_PASSWORD,
+                                    GOOGLE_LINK_EXCHANGE,
+                                    GOOGLE_REAUTHENTICATE ->
+                            204;
+                    default -> 200;
+                };
+        if (statusCode != expected) {
+            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, statusCode, null);
+        }
     }
 
-    private Account read(Operation operation, HttpResponse<String> response) throws ApiException {
+    private String recognizedProblem(Operation operation, HttpResponse<String> response) {
+        if (operation != Operation.CHANGE_PASSWORD
+                && operation != Operation.RESET_PASSWORD
+                && operation != Operation.FORGOT_PASSWORD
+                && operation != Operation.GOOGLE_EXCHANGE
+                && operation != Operation.GOOGLE_LINK
+                && operation != Operation.GOOGLE_LINK_EXCHANGE
+                && operation != Operation.GOOGLE_REAUTHENTICATE
+                && operation != Operation.GOOGLE_CONNECTIONS) {
+            return null;
+        }
         try {
-            return json.readValue(response.body(), Account.class);
-        } catch (JsonProcessingException e) {
-            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, e);
+            var problem = objectMapper.readTree(response.body());
+            String type = problem == null ? "" : problem.path("type").asText();
+            return AUTH_PROBLEMS.contains(type) ? type : null;
+        } catch (JsonProcessingException invalidProblem) {
+            return null;
         }
     }
 
-    /**
-     * Decide el caso solo con el código HTTP y la operación. El servicio envía {@code type:
-     * "about:blank"} en todos sus errores y su {@code detail} no es contrato (#14).
-     */
-    static ApiErrorKind classify(Operation operation, int status) {
-        return switch (status) {
+    private <T> T readResponse(
+            Operation operation, HttpResponse<String> response, Class<T> responseType)
+            throws ApiException {
+
+        if (responseType == Void.class && response.body().isBlank()) {
+            return null;
+        }
+
+        try {
+
+            T responseBody = objectMapper.readValue(response.body(), responseType);
+
+            if (responseBody == null) {
+                throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
+            }
+
+            return responseBody;
+
+        } catch (JsonProcessingException deserializationFailure) {
+            throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
+        }
+    }
+
+    static ApiErrorKind classify(Operation operation, int statusCode) {
+        return switch (statusCode) {
             case 400 -> ApiErrorKind.VALIDATION;
+            case 401 ->
+                    operation == Operation.LOGIN
+                            ? ApiErrorKind.INVALID_CREDENTIALS
+                            : ApiErrorKind.UNEXPECTED;
             case 409 ->
                     operation == Operation.REGISTER
                             ? ApiErrorKind.EMAIL_TAKEN
@@ -165,29 +457,34 @@ public class AuthApi {
             case 429 -> ApiErrorKind.RATE_LIMITED;
             case 500 -> ApiErrorKind.SERVER;
             case 502, 503, 504 -> ApiErrorKind.UNAVAILABLE;
-            // 422 y 415 los produce Axum cuando el JSON enviado no es válido: es un error del
-            // cliente.
             default -> ApiErrorKind.UNEXPECTED;
         };
     }
 
-    /**
-     * {@code Retry-After} en segundos o como fecha HTTP (RFC 9110); {@code null} si no se entiende.
-     */
     static Duration parseRetryAfter(String value) {
-        String text = value.strip();
+
+        String retryAfterValue = value.strip();
+
         try {
-            return Duration.ofSeconds(Math.max(0, Long.parseLong(text)));
-        } catch (NumberFormatException e) {
-            // No son segundos: puede ser una fecha.
+
+            return Duration.ofSeconds(Math.max(0, Long.parseLong(retryAfterValue)));
+
+        } catch (NumberFormatException invalidSeconds) {
+            return parseRetryAfterDate(retryAfterValue);
         }
+    }
+
+    private static Duration parseRetryAfterDate(String value) {
+
         try {
-            Duration wait =
+            Duration remainingWait =
                     Duration.between(
                             ZonedDateTime.now(),
-                            ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME));
-            return wait.isNegative() ? Duration.ZERO : wait;
-        } catch (DateTimeParseException e) {
+                            ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME));
+
+            return remainingWait.isNegative() ? Duration.ZERO : remainingWait;
+
+        } catch (DateTimeParseException invalidDate) {
             return null;
         }
     }

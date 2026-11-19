@@ -6,12 +6,16 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextFormatter;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Text;
 
-import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
-import mx.uv.sonimbus.desktop.data.api.ApiException;
-import mx.uv.sonimbus.desktop.data.api.auth.AuthApi;
+import mx.uv.sonimbus.desktop.data.logging.AuthLog;
+import mx.uv.sonimbus.desktop.domain.registration.PendingRegistration;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationError;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationException;
+import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
 import mx.uv.sonimbus.desktop.ui.auth.common.AuthMessages;
 import mx.uv.sonimbus.desktop.ui.common.AlertBox;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
@@ -21,33 +25,27 @@ import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
-/**
- * CU-02 adaptado al enlace: Auth envía un enlace de verificación (no un código) y el usuario lo
- * abre desde su correo. Esta vista informa a dónde se envió y permite reenviarlo.
- */
 public class VerifyAccountController implements Parameterized<VerifyAccountParams> {
 
-    /** Igual al cooldown de reenvío de Auth. */
     static final int RESEND_COOLDOWN_SECONDS = 60;
-
-    private static final String RESEND_TEXT = "Reenviar correo";
-    private static final String RESEND_ACCESSIBLE_TEXT = "Reenviar correo de verificación";
-
-    private final AuthApi authApi;
-    private final BackgroundTasks tasks;
+    private static final int CODE_LENGTH = 8;
+    private final RegistrationService registrations;
+    private final BackgroundTasks backgroundTasks;
     private final ViewManager viewManager;
 
-    /** Correo recibido como parámetro; {@code null} si la vista se abrió sin él (demostración). */
-    private String email;
-
-    private boolean sending;
+    private VerifyAccountParams parameters;
+    private Instant resendAvailableAt = Instant.MIN;
+    private Timeline timer;
     private boolean active = true;
-    private Timeline cooldown;
-    private int cooldownRemaining;
+    private boolean busy;
+    private boolean verified;
 
     @FXML private Text sentToEmailText;
+    @FXML private TextField codeField;
+    @FXML private Label expirationLabel;
     @FXML private HBox errorBox;
     @FXML private Label errorIconLabel;
     @FXML private Label errorLabel;
@@ -58,17 +56,33 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
     @FXML private Hyperlink backToLoginLink;
 
     public VerifyAccountController(
-            AuthApi authApi, BackgroundTasks tasks, ViewManager viewManager) {
-        this.authApi = Objects.requireNonNull(authApi);
-        this.tasks = Objects.requireNonNull(tasks);
+            RegistrationService registrations,
+            BackgroundTasks backgroundTasks,
+            ViewManager viewManager) {
+        this.registrations = Objects.requireNonNull(registrations);
+        this.backgroundTasks = Objects.requireNonNull(backgroundTasks);
         this.viewManager = Objects.requireNonNull(viewManager);
     }
 
     @FXML
     private void initialize() {
-        infoLabel.setText(AuthMessages.RESEND_DONE);
-        // Sin correo no hay a quién reenviar; setParameters lo habilita.
-        resendButton.setDisable(true);
+        codeField.setTextFormatter(
+                new TextFormatter<String>(
+                        change -> change.getControlNewText().matches("\\d{0,8}") ? change : null));
+
+        codeField
+                .textProperty()
+                .addListener((observable, previous, current) -> AlertBox.hide(errorBox));
+
+        verifyButton
+                .sceneProperty()
+                .addListener(
+                        (observable, previous, current) -> {
+                            if (previous != null && current == null) {
+                                leave();
+                            }
+                        });
+        refreshAvailability();
     }
 
     @Override
@@ -78,90 +92,147 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
 
     @Override
     public void setParameters(VerifyAccountParams parameters) {
-        email = parameters.email();
-        sentToEmailText.setText(email);
-        resendButton.setDisable(false);
-        switch (parameters.delivery()) {
-            // Auth acaba de enviar el correo: su cooldown ya corre, así que el botón también
-            // espera.
-            case SENT -> startCooldown(RESEND_COOLDOWN_SECONDS);
-            case FAILED ->
-                    AlertBox.show(
-                            errorBox,
-                            errorIconLabel,
-                            errorLabel,
-                            AlertBox.Kind.ERROR,
-                            AuthMessages.VERIFICATION_NOT_SENT);
-            // Desde un 409 no se sabe nada del envío: el reenvío queda disponible de inmediato.
-            case UNKNOWN -> {}
+        this.parameters = Objects.requireNonNull(parameters);
+        sentToEmailText.setText(parameters.email());
+
+        if (parameters.emailSent()) {
+            waitBeforeResend(RESEND_COOLDOWN_SECONDS);
+        } else {
+            showError(AuthMessages.VERIFICATION_NOT_SENT);
         }
+
+        timer =
+                new Timeline(
+                        new KeyFrame(
+                                javafx.util.Duration.seconds(1), event -> refreshAvailability()));
+        timer.setCycleCount(Timeline.INDEFINITE);
+        timer.play();
+
+        refreshAvailability();
+    }
+
+    @FXML
+    private void onVerifyCode() {
+
+        if (!canSubmit()) {
+            return;
+        }
+
+        String code = codeField.getText();
+
+        if (code.length() != CODE_LENGTH) {
+            showError(AuthMessages.CODE_REQUIRED);
+            codeField.requestFocus();
+            return;
+        }
+
+        setBusy(true);
+
+        backgroundTasks.run(
+                () -> {
+                    registrations.verifyEmail(parameters.attemptId(), code);
+                    return null;
+                },
+                ignored -> onVerified(),
+                this::onVerificationFailed);
+    }
+
+    private void onVerified() {
+
+        if (!active) {
+            return;
+        }
+
+        verified = true;
+        busy = false;
+        stopTimer();
+        codeField.clear();
+        BusyButton.setBusy(verifyButton, false, null);
+        infoLabel.setText(AuthMessages.REGISTRATION_COMPLETE);
+        AlertBox.setShown(infoBox, true);
+        backToLoginLink.setText("Iniciar sesión");
+
+        refreshAvailability();
+    }
+
+    private void onVerificationFailed(Throwable error) {
+
+        if (!active) {
+            return;
+        }
+
+        setBusy(false);
+
+        if (!(error instanceof RegistrationException)) {
+            AuthLog.unexpectedFailure("verify-email", error);
+        }
+
+        showError(
+                error instanceof RegistrationException failure
+                        ? AuthMessages.forVerifyEmail(failure)
+                        : AuthMessages.UNEXPECTED);
     }
 
     @FXML
     private void onResendEmail() {
-        if (email == null || sending || cooldownRemaining > 0) {
+
+        if (!canSubmit() || Instant.now().isBefore(resendAvailableAt)) {
             return;
         }
-        sending = true;
-        AlertBox.hide(errorBox);
-        AlertBox.setShown(infoBox, false);
-        BusyButton.setBusy(resendButton, true, "Enviando…");
-        String to = email;
-        tasks.run(
-                () -> {
-                    authApi.resendVerification(to);
-                    return null;
-                },
-                ignored -> onResent(),
+
+        setBusy(true);
+
+        backgroundTasks.run(
+                () -> registrations.resendVerification(parameters.attemptId()),
+                this::onResent,
                 this::onResendFailed);
     }
 
-    private void onResent() {
+    private void onResent(PendingRegistration attempt) {
+
         if (!active) {
             return;
         }
-        sending = false;
-        BusyButton.setBusy(resendButton, false, null);
-        AlertBox.setShown(infoBox, true);
-        startCooldown(RESEND_COOLDOWN_SECONDS);
+
+        setBusy(false);
+
+        codeField.clear();
+        waitBeforeResend(RESEND_COOLDOWN_SECONDS);
+
+        if (attempt.emailSent()) {
+            infoLabel.setText(AuthMessages.RESEND_DONE);
+            AlertBox.setShown(infoBox, true);
+        } else {
+            showError(AuthMessages.VERIFICATION_NOT_SENT);
+        }
+
+        refreshAvailability();
     }
 
     private void onResendFailed(Throwable error) {
+
         if (!active) {
             return;
         }
-        sending = false;
-        BusyButton.setBusy(resendButton, false, null);
-        if (!(error instanceof ApiException e)) {
-            AlertBox.show(
-                    errorBox,
-                    errorIconLabel,
-                    errorLabel,
-                    AlertBox.Kind.ERROR,
-                    AuthMessages.UNEXPECTED);
-            return;
-        }
-        AlertBox.show(
-                errorBox,
-                errorIconLabel,
-                errorLabel,
-                AlertBox.Kind.ERROR,
-                AuthMessages.forResendVerification(e));
-        if (e.kind() == ApiErrorKind.RATE_LIMITED) {
-            long wait =
-                    e.retryAfter()
-                            .map(Duration::toSeconds)
-                            .filter(s -> s > 0)
-                            .orElse((long) RESEND_COOLDOWN_SECONDS);
-            startCooldown((int) Math.min(wait, Integer.MAX_VALUE));
-        }
-    }
 
-    /** CU-02: tras abrir el enlace, la cuenta queda verificada y el usuario inicia sesión. */
-    @FXML
-    private void onAlreadyVerified() {
-        leave();
-        viewManager.show(View.LOGIN);
+        setBusy(false);
+
+        if (error instanceof RegistrationException failure) {
+            if (failure.kind() == RegistrationError.RATE_LIMITED) {
+                long seconds =
+                        failure.retryAfter()
+                                .map(Duration::toSeconds)
+                                .filter(wait -> wait > 0)
+                                .orElse((long) RESEND_COOLDOWN_SECONDS);
+                waitBeforeResend(Math.min(seconds, Integer.MAX_VALUE));
+            }
+            showError(AuthMessages.forResendVerification(failure));
+        } else {
+            AuthLog.unexpectedFailure("resend-verification", error);
+            showError(AuthMessages.UNEXPECTED);
+        }
+
+        refreshAvailability();
     }
 
     @FXML
@@ -170,51 +241,85 @@ public class VerifyAccountController implements Parameterized<VerifyAccountParam
         viewManager.show(View.LOGIN);
     }
 
-    /** Deshabilita el reenvío y muestra la cuenta regresiva en el botón. */
-    private void startCooldown(int seconds) {
-        stopCooldown();
-        cooldownRemaining = seconds;
-        showCooldown();
-        cooldown =
-                new Timeline(
-                        new KeyFrame(
-                                javafx.util.Duration.seconds(1),
-                                event -> {
-                                    cooldownRemaining--;
-                                    showCooldown();
-                                }));
-        cooldown.setCycleCount(seconds);
-        cooldown.play();
+    @FXML
+    private void onRestartRegistration() {
+        leave();
+        viewManager.show(View.REGISTER);
     }
 
-    private void showCooldown() {
-        if (cooldownRemaining > 0) {
-            resendButton.setDisable(true);
-            resendButton.setText(cooldownText(cooldownRemaining));
-            resendButton.setAccessibleText(
-                    RESEND_ACCESSIBLE_TEXT + ", disponible en " + cooldownRemaining + " segundos");
+    private boolean canSubmit() {
+        return active
+                && parameters != null
+                && !busy
+                && !verified
+                && Instant.now().isBefore(parameters.expiresAt());
+    }
+
+    private void setBusy(boolean busy) {
+        this.busy = busy;
+        AlertBox.hide(errorBox);
+        AlertBox.setShown(infoBox, false);
+        BusyButton.setBusy(verifyButton, busy, "Procesando…");
+
+        refreshAvailability();
+    }
+
+    private void waitBeforeResend(long seconds) {
+        resendAvailableAt = Instant.now().plusSeconds(seconds);
+    }
+
+    private void refreshAvailability() {
+        boolean available = canSubmit();
+
+        codeField.setDisable(!available);
+        verifyButton.setDisable(!available);
+
+        long waitSeconds =
+                Math.max(0, Duration.between(Instant.now(), resendAvailableAt).getSeconds() + 1);
+
+        resendButton.setDisable(!available || waitSeconds > 0);
+        resendButton.setText(waitSeconds > 0 ? cooldownText((int) waitSeconds) : "Reenviar correo");
+
+        updateExpirationLabel();
+    }
+
+    private void updateExpirationLabel() {
+
+        if (parameters == null) {
+            expirationLabel.setText("Inicia un registro para solicitar un código.");
+        } else if (verified) {
+            expirationLabel.setText("");
+        } else if (!Instant.now().isBefore(parameters.expiresAt())) {
+            expirationLabel.setText(AuthMessages.REGISTRATION_EXPIRED);
+            stopTimer();
         } else {
-            resendButton.setDisable(false);
-            resendButton.setText(RESEND_TEXT);
-            resendButton.setAccessibleText(RESEND_ACCESSIBLE_TEXT);
+            long seconds =
+                    Math.max(
+                            0,
+                            Duration.between(Instant.now(), parameters.expiresAt()).getSeconds());
+            expirationLabel.setText(
+                    "El código vence en " + seconds / 60 + " min " + seconds % 60 + " s.");
         }
     }
 
-    /** «Reenviar en 42 s». */
     static String cooldownText(int seconds) {
         return "Reenviar en " + seconds + " s";
     }
 
-    private void stopCooldown() {
-        if (cooldown != null) {
-            cooldown.stop();
-            cooldown = null;
-        }
-        cooldownRemaining = 0;
+    private void showError(String message) {
+        AlertBox.show(errorBox, errorIconLabel, errorLabel, AlertBox.Kind.ERROR, message);
     }
 
     private void leave() {
         active = false;
-        stopCooldown();
+        stopTimer();
+        codeField.clear();
+    }
+
+    private void stopTimer() {
+        if (timer != null) {
+            timer.stop();
+            timer = null;
+        }
     }
 }
