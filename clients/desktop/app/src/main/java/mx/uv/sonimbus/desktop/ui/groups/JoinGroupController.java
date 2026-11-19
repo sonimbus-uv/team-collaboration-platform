@@ -1,12 +1,27 @@
 package mx.uv.sonimbus.desktop.ui.groups;
 
+import java.util.Objects;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
+import mx.uv.sonimbus.desktop.data.core.CoreApi;
+import mx.uv.sonimbus.desktop.ui.common.AlertBox;
+import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
+import mx.uv.sonimbus.desktop.ui.common.BusyButton;
+import mx.uv.sonimbus.desktop.ui.common.CoreMessages;
+import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 
-public class JoinGroupController {
+/** CU-11. Une al usuario con un código de invitación; si ya era miembro, solo abre el grupo. */
+public class JoinGroupController implements Parameterized<GroupDialogParams> {
+
+    private static final String FIELD_INVALID = "field-invalid";
+    static final int CODE_MAX = 64;
+
+    private final CoreApi core;
+    private final BackgroundTasks tasks;
+    private GroupDialogParams params = new GroupDialogParams(group -> { });
 
     @FXML private HBox errorBox;
     @FXML private Label errorLabel;
@@ -18,23 +33,67 @@ public class JoinGroupController {
     @FXML private Button cancelButton;
     @FXML private Button joinButton;
 
+    public JoinGroupController(CoreApi core, BackgroundTasks tasks) {
+        this.core = Objects.requireNonNull(core);
+        this.tasks = Objects.requireNonNull(tasks);
+    }
+
     @FXML
     private void initialize() {
-        // TODO CU-11: si se pega un enlace de invitación completo, extraer el código
-        // TODO CU-11: al completar el código, consultar la invitación y mostrar groupPreviewBox
-        //             (iniciales, nombre, "N miembros · Invitación válida")
-        // TODO CU-11: ocultar errorBox y quitar "field-invalid" de inviteCodeField al editar
+        // TODO CU-11: vista previa del grupo cuando Core publique la consulta de invitaciones
+        inviteCodeField.textProperty().addListener((obs, old, text) -> {
+            inviteCodeField.getStyleClass().remove(FIELD_INVALID);
+            AlertBox.hide(errorBox);
+        });
+    }
+
+    @Override
+    public Class<GroupDialogParams> parametersType() {
+        return GroupDialogParams.class;
+    }
+
+    @Override
+    public void setParameters(GroupDialogParams parameters) {
+        this.params = Objects.requireNonNull(parameters);
     }
 
     @FXML
     private void onJoinGroup() {
-        // TODO CU-11: validar el código; si la invitación es inválida, caducada, revocada o
-        //             agotada mostrar errorBox; si es válida, unirse (sin duplicar la membresía),
-        //             cerrar el diálogo y seleccionar el grupo en el shell
+        String code = extractCode(inviteCodeField.getText());
+        if (code.isEmpty() || code.length() > CODE_MAX) {
+            inviteCodeField.getStyleClass().add(FIELD_INVALID);
+            showError("Escribe el código de invitación.");
+            inviteCodeField.requestFocus();
+            return;
+        }
+        BusyButton.setBusy(joinButton, true, "Uniéndote…");
+        tasks.run(() -> core.joinGroup(code), group -> {
+            joinButton.getScene().getWindow().hide();
+            params.onGroup().accept(group);
+        }, error -> {
+            BusyButton.setBusy(joinButton, false, null);
+            inviteCodeField.getStyleClass().add(FIELD_INVALID);
+            showError(CoreMessages.forError(error));
+        });
+    }
+
+    /** Acepta el código solo o un enlace que termine en él ({@code …/invite/<código>}). */
+    static String extractCode(String text) {
+        if (text == null) {
+            return "";
+        }
+        String value = text.strip().replaceAll("[/?#]+$", "");
+        int slash = value.lastIndexOf('/');
+        return slash >= 0 ? value.substring(slash + 1) : value;
     }
 
     @FXML
     private void onCancel() {
         cancelButton.getScene().getWindow().hide();
+    }
+
+    private void showError(String message) {
+        errorLabel.setText(message);
+        AlertBox.setShown(errorBox, true);
     }
 }

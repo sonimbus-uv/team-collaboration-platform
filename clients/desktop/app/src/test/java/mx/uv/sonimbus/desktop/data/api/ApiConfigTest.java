@@ -66,4 +66,19 @@ class ApiConfigTest {
         assertEquals(AuthPaths.PREFIX + "/auth/verify-email", AuthPaths.VERIFY_EMAIL);
         assertEquals(AuthPaths.PREFIX + "/auth/resend-verification", AuthPaths.RESEND_VERIFICATION);
     }
+
+    @Test
+    void coreUrlComesFromPropertyEnvOrDefault() {
+        assertEquals(URI.create("http://a:1"), ApiConfig.resolveCoreUrl("http://a:1/", "http://b:2"));
+        assertEquals(URI.create("http://b:2"), ApiConfig.resolveCoreUrl(null, "http://b:2"));
+        assertEquals(URI.create("http://localhost:3002"), ApiConfig.resolveCoreUrl(null, null));
+    }
+
+    @Test
+    void coreSocketUsesWebSocketScheme() {
+        assertEquals(URI.create("ws://a:1/socket/websocket?vsn=2.0.0"),
+                ApiConfig.withUrls(URI.create("http://x"), URI.create("http://a:1/")).coreSocketUrl());
+        assertEquals(URI.create("wss://core.example/socket/websocket?vsn=2.0.0"),
+                ApiConfig.withUrls(URI.create("http://x"), URI.create("https://core.example")).coreSocketUrl());
+    }
 }
