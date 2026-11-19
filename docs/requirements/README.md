@@ -17,11 +17,11 @@ Los requisitos nuevos siguen el formato de la sección 6 de [`STANDARD_DEVELOPME
 | Grupos y permisos | Creación, configuración, archivado y eliminación de grupos; invitaciones; unirse y abandonar; canales; roles y permisos; moderación | — |
 | Mensajería y archivos | Mensajes en tiempo real sin duplicados, respuestas, reacciones, edición y eliminación, historial paginado, archivos e imágenes, archivos compartidos | Traducción de mensajes |
 | Proyectos y tareas | Proyectos, tareas, asignación y estado | — |
-| Voz | Canales de voz con control de micrófono (D-01) | Transcripción y resumen de reuniones |
+| Voz | Canales de voz con control de micrófono (D-01) y video de cámara (D-31) | Publicar pantalla compartida; transcripción y resumen de reuniones |
 | Reportes | Reportes básicos de actividad; exportación a PDF o CSV (prioridad baja) | — |
 | Notificaciones | Notificaciones internas en tiempo real | Notificaciones push en móvil |
 | Clientes | Escritorio (JavaFX) y móvil (Flutter) | — |
-| Fuera del alcance | Cliente web y videollamadas | — |
+| Fuera del alcance | Cliente web | — |
 
 ## Trazabilidad por módulo
 
@@ -91,6 +91,7 @@ La AR02 (entregada el 20 sep 2026) se revisó el 30 sep y se ajustó con las dec
 |---|---|---|---|
 | CU-22, RF-VOZ-01, 02 | Voz condicionada a validación técnica | Voz dentro del MVP | D-01 |
 | RNF-INT-02 | Broker opcional | RabbitMQ dentro del MVP | D-04 |
+| Videollamadas | Fuera del alcance | Video de cámara dentro del MVP (la pantalla compartida queda aparte) | D-31 |
 | CU-07 Foto de perfil | Paquete predefinido | Paquete predefinido (se descarta la subida de imagen propia de la revisión del 30 sep) | Equipo, 2026-10-07 |
 | CU-10 Invitaciones | Administrador y moderador | Administrador y moderador (la revisión del 30 sep lo limitaba al administrador) | Equipo, 2026-10-07 |
 | CU-21 Traducir | Automática, según el idioma del sistema operativo | A petición del miembro, eligiendo el idioma | Revisión 30 sep; equipo, 2026-10-07 |
