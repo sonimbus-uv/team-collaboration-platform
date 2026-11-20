@@ -38,7 +38,7 @@ Los archivos importados conservan sus comentarios y Javadoc originales (decisió
 
 ## Licencia
 
-El SDK declara Apache-2.0 en su README (sección License) y en `build.gradle.kts`, pero el tag `v0.1.4` no incluye un archivo `LICENSE`. No hay nada que conservar; el texto de la licencia está pendiente de añadir.
+El SDK declara Apache-2.0 en su README (sección License) y en `build.gradle.kts`, pero el tag `v0.1.4` no incluye un archivo `LICENSE`. Se añadió `LICENSE` con el texto estándar de Apache License 2.0 (copia sin modificar de `/usr/share/common-licenses/Apache-2.0`, de Debian). No es un archivo del original: no contiene aviso de copyright de los autores.
 
 ## Cambios respecto al original
 
@@ -62,7 +62,6 @@ Un commit por cambio, en el orden de aplicación:
 
 ## Pendientes
 
-- Añadir `LICENSE` (ver Licencia).
 - Defecto 7 (pantalla compartida): fuera del alcance, T-15.
 - Sin cancelación de eco ni supresión de ruido, sin `getStats()` y sin elección de dispositivo de salida (7.5, sin parche).
 - Integración con `app/` a través de la interfaz de voz propia: aún no.
