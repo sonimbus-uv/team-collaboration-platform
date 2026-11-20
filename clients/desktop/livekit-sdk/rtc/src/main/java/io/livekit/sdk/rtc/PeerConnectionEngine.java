@@ -25,6 +25,7 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
   private final List<String> streamIds = new ArrayList<>();
 
   private volatile boolean initialized = false;
+  private boolean closed = false;
 
   public PeerConnectionEngine() {
     streamIds.add("livekit");
@@ -33,10 +34,11 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
   }
 
   @Override
-  public void initialize(List<IceServerConfig> iceServers) {
+  public synchronized void initialize(List<IceServerConfig> iceServers) {
     if (initialized) {
       return;
     }
+    closed = false;
 
     factory = new PeerConnectionFactory();
 
@@ -222,7 +224,11 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
   }
 
   @Override
-  public void close() {
+  public synchronized void close() {
+    if (closed) {
+      return;
+    }
+    closed = true;
     dataChannelManager.close();
     if (mediaDevicesHelper != null) {
       mediaDevicesHelper.dispose();
