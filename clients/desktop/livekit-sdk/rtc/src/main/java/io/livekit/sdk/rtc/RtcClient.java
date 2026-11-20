@@ -91,6 +91,7 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
     rtcEngine.addAudioTrack(track);
     hasPublishedTracks = true;
+    onPublisherNegotiationNeeded();
   }
 
   /** Publish a local video track. */
@@ -111,6 +112,7 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
     rtcEngine.addVideoTrack(track);
     hasPublishedTracks = true;
+    onPublisherNegotiationNeeded();
   }
 
   /** Unpublish a track. */
