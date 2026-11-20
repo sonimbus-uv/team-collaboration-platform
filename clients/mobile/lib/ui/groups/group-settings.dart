@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class GroupSettingsScreen extends StatefulWidget {
   const GroupSettingsScreen({super.key});
 
@@ -8,9 +10,6 @@ class GroupSettingsScreen extends StatefulWidget {
 }
 
 class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
-  final Color _accentOrange = const Color(0xFFC44111);
-  final Color _dangerRed = const Color(0xFFB3261E);
-
   // Controladores para la pestaña General
   final TextEditingController _nameController = TextEditingController(
     text: 'Sistemas Distribuidos',
@@ -36,33 +35,41 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return DefaultTabController(
       length: 5,
       child: Scaffold(
-        backgroundColor: Colors.white,
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 1,
+          backgroundColor: colorScheme.surface,
+          foregroundColor: colorScheme.onSurface,
+          elevation: 0,
           surfaceTintColor: Colors.transparent,
           leadingWidth: 160,
           leading: TextButton.icon(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
-            label: const Text(
+            icon: Icon(
+              Icons.arrow_back,
+              color: colorScheme.onSurface,
+              size: 20,
+            ),
+            label: Text(
               'Volver al grupo',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               alignment: Alignment.centerLeft,
             ),
           ),
-          title: const Text(
+          title: Text(
             'Configuración del grupo',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: colorScheme.onSurface,
             ),
           ),
           actions: [
@@ -70,11 +77,11 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               padding: const EdgeInsets.only(right: 16.0, top: 10, bottom: 10),
               child: OutlinedButton(
                 onPressed: () {
-                  // Lógica para abandonar grupo
+                  // TODO: Lógica para abandonar grupo
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.black87,
-                  side: const BorderSide(color: Colors.black26),
+                  foregroundColor: colorScheme.onSurface,
+                  side: BorderSide(color: colorScheme.outline),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -83,29 +90,44 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               ),
             ),
           ],
-          bottom: TabBar(
-            isScrollable: true,
-            labelColor: _accentOrange,
-            unselectedLabelColor: Colors.black54,
-            indicatorColor: _accentOrange,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(text: 'General'),
-              Tab(text: 'Invitaciones'),
-              Tab(text: 'Canales'),
-              Tab(text: 'Miembros y roles'),
-              Tab(text: 'Moderación'),
-            ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(kTextTabBarHeight + 1),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelColor: colorScheme.primary,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  unselectedLabelColor: colorScheme.onSurfaceVariant,
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.normal,
+                  ),
+                  indicatorColor: colorScheme.primary,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorWeight: 3,
+                  dividerColor: Colors.transparent,
+                  tabs: const [
+                    Tab(text: 'General'),
+                    Tab(text: 'Invitaciones'),
+                    Tab(text: 'Canales'),
+                    Tab(text: 'Miembros y roles'),
+                    Tab(text: 'Moderación'),
+                  ],
+                ),
+                Divider(height: 1, color: appColors.divider),
+              ],
+            ),
           ),
         ),
         body: TabBarView(
           children: [
-            _buildGeneralTab(),
-            _buildInvitationsTab(),
-            _buildChannelsTab(),
-            _buildMembersTab(),
-            _buildModerationTab(),
+            _buildGeneralTab(colorScheme, appColors),
+            _buildInvitationsTab(colorScheme, appColors),
+            _buildChannelsTab(colorScheme, appColors),
+            _buildMembersTab(colorScheme, appColors),
+            _buildModerationTab(colorScheme, appColors),
           ],
         ),
       ),
@@ -113,31 +135,41 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   }
 
   // ===================== PESTAÑA 1: GENERAL =====================
-  Widget _buildGeneralTab() {
+  Widget _buildGeneralTab(ColorScheme colorScheme, AppThemeColors appColors) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Nombre del grupo',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _nameController,
+            cursorColor: colorScheme.primary,
+            style: TextStyle(color: colorScheme.onSurface),
             decoration: _inputDecoration('Nombre del grupo'),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Descripción',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _descController,
             maxLines: 4,
             maxLength: 200,
+            cursorColor: colorScheme.primary,
+            style: TextStyle(color: colorScheme.onSurface),
             decoration: _inputDecoration('¿Para qué es este grupo?'),
           ),
           const SizedBox(height: 16),
@@ -146,10 +178,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             runSpacing: 12,
             children: [
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+                  // TODO: Guardar cambios generales del grupo
+                },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _accentOrange,
-                  foregroundColor: Colors.white,
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -165,10 +199,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 ),
               ),
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () {
+                  // TODO: Descartar cambios generales del grupo
+                },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.black87,
-                  side: const BorderSide(color: Colors.black26),
+                  foregroundColor: colorScheme.onSurface,
+                  side: BorderSide(color: colorScheme.outline),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -187,19 +223,35 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
+              color: appColors.errorBackground.withValues(alpha: 0.35),
               border: Border.all(
-                color: _dangerRed.withOpacity(0.5),
+                color: colorScheme.error.withValues(alpha: 0.6),
                 width: 1.5,
-                style: BorderStyle.solid,
               ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Zona de riesgo · solo administradores',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: colorScheme.error,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Zona de riesgo · solo administradores',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
                 _buildDangerZoneAction(
@@ -207,18 +259,23 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   description: 'El grupo queda en solo lectura. Puedes restaurarlo después.',
                   buttonText: 'Archivar',
                   isDanger: false,
-                  onPressed: () {},
+                  colorScheme: colorScheme,
+                  onPressed: () {
+                    // TODO: Lógica para archivar grupo
+                  },
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16.0),
-                  child: Divider(color: Colors.black12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Divider(color: appColors.divider),
                 ),
                 _buildDangerZoneAction(
                   title: 'Eliminar grupo',
                   description: 'Se borran canales, mensajes, archivos y proyectos. No se puede deshacer.',
                   buttonText: 'Eliminar grupo',
                   isDanger: true,
-                  onPressed: () => _showDeleteGroupDialog(context),
+                  colorScheme: colorScheme,
+                  onPressed: () =>
+                      _showDeleteGroupDialog(context, colorScheme, appColors),
                 ),
               ],
             ),
@@ -233,16 +290,23 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     required String description,
     required String buttonText,
     required bool isDanger,
+    required ColorScheme colorScheme,
     required VoidCallback onPressed,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurface,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           description,
-          style: const TextStyle(color: Colors.black54, fontSize: 13),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
         ),
         const SizedBox(height: 12),
         SizedBox(
@@ -251,20 +315,23 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               ? ElevatedButton(
                   onPressed: onPressed,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _dangerRed,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.error,
+                    foregroundColor: colorScheme.onError,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: Text(buttonText),
+                  child: Text(
+                    buttonText,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 )
               : OutlinedButton(
                   onPressed: onPressed,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black87,
-                    side: const BorderSide(color: Colors.black26),
+                    foregroundColor: colorScheme.onSurface,
+                    side: BorderSide(color: colorScheme.outline),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -277,7 +344,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   }
 
   // ===================== PESTAÑA 2: INVITACIONES =====================
-  Widget _buildInvitationsTab() {
+  Widget _buildInvitationsTab(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -286,9 +356,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black12),
+              border: Border.all(color: appColors.divider),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -298,6 +368,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ['1 uso', '5 usos', '10 usos', 'Sin límite'],
                   _inviteMaxUses,
                   (v) => setState(() => _inviteMaxUses = v!),
+                  colorScheme,
                 ),
                 const SizedBox(height: 16),
                 _buildDropdownCol(
@@ -305,13 +376,16 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ['1 hora', '1 día', '7 días', 'Nunca'],
                   _inviteExpiration,
                   (v) => setState(() => _inviteExpiration = v!),
+                  colorScheme,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // TODO: Generar código de invitación
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentOrange,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -330,6 +404,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           _buildMobileEmptyState(
             icon: Icons.mark_email_unread_outlined,
             message: 'Todavía no hay invitaciones',
+            colorScheme: colorScheme,
+            appColors: appColors,
           ),
         ],
       ),
@@ -341,26 +417,34 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     List<String> options,
     String currentValue,
     ValueChanged<String?> onChanged,
+    ColorScheme colorScheme,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            color: colorScheme.onSurface,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.black26),
+            border: Border.all(color: colorScheme.outline),
             borderRadius: BorderRadius.circular(8),
-            color: Colors.white,
+            color: colorScheme.surface,
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: currentValue,
               isExpanded: true,
+              dropdownColor: colorScheme.surface,
+              iconEnabledColor: colorScheme.onSurfaceVariant,
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
               items: options
                   .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                   .toList(),
@@ -373,7 +457,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   }
 
   // ===================== PESTAÑA 3: CANALES =====================
-  Widget _buildChannelsTab() {
+  Widget _buildChannelsTab(ColorScheme colorScheme, AppThemeColors appColors) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -382,53 +466,67 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black12),
+              border: Border.all(color: appColors.divider),
             ),
             child: Column(
-              // Cambiado a Column para adaptabilidad móvil
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'Nombre del nuevo canal',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _newChannelController,
+                  cursorColor: colorScheme.primary,
+                  style: TextStyle(color: colorScheme.onSurface),
                   decoration: _inputDecoration('ej. entregas'),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Tipo',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 Row(
                   children: [
                     Radio<String>(
                       value: 'text',
                       groupValue: _channelType,
-                      activeColor: _accentOrange,
+                      activeColor: colorScheme.primary,
                       onChanged: (v) => setState(() => _channelType = v!),
                     ),
-                    const Text('Texto'),
+                    Text(
+                      'Texto',
+                      style: TextStyle(color: colorScheme.onSurface),
+                    ),
                     const SizedBox(width: 16),
                     Radio<String>(
                       value: 'voice',
                       groupValue: _channelType,
-                      activeColor: _accentOrange,
+                      activeColor: colorScheme.primary,
                       onChanged: (v) => setState(() => _channelType = v!),
                     ),
-                    const Text('Voz'),
+                    Text('Voz', style: TextStyle(color: colorScheme.onSurface)),
                   ],
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // TODO: Crear nuevo canal
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentOrange,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -444,81 +542,94 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'CANALES DE TEXTO (0)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(child: _buildEmptyListContainer()),
+          Expanded(child: _buildEmptyListContainer(colorScheme, appColors)),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'CANALES DE VOZ (0)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(child: _buildEmptyListContainer()),
+          Expanded(child: _buildEmptyListContainer(colorScheme, appColors)),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyListContainer() {
+  Widget _buildEmptyListContainer(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
+        color: colorScheme.surface,
+        border: Border.all(color: appColors.divider),
         borderRadius: BorderRadius.circular(8),
       ),
     );
   }
 
   // ===================== PESTAÑA 4: MIEMBROS Y ROLES =====================
-  Widget _buildMembersTab() {
+  Widget _buildMembersTab(ColorScheme colorScheme, AppThemeColors appColors) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.stretch, // Expande los hijos al máximo ancho
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'MIEMBROS (0)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Buscar miembro',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ), // Tamaño de fuente ajustado
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _memberSearchController,
+            cursorColor: colorScheme.primary,
+            style: TextStyle(color: colorScheme.onSurface),
             decoration: _inputDecoration('Nombre o correo'),
           ),
           const SizedBox(height: 24),
-          // Reemplazo de tabla horizontal por estado vacío adaptado a móvil
           _buildMobileEmptyState(
             icon: Icons.group_off_outlined,
             message: 'Sin miembros que mostrar',
+            colorScheme: colorScheme,
+            appColors: appColors,
           ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
+              Text(
                 'Mostrando 0 de 0',
-                style: TextStyle(color: Colors.black54, fontSize: 13),
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(width: 8),
               InkWell(
@@ -526,8 +637,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 child: Text(
                   'Ver todos',
                   style: TextStyle(
-                    color: _accentOrange,
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
                     decoration: TextDecoration.underline,
+                    decorationColor: colorScheme.primary,
                     fontSize: 13,
                   ),
                 ),
@@ -540,29 +653,34 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   }
 
   // ===================== PESTAÑA 5: MODERACIÓN =====================
-  Widget _buildModerationTab() {
+  Widget _buildModerationTab(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'BLOQUEADOS (0)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: colorScheme.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Un miembro bloqueado no puede volver a unirse con una invitación. Para expulsar o bloquear a alguien usa la pestaña «Miembros y roles».',
-            style: TextStyle(color: Colors.black54, fontSize: 14),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
           ),
           const SizedBox(height: 24),
           _buildMobileEmptyState(
             icon: Icons.block,
             message: 'No hay miembros bloqueados',
+            colorScheme: colorScheme,
+            appColors: appColors,
           ),
         ],
       ),
@@ -572,42 +690,36 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   // ===================== UTILIDADES =====================
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black38),
+      hintText: hint.isEmpty ? null : hint,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.black26),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: _accentOrange, width: 2),
-      ),
     );
   }
 
-  // Concepto de Usabilidad Móvil: En lugar de renderizar encabezados de tabla (que se aplastan)
-  // mostramos un diseño de tarjeta vacío. Cuando haya datos, se recomienda usar ListView con Card o ListTile.
   Widget _buildMobileEmptyState({
     required IconData icon,
     required String message,
+    required ColorScheme colorScheme,
+    required AppThemeColors appColors,
   }) {
     return Expanded(
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFFFAFAFA),
-          border: Border.all(color: Colors.black12),
+          color: colorScheme.surface,
+          border: Border.all(color: appColors.divider),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 40, color: Colors.black26),
+            Icon(icon, size: 40, color: colorScheme.onSurfaceVariant),
             const SizedBox(height: 12),
             Text(
               message,
-              style: const TextStyle(color: Colors.black54, fontSize: 14),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 14,
+              ),
             ),
           ],
         ),
@@ -616,76 +728,119 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   }
 
   // ===================== DIÁLOGO ELIMINAR =====================
-  void _showDeleteGroupDialog(BuildContext context) {
+  void _showDeleteGroupDialog(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     final TextEditingController confirmController = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
-          '¿Eliminar el grupo?',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        ),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.9,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Se borrarán de forma permanente todos los canales, mensajes, archivos y proyectos del grupo, y sus miembros perderán el acceso. Esta acción no se puede deshacer.',
-                style: TextStyle(color: Colors.black87, fontSize: 14),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isMatch =
+              confirmController.text.trim() == _nameController.text.trim() &&
+              _nameController.text.trim().isNotEmpty;
+
+          return AlertDialog(
+            backgroundColor: colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: appColors.divider),
+            ),
+            title: Text(
+              '¿Eliminar el grupo?',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: colorScheme.onSurface,
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Escribe el nombre del grupo para confirmar',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Se borrarán de forma permanente todos los canales, mensajes, archivos y proyectos del grupo, y sus miembros perderán el acceso. Esta acción no se puede deshacer.',
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Escribe el nombre del grupo para confirmar',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirmController,
+                    cursorColor: colorScheme.error,
+                    style: TextStyle(color: colorScheme.onSurface),
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: _inputDecoration(''),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'El botón se activa cuando el nombre coincide exactamente.',
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: confirmController,
-                decoration: _inputDecoration(''),
+            ),
+            actionsPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 20,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                ),
+                child: const Text('Cancelar'),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'El botón se activa cuando el nombre coincide exactamente.',
-                style: TextStyle(color: Colors.black54, fontSize: 12),
+              ElevatedButton(
+                onPressed: isMatch
+                    ? () {
+                        // TODO: Ejecutar eliminación permanente del grupo
+                        Navigator.pop(dialogContext);
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.error,
+                  disabledBackgroundColor: colorScheme.error.withValues(
+                    alpha: 0.35,
+                  ),
+                  foregroundColor: colorScheme.onError,
+                  disabledForegroundColor: colorScheme.onError.withValues(
+                    alpha: 0.75,
+                  ),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Eliminar grupo',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
-          ),
-        ),
-        actionsPadding: const EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: 20,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(foregroundColor: Colors.black54),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: null, // Habilitar cuando confirmController.text coincida
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _dangerRed,
-              disabledBackgroundColor: _dangerRed.withOpacity(0.5),
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Eliminar grupo',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
+          );
+        },
       ),
-    );
+    ).whenComplete(confirmController.dispose);
   }
 }
