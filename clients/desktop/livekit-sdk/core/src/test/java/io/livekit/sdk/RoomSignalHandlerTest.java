@@ -299,7 +299,8 @@ class RoomSignalHandlerTest {
   @Test
   void testFailedSignalStateNotifiesDisconnectedOnce() {
     AtomicReference<DisconnectReason> reason = new AtomicReference<>();
-    java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+    java.util.concurrent.atomic.AtomicInteger calls =
+        new java.util.concurrent.atomic.AtomicInteger();
     room.addListener(
         new RoomListener() {
           @Override

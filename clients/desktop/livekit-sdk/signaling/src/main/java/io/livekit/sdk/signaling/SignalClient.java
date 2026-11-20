@@ -315,7 +315,8 @@ public class SignalClient {
       notifyIceRestartRequired(reason);
 
       long delay = reconnectDelayMs * (1L << Math.min(reconnectAttempts - 1, 5));
-      scheduler.schedule(() -> startReconnect(reason, pendingSyncState), delay, TimeUnit.MILLISECONDS);
+      scheduler.schedule(
+          () -> startReconnect(reason, pendingSyncState), delay, TimeUnit.MILLISECONDS);
     } else {
       setState(SignalState.FAILED);
     }
