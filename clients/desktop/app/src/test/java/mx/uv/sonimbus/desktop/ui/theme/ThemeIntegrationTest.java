@@ -43,6 +43,8 @@ import mx.uv.sonimbus.desktop.data.core.Channel;
 import mx.uv.sonimbus.desktop.data.core.CoreApi;
 import mx.uv.sonimbus.desktop.data.core.Profile;
 import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxService;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxStore;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
@@ -88,6 +90,7 @@ class ThemeIntegrationTest {
         controllers
                 .register(CoreApi.class, core)
                 .register(RealtimeClient.class, mock(RealtimeClient.class))
+                .register(OutboxService.class, new OutboxService(mock(OutboxStore.class), session))
                 .register(GoogleService.class, mock(GoogleService.class))
                 .register(
                         PasswordService.class,

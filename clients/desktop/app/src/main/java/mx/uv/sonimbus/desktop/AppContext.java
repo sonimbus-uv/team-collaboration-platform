@@ -1,5 +1,6 @@
 package mx.uv.sonimbus.desktop;
 
+import java.nio.file.Path;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 
@@ -11,9 +12,11 @@ import mx.uv.sonimbus.desktop.data.api.auth.registration.HttpRegistrationGateway
 import mx.uv.sonimbus.desktop.data.api.auth.session.HttpAuthenticationGateway;
 import mx.uv.sonimbus.desktop.data.browser.google.DesktopGoogleBrowser;
 import mx.uv.sonimbus.desktop.data.core.CoreApi;
+import mx.uv.sonimbus.desktop.data.local.SqliteOutboxStore;
 import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
 import mx.uv.sonimbus.desktop.data.session.Session;
 import mx.uv.sonimbus.desktop.domain.google.GoogleService;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxService;
 import mx.uv.sonimbus.desktop.domain.password.PasswordService;
 import mx.uv.sonimbus.desktop.domain.registration.RegistrationService;
 import mx.uv.sonimbus.desktop.domain.session.SessionService;
@@ -23,10 +26,6 @@ import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 import mx.uv.sonimbus.desktop.ui.theme.ThemeManager;
 
-/**
- * Contenedor de la aplicación: crea los servicios una sola vez y los registra en la fábrica de
- * controladores. No hay singletons estáticos; quien necesita algo lo recibe por constructor.
- */
 final class AppContext implements AutoCloseable {
 
     private final BackgroundTasks backgroundTasks = new BackgroundTasks();
@@ -59,6 +58,12 @@ final class AppContext implements AutoCloseable {
         controllers
                 .register(CoreApi.class, new CoreApi(config, coreSession))
                 .register(RealtimeClient.class, new RealtimeClient(config, coreSession))
+                .register(
+                        OutboxService.class,
+                        new OutboxService(
+                                new SqliteOutboxStore(
+                                        Path.of(System.getProperty("user.home"), ".sonimbus", "outbox.db")),
+                                sessions))
                 .register(ApiConfig.class, config)
                 .register(
                         RegistrationService.class,

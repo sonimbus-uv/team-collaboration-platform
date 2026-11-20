@@ -2,15 +2,18 @@ package mx.uv.sonimbus.desktop.ui.chat;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
+import java.util.function.Consumer;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.layout.HBox;
@@ -19,17 +22,14 @@ import mx.uv.sonimbus.desktop.data.core.CoreApi;
 import mx.uv.sonimbus.desktop.data.core.Message;
 import mx.uv.sonimbus.desktop.data.realtime.ChannelConnection;
 import mx.uv.sonimbus.desktop.data.realtime.RealtimeClient;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxMessage;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxService;
+import mx.uv.sonimbus.desktop.domain.outbox.OutboxStatus;
 import mx.uv.sonimbus.desktop.ui.common.BackgroundTasks;
 import mx.uv.sonimbus.desktop.ui.common.CoreMessages;
 import mx.uv.sonimbus.desktop.ui.common.Dialogs;
 import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 
-/**
- * CU-16 y CU-20. Carga la página más reciente del historial por REST y recibe y envía mensajes
- * por el WebSocket de Core. Un mensaje propio aparece «Enviando…» hasta que Core lo confirma;
- * si se pierde la conexión, se reenvía al reconectar con el mismo {@code client_message_id}.
- * La conexión se cierra cuando la vista sale de la ventana.
- */
 public class TextChannelController implements Parameterized<TextChannelParams> {
 
     static final int PAGE_SIZE = 50;
@@ -40,53 +40,48 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
     private final CoreApi core;
     private final RealtimeClient realtime;
     private final BackgroundTasks tasks;
+    private final OutboxService outbox;
     private ChatTimeline timeline;
     private TextChannelParams params;
     private ChannelConnection connection;
     private boolean joinedBefore;
     private boolean closed;
 
-    // Historial
     @FXML private ListView<ChatEntry> messagesList;
     @FXML private Label emptyMessagesLabel;
 
-    // Barra de respuesta
     @FXML private HBox replyBox;
     @FXML private Label replyAuthorLabel;
     @FXML private Label replyPreviewLabel;
     @FXML private Button cancelReplyButton;
 
-    // Caja de escritura
     @FXML private Label messageLabel;
     @FXML private TextField messageField;
     @FXML private Button attachButton;
     @FXML private Button sendButton;
 
-    public TextChannelController(CoreApi core, RealtimeClient realtime, BackgroundTasks tasks) {
+    public TextChannelController(CoreApi core, RealtimeClient realtime, BackgroundTasks tasks,
+            OutboxService outbox) {
         this.core = Objects.requireNonNull(core);
         this.realtime = Objects.requireNonNull(realtime);
         this.tasks = Objects.requireNonNull(tasks);
+        this.outbox = Objects.requireNonNull(outbox);
     }
 
     @FXML
     private void initialize() {
         timeline = new ChatTimeline(messagesList.getItems());
-        messagesList.setCellFactory(list -> new MessageCell());
+        messagesList.setCellFactory(list -> new MessageCell(this::discard));
         messagesList.getItems().addListener((ListChangeListener<ChatEntry>) change ->
                 showEmptyState());
         messageField.setTextFormatter(new TextFormatter<String>(change ->
                 change.getControlNewText().length() <= CONTENT_MAX ? change : null));
-        // Cierra el WebSocket cuando el shell reemplaza esta vista o se cierra la sesión.
         messagesList.sceneProperty().addListener((obs, old, scene) -> {
             if (old != null && scene == null) {
                 close();
             }
         });
-        // TODO CU-17, CU-18, CU-19: responder, reaccionar, editar y eliminar
-        // TODO CU-20: cargar páginas anteriores al desplazarse hacia arriba
-        // TODO CU-23: adjuntar archivos
         attachButton.setDisable(true);
-        sendButton.setDisable(true);
     }
 
     @Override
@@ -98,6 +93,7 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
     public void setParameters(TextChannelParams parameters) {
         this.params = Objects.requireNonNull(parameters);
         setStatus(null);
+        loadUnsent();
         loadHistory();
         connection = realtime.channel(params.channel().id(), new ConnectionListener());
         connection.connect();
@@ -109,7 +105,7 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
             if (closed) {
                 return;
             }
-            timeline.acceptAll(ChatTimeline.oldestFirst(page.data()));
+            ChatTimeline.oldestFirst(page.data()).forEach(this::accept);
             scrollToEnd();
             showEmptyState();
         }, error -> {
@@ -119,17 +115,70 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
         });
     }
 
+    private void loadUnsent() {
+        String channelId = params.channel().id();
+        tasks.run(() -> outbox.unsent(channelId), this::showUnsent, error -> { });
+    }
+
+    private void showUnsent(List<OutboxMessage> unsent) {
+        if (closed) {
+            return;
+        }
+        for (OutboxMessage queued : unsent) {
+            if (timeline.hasEntry(queued.clientMessageId())) {
+                tasks.run(() -> {
+                    outbox.confirm(queued.clientMessageId());
+                    return null;
+                }, ignored -> { }, error -> { });
+                continue;
+            }
+            ChatEntry entry = queued.status() == OutboxStatus.FAILED
+                    ? ChatEntry.failed(queued.clientMessageId(), queued.content())
+                    : ChatEntry.pending(queued.clientMessageId(), queued.content());
+            timeline.addPending(entry);
+            if (entry.isRetryable() && joinedBefore) {
+                send(entry);
+            }
+        }
+        scrollToEnd();
+    }
+
+    private void accept(Message message) {
+        boolean wasPending = timeline.hasUnconfirmed(message.clientMessageId());
+        boolean added = timeline.accept(message);
+        if (wasPending) {
+            tasks.run(() -> {
+                outbox.confirm(message.clientMessageId());
+                return null;
+            }, ignored -> { }, error -> { });
+        }
+        if (added) {
+            scrollToEnd();
+        }
+    }
+
     @FXML
     private void onSend() {
         String text = messageField.getText() == null ? "" : messageField.getText().strip();
-        if (text.isEmpty() || connection == null) {
+        if (text.isEmpty() || params == null) {
             return;
         }
-        ChatEntry entry = ChatEntry.pending(UUID.randomUUID().toString(), text);
-        timeline.addPending(entry);
+        String channelId = params.channel().id();
         messageField.clear();
-        scrollToEnd();
-        send(entry);
+        tasks.run(() -> outbox.enqueue(channelId, text), queued -> {
+            if (closed) {
+                return;
+            }
+            ChatEntry entry = ChatEntry.pending(queued.clientMessageId(), queued.content());
+            timeline.addPending(entry);
+            scrollToEnd();
+            send(entry);
+        }, error -> {
+            if (!closed) {
+                messageField.setText(text);
+                Dialogs.showError(messagesList, CoreMessages.MESSAGE_NOT_QUEUED);
+            }
+        });
     }
 
     private void send(ChatEntry entry) {
@@ -139,42 +188,47 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
                         return;
                     }
                     if (error == null) {
-                        timeline.accept(message);
+                        accept(message);
                         return;
                     }
                     String notice = CoreMessages.forSend(error);
                     if (notice.equals(CoreMessages.MESSAGE_NOT_SENT)) {
-                        timeline.markFailed(entry.clientMessageId());
-                    } else {
-                        // Core lo rechazó: reintentarlo daría el mismo error.
-                        timeline.removePending(entry.clientMessageId());
-                        Dialogs.showError(messagesList, notice);
+                        return;
                     }
+                    timeline.markFailed(entry.clientMessageId());
+                    tasks.run(() -> {
+                        outbox.markFailed(entry.clientMessageId());
+                        return null;
+                    }, ignored -> { }, failure -> { });
+                    Dialogs.showError(messagesList, notice);
                 }));
     }
 
-    /** Al (re)unirse: recupera lo que llegó mientras no había conexión y reenvía lo pendiente. */
+    private void discard(ChatEntry entry) {
+        timeline.removePending(entry.clientMessageId());
+        tasks.run(() -> {
+            outbox.discard(entry.clientMessageId());
+            return null;
+        }, ignored -> { }, error -> { });
+    }
+
     private void onJoined() {
         setStatus(null);
-        sendButton.setDisable(false);
         if (joinedBefore) {
             loadHistory();
         }
         joinedBefore = true;
         for (ChatEntry entry : timeline.pending()) {
-            timeline.markRetrying(entry.clientMessageId());
             send(entry);
         }
     }
 
     @FXML
     private void onAttachFile() {
-        // TODO CU-23: abrir FileChooser, validar tipo y tamaño y compartir el archivo en el canal
     }
 
     @FXML
     private void onCancelReply() {
-        // TODO CU-17: ocultar replyBox (visible + managed) y descartar el mensaje referenciado
     }
 
     private void close() {
@@ -201,7 +255,6 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
         }
     }
 
-    /** Avisos de la red: pasan al hilo de JavaFX. */
     private final class ConnectionListener implements ChannelConnection.Listener {
         @Override
         public void onJoined() {
@@ -215,8 +268,8 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
         @Override
         public void onMessage(Message message) {
             Platform.runLater(() -> {
-                if (!closed && timeline.accept(message)) {
-                    scrollToEnd();
+                if (!closed) {
+                    accept(message);
                 }
             });
         }
@@ -225,7 +278,6 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
         public void onDisconnected() {
             Platform.runLater(() -> {
                 if (!closed) {
-                    sendButton.setDisable(true);
                     setStatus("reconectando…");
                 }
             });
@@ -243,14 +295,21 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
         }
     }
 
-    /** Autor y hora arriba, texto abajo; los pendientes se distinguen por texto, no solo por color. */
     private static final class MessageCell extends ListCell<ChatEntry> {
         private final Label author = new Label();
         private final Label time = new Label();
         private final Label text = new Label();
+        private final ContextMenu menu = new ContextMenu();
         private final VBox box = new VBox(2, new HBox(8, author, time), text);
 
-        MessageCell() {
+        MessageCell(Consumer<ChatEntry> onDiscard) {
+            MenuItem discard = new MenuItem("Descartar mensaje");
+            discard.setOnAction(event -> {
+                if (getItem() != null) {
+                    onDiscard.accept(getItem());
+                }
+            });
+            menu.getItems().add(discard);
             author.getStyleClass().add("message-author");
             time.getStyleClass().add("message-time");
             text.setWrapText(true);
@@ -264,15 +323,19 @@ public class TextChannelController implements Parameterized<TextChannelParams> {
             if (empty || entry == null) {
                 setGraphic(null);
                 setAccessibleText(null);
+                setContextMenu(null);
                 return;
             }
             text.getStyleClass().removeAll("message-text", "message-pending", "message-deleted");
             if (entry.isPending()) {
                 author.setText("Tú");
-                time.setText(entry.failed() ? "No enviado · se reintentará" : "Enviando…");
+                boolean failed = entry.state() == SendState.FAILED;
+                time.setText(failed ? "No enviado" : "Pendiente · se enviará al reconectar");
+                setContextMenu(failed ? menu : null);
                 text.getStyleClass().add("message-pending");
             } else {
                 Message message = entry.message();
+                setContextMenu(null);
                 author.setText(authorName(message));
                 time.setText(TIME.format(message.createdInstant()));
                 text.getStyleClass().add(message.deleted() ? "message-deleted" : "message-text");

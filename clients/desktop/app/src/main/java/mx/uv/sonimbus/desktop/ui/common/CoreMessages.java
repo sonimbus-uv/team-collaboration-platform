@@ -3,10 +3,6 @@ package mx.uv.sonimbus.desktop.ui.common;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
 import mx.uv.sonimbus.desktop.data.realtime.ChannelConnection.SendException;
 
-/**
- * Textos en español de los errores de Core. Nunca muestran el {@code detail} del servicio ni
- * datos internos.
- */
 public final class CoreMessages {
 
     public static final String CONNECTION =
@@ -21,6 +17,7 @@ public final class CoreMessages {
     public static final String VALIDATION = "Revisa los datos e intenta de nuevo.";
     public static final String RATE_LIMITED = "Demasiadas solicitudes. Intenta de nuevo en unos momentos.";
     public static final String MESSAGE_NOT_SENT = "No se pudo enviar el mensaje. Se reintentará al reconectar.";
+    public static final String MESSAGE_NOT_QUEUED = "No se pudo guardar el mensaje en este equipo. Intenta de nuevo.";
     public static final String MESSAGE_REJECTED = "El mensaje no es válido: de 1 a 4000 caracteres.";
 
     private CoreMessages() {
@@ -44,7 +41,6 @@ public final class CoreMessages {
         };
     }
 
-    /** Error de {@code message.create} ({@code contracts/events/message.created.md}). */
     public static String forSend(Throwable error) {
         if (error instanceof SendException e) {
             return switch (e.type()) {

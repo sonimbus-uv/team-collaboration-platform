@@ -20,9 +20,9 @@
     <javafx.version>21.0.8</javafx.version>
     <junit.version>5.13.4</junit.version>
     <jackson.version>2.22.2</jackson.version>
+    <sqlite.version>3.54.1.0</sqlite.version>
     <mockito.version>5.24.0</mockito.version>
     <testfx.version>4.0.18</testfx.version>
-    <!-- Monocle publica una versión por JavaFX mayor; 21.0.2 es la de JavaFX 21 -->
     <monocle.version>21.0.2</monocle.version>
   </properties>
 
@@ -42,6 +42,11 @@
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.xerial</groupId>
+        <artifactId>sqlite-jdbc</artifactId>
+        <version>${sqlite.version}</version>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
@@ -90,7 +95,6 @@
     </pluginManagement>
 
     <plugins>
-      <!-- Falla el build si no se usa Java 21 (el sistema puede traer JDK 24). -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
