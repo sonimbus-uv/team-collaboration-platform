@@ -113,7 +113,7 @@ public class MediaDevicesHelper {
 
       return new LocalAudioTrack(trackId, name, nativeTrack);
     } catch (Exception e) {
-      return null;
+      throw new IllegalStateException("Failed to create audio track: " + e.getMessage(), e);
     }
   }
 
@@ -133,10 +133,11 @@ public class MediaDevicesHelper {
    */
   public LocalVideoTrack createVideoTrack(
       String deviceId, String name, int width, int height, int frameRate) {
+    VideoDeviceSource videoSource = null;
     try {
       List<VideoDevice> devices = MediaDevices.getVideoCaptureDevices();
       if (devices.isEmpty()) {
-        return null;
+        throw new IllegalStateException("No video capture device available");
       }
 
       int deviceIndex = 0;
@@ -152,7 +153,7 @@ public class MediaDevicesHelper {
       // Create capability with desired resolution
       VideoCaptureCapability capability = new VideoCaptureCapability(width, height, frameRate);
 
-      VideoDeviceSource videoSource = new VideoDeviceSource();
+      videoSource = new VideoDeviceSource();
       videoSource.setVideoCaptureDevice(selectedDevice);
       videoSource.setVideoCaptureCapability(capability);
       videoSource.start();
@@ -161,9 +162,15 @@ public class MediaDevicesHelper {
       String trackId = "video-" + UUID.randomUUID();
       VideoTrack nativeTrack = factory.createVideoTrack(trackId, videoSource);
 
-      return new LocalVideoTrack(trackId, name, nativeTrack, width, height);
+      return new LocalVideoTrack(trackId, name, nativeTrack, width, height, videoSource);
     } catch (Exception e) {
-      return null;
+      if (videoSource != null) {
+        videoSource.dispose();
+      }
+      if (e instanceof IllegalStateException) {
+        throw (IllegalStateException) e;
+      }
+      throw new IllegalStateException("Failed to create video track: " + e.getMessage(), e);
     }
   }
 

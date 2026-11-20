@@ -574,7 +574,7 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   @Override
   public void onError(String error) {
-    // Log or notify error
+    signalHandler.onError(new IllegalStateException(error));
   }
 
   // Helper methods
