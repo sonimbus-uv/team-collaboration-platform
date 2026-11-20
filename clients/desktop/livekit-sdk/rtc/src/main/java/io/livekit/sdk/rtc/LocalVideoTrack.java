@@ -11,6 +11,7 @@ public class LocalVideoTrack {
   private final int height;
   private String sid;
   private boolean muted;
+  private boolean disposed;
 
   public LocalVideoTrack(String id, String name, VideoTrack nativeTrack, int width, int height) {
     this.id = id;
@@ -60,7 +61,11 @@ public class LocalVideoTrack {
     }
   }
 
-  public void dispose() {
+  public synchronized void dispose() {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
     if (nativeTrack != null) {
       nativeTrack.dispose();
     }

@@ -9,6 +9,7 @@ public class LocalAudioTrack {
   private final AudioTrack nativeTrack;
   private String sid;
   private boolean muted;
+  private boolean disposed;
 
   public LocalAudioTrack(String id, String name, AudioTrack nativeTrack) {
     this.id = id;
@@ -48,7 +49,11 @@ public class LocalAudioTrack {
     }
   }
 
-  public void dispose() {
+  public synchronized void dispose() {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
     if (nativeTrack != null) {
       nativeTrack.dispose();
     }

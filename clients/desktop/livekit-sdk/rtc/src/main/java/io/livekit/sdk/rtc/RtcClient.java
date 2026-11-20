@@ -69,10 +69,26 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   /** Disconnect from the room. */
   public void disconnect() {
+    releaseLocalTracks();
     signalClient.sendLeave();
     signalClient.disconnect();
     rtcEngine.close();
     room.disconnect();
+  }
+
+  private synchronized void releaseLocalTracks() {
+    LocalAudioTrack audio = publishedAudioTrack;
+    publishedAudioTrack = null;
+    if (audio != null) {
+      rtcEngine.removeTrack(audio.getId());
+      audio.dispose();
+    }
+    LocalVideoTrack video = publishedVideoTrack;
+    publishedVideoTrack = null;
+    if (video != null) {
+      rtcEngine.removeTrack(video.getId());
+      video.dispose();
+    }
   }
 
   /** Publish a local audio track. */
@@ -331,16 +347,7 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   @Override
   public void onLeave(LivekitRtc.LeaveRequest leave) {
-    // Clean up local tracks
-    if (publishedAudioTrack != null) {
-      publishedAudioTrack.dispose();
-      publishedAudioTrack = null;
-    }
-    if (publishedVideoTrack != null) {
-      publishedVideoTrack.dispose();
-      publishedVideoTrack = null;
-    }
-
+    releaseLocalTracks();
     rtcEngine.close();
     signalClient.disconnect();
     signalHandler.onLeave(leave);
