@@ -295,4 +295,44 @@ class RoomSignalHandlerTest {
     assertTrue(reconnectedCalled.get());
     assertEquals(ConnectionState.CONNECTED, room.getState());
   }
+
+  @Test
+  void testFailedSignalStateNotifiesDisconnectedOnce() {
+    AtomicReference<DisconnectReason> reason = new AtomicReference<>();
+    java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+    room.addListener(
+        new RoomListener() {
+          @Override
+          public void onDisconnected(Room r, DisconnectReason disconnectReason) {
+            reason.set(disconnectReason);
+            calls.incrementAndGet();
+          }
+        });
+    room.connect("ws://localhost", "token");
+
+    handler.onStateChanged("RECONNECTING");
+    handler.onStateChanged("FAILED");
+    handler.onStateChanged("FAILED");
+
+    assertEquals(DisconnectReason.SIGNAL_CLOSE, reason.get());
+    assertEquals(1, calls.get());
+    assertEquals(ConnectionState.DISCONNECTED, room.getState());
+  }
+
+  @Test
+  void testSignalErrorReachesListeners() {
+    AtomicReference<Exception> received = new AtomicReference<>();
+    room.addListener(
+        new RoomListener() {
+          @Override
+          public void onError(Room r, Exception error) {
+            received.set(error);
+          }
+        });
+    Exception failure = new IllegalStateException("signal failure");
+
+    handler.onError(failure);
+
+    assertSame(failure, received.get());
+  }
 }

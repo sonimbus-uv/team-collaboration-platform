@@ -9,6 +9,8 @@ public interface RoomListener {
 
   default void onReconnecting(Room room) {}
 
+  default void onError(Room room, Exception error) {}
+
   default void onReconnected(Room room) {}
 
   default void onParticipantConnected(Room room, RemoteParticipant participant) {}

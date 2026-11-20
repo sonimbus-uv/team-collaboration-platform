@@ -21,8 +21,8 @@ public class RoomSignalHandler {
       room.handleReconnecting();
     } else if ("CONNECTED".equals(stateName)) {
       // Connected is handled via JoinResponse
-    } else if ("DISCONNECTED".equals(stateName) || "FAILED".equals(stateName)) {
-      // Disconnect is handled via Leave or explicit disconnect
+    } else if ("FAILED".equals(stateName)) {
+      room.handleSignalFailure();
     }
   }
 

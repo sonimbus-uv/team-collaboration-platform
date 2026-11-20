@@ -84,11 +84,16 @@ public class SignalClient {
     if (state == SignalState.RECONNECTING) {
       return;
     }
+    startReconnect(reason, syncState);
+  }
 
+  private void startReconnect(ReconnectReason reason, LivekitRtc.SyncState syncState) {
     this.isReconnecting = true;
     this.reconnectReason = reason;
     this.pendingSyncState = syncState;
-    setState(SignalState.RECONNECTING);
+    if (state != SignalState.RECONNECTING) {
+      setState(SignalState.RECONNECTING);
+    }
     doConnect();
   }
 
@@ -310,7 +315,7 @@ public class SignalClient {
       notifyIceRestartRequired(reason);
 
       long delay = reconnectDelayMs * (1L << Math.min(reconnectAttempts - 1, 5));
-      scheduler.schedule(() -> reconnect(reason, pendingSyncState), delay, TimeUnit.MILLISECONDS);
+      scheduler.schedule(() -> startReconnect(reason, pendingSyncState), delay, TimeUnit.MILLISECONDS);
     } else {
       setState(SignalState.FAILED);
     }

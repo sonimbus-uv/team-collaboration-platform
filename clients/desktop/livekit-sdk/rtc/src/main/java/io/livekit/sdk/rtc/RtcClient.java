@@ -236,6 +236,10 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   @Override
   public void onStateChanged(SignalState state) {
+    if (state == SignalState.FAILED) {
+      releaseLocalTracks();
+      rtcEngine.close();
+    }
     signalHandler.onStateChanged(state);
   }
 

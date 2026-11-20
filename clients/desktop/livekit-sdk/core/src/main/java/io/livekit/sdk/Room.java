@@ -250,7 +250,18 @@ public class Room implements TrackSubscriptionHandler {
   }
 
   void handleSignalError(Exception e) {
-    // Could implement error callback
+    for (RoomListener listener : listeners) {
+      listener.onError(this, e);
+    }
+  }
+
+  void handleSignalFailure() {
+    if (state == ConnectionState.DISCONNECTED) {
+      return;
+    }
+    setState(ConnectionState.DISCONNECTED);
+    clearParticipants();
+    notifyDisconnected(DisconnectReason.SIGNAL_CLOSE);
   }
 
   private Participant findParticipantBySid(String sid) {
