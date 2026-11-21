@@ -104,6 +104,22 @@ Se espera `200`. Si responde en la VM pero no desde el anfitrión, revisar `ufw`
 2. **IP del nodo por variable.** La imagen acepta `--node-ip` (variable `NODE_IP`). Se mantiene `rtc.node_ip` en `livekit.yaml` por simplicidad; no se cambia salvo que haga falta.
 3. **Token real.** Pedir un token a Core (o generarlo con la clave de `.env`) y conectar con el cliente de la PoC o con `meet.livekit.io` en modo Custom contra `ws://192.168.33.30:7880`.
 
+### Token de prueba
+
+Mientras Core no emita tokens (D-15), [`generate-token.sh`](generate-token.sh) firma uno (HS256) con `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET` tomados del entorno. Solo escribe el token en la salida estándar; nunca imprime la clave ni el secreto.
+
+```bash
+cd /vagrant/infrastructure
+set -a && . ./.env && set +a
+./livekit/generate-token.sh <sala> <identidad> [segundos]
+```
+
+- Permisos: unirse a la sala, publicar, suscribirse, datos y `canPublishSources` explícito con `microphone` y `camera`.
+- Vigencia: 3600 segundos por defecto y como máximo; acepta valores menores.
+- `sala` e `identidad` admiten `A-Z a-z 0-9 . _ : @ -` (hasta 128 caracteres).
+- `openssl` recibe el secreto como argumento mientras firma, por lo que otro usuario de la VM podría verlo un instante con `ps`. Aceptable en desarrollo; no usar con claves de producción.
+- No pegar el token en issues, PR ni chats: da acceso a la sala hasta que expire.
+
 ### 4. Medir la memoria (T-09)
 
 Con el servicio en reposo y luego con dos participantes (voz y cámara):
