@@ -35,14 +35,9 @@ import mx.uv.sonimbus.desktop.ui.navigation.Navigable;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-/**
- * Shell: grupos del usuario, canales del grupo elegido y el canal abierto en el centro. Al
- * entrar pide el nombre visible si el usuario todavía no lo guardó (D-29).
- */
 public class MainController implements Navigable, ContentHost {
 
     private static final String SELECTED = "selected";
-    /** {@code CreateChannel.name} de core.yaml. */
     static final Pattern CHANNEL_NAME = Pattern.compile("^[a-z0-9-]{1,80}$");
     static final int DISPLAY_NAME_MAX = 100;
 
@@ -51,13 +46,11 @@ public class MainController implements Navigable, ContentHost {
     private ViewManager viewManager;
     private Group currentGroup;
 
-    // Columna de grupos
     @FXML private ListView<Group> groupsList;
     @FXML private MenuButton addGroupMenuButton;
     @FXML private MenuItem createGroupMenuItem;
     @FXML private MenuItem joinGroupMenuItem;
 
-    // Columna de canales
     @FXML private VBox channelsColumn;
     @FXML private Label groupNameLabel;
     @FXML private Button inviteButton;
@@ -65,12 +58,11 @@ public class MainController implements Navigable, ContentHost {
     @FXML private Button createTextChannelButton;
     @FXML private ListView<Channel> textChannelsList;
     @FXML private Button createVoiceChannelButton;
-    @FXML private ListView<Channel> voiceChannelsList;    // TODO CU-22: participantes conectados
+    @FXML private ListView<Channel> voiceChannelsList;
     @FXML private Button sharedFilesButton;
     @FXML private Button projectsButton;
     @FXML private Button reportsButton;
 
-    // Barra superior
     @FXML private Label sectionTitleLabel;
     @FXML private Separator sectionTitleSeparator;
     @FXML private Label sectionSubtitleLabel;
@@ -80,7 +72,6 @@ public class MainController implements Navigable, ContentHost {
     @FXML private Label profileInitialsLabel;
     @FXML private ImageView profileAvatarView;
 
-    // Contenido
     @FXML private StackPane contentPane;
     @FXML private Label emptyStateLabel;
 
@@ -105,16 +96,12 @@ public class MainController implements Navigable, ContentHost {
             }
         });
         showGroupActions(null);
-        // TODO CU-31: actualizar notificationsBadgeLabel y accessibleText
-        //             ("Notificaciones, N sin leer") de notificationsButton
-        // TODO CU-07: mostrar avatar del perfil (circle clip en profileAvatarView)
         tasks.run(core::myProfile, profile -> {
             profile.ifPresentOrElse(this::showProfile, this::askDisplayName);
             loadGroups(null);
         }, this::showError);
     }
 
-    // --- Perfil (D-29) ---
 
     private void askDisplayName() {
         Dialogs.askText(groupsList, "Tu nombre visible",
@@ -129,7 +116,6 @@ public class MainController implements Navigable, ContentHost {
         Tooltip.install(profileButton, new Tooltip(profile.displayName()));
     }
 
-    // --- Grupos ---
 
     private void loadGroups(String selectId) {
         tasks.run(core::listGroups, groups -> {
@@ -197,7 +183,6 @@ public class MainController implements Navigable, ContentHost {
         loadGroups(group.id());
     }
 
-    /** CU-10: invitación con los valores por omisión (7 días, usos ilimitados). */
     @FXML
     private void onInvite() {
         Group group = currentGroup;
@@ -219,7 +204,6 @@ public class MainController implements Navigable, ContentHost {
         viewManager.showContent(View.GROUP_SETTINGS);
     }
 
-    // --- Canales (CU-13) ---
 
     @FXML
     private void onCreateTextChannel() {
@@ -260,7 +244,6 @@ public class MainController implements Navigable, ContentHost {
         setSectionHeader("# " + channel.name(), group.name());
     }
 
-    // --- Otras secciones ---
 
     @FXML
     private void onShowSharedFiles() {
@@ -319,7 +302,6 @@ public class MainController implements Navigable, ContentHost {
     }
 
     private void showError(Throwable error) {
-        // Sesión vencida: Session ya lleva a la pantalla de inicio de sesión.
         if (error instanceof ApiException e && e.kind() == ApiErrorKind.UNAUTHORIZED) {
             return;
         }
@@ -339,7 +321,6 @@ public class MainController implements Navigable, ContentHost {
         sectionTitleSeparator.setManaged(hasSubtitle);
     }
 
-    /** Marca en la columna de canales la sección abierta; {@code null} las desmarca todas. */
     private void selectNavItem(Button selected) {
         for (Button navItem : new Button[] {sharedFilesButton, projectsButton, reportsButton}) {
             navItem.getStyleClass().remove(SELECTED);
@@ -349,7 +330,6 @@ public class MainController implements Navigable, ContentHost {
         }
     }
 
-    /** Ficha redonda con las iniciales; el nombre va en el tooltip y en el texto accesible. */
     private static final class GroupCell extends ListCell<Group> {
         private final Label chip = new Label();
 

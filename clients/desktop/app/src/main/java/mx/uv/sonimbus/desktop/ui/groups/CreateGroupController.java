@@ -18,10 +18,6 @@ import mx.uv.sonimbus.desktop.ui.common.CoreMessages;
 import mx.uv.sonimbus.desktop.ui.common.Initials;
 import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 
-/**
- * CU-08. Crea el grupo (el usuario queda como administrador) y su canal de texto
- * {@code #general}, como anuncia el diálogo.
- */
 public class CreateGroupController implements Parameterized<GroupDialogParams> {
 
     private static final String FIELD_INVALID = "field-invalid";
@@ -62,7 +58,6 @@ public class CreateGroupController implements Parameterized<GroupDialogParams> {
             nameField.getStyleClass().remove(FIELD_INVALID);
             AlertBox.hide(errorBox);
         });
-        // TODO CU-08: imagen del grupo cuando exista File Service
         chooseImageButton.setDisable(true);
     }
 
@@ -78,13 +73,10 @@ public class CreateGroupController implements Parameterized<GroupDialogParams> {
 
     @FXML
     private void onChooseImage() {
-        // TODO CU-08: FileChooser de imágenes; mostrar la elegida en groupImageView (clip
-        //             redondeado) y hacer visible removeImageButton
     }
 
     @FXML
     private void onRemoveImage() {
-        // TODO CU-08: quitar la imagen elegida y ocultar removeImageButton
     }
 
     @FXML
@@ -107,13 +99,11 @@ public class CreateGroupController implements Parameterized<GroupDialogParams> {
         });
     }
 
-    /** Si falla solo {@code #general}, el grupo ya existe: se entrega igual y el admin puede crearlo. */
     private Group createWithDefaultChannel(String name, String description) throws Exception {
         Group group = core.createGroup(name, description);
         try {
             core.createChannel(group.id(), DEFAULT_CHANNEL, "text");
         } catch (Exception e) {
-            // El grupo se muestra sin canales; el administrador puede crearlos con +.
         }
         return group;
     }

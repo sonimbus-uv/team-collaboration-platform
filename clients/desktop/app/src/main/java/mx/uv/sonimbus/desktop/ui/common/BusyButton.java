@@ -3,7 +3,6 @@ package mx.uv.sonimbus.desktop.ui.common;
 import javafx.scene.control.Button;
 import javafx.scene.control.ProgressIndicator;
 
-/** Botón que muestra un indicador y queda deshabilitado mientras una petición está en curso. */
 public final class BusyButton {
 
     private static final String IDLE_TEXT = "sonimbus.idleText";
