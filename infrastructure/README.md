@@ -25,6 +25,7 @@ Entorno de desarrollo reproducible y despliegue de los servicios de apoyo:
 | `scylladb` | Perfil `messaging` | 1 *shard*, `SCYLLA_MEMORY` (750 MB por defecto) y `SCYLLA_RESERVE_MEMORY` (250 MB) dentro de `SCYLLA_MEM_LIMIT` (1200 MB), modo desarrollo (T-01) |
 | `minio` | Perfil `storage` | Con *health check* |
 | `minio-init` | Perfil `storage` | Se ejecuta y termina: crea `MINIO_BUCKET` (T-05) |
+| `livekit` | Perfil `voice` | Red del anfitrión; 7880/TCP, 7881/TCP y 50000-50200/UDP. Ver [`livekit/`](livekit/README.md) |
 
 La VM además fija `fs.aio-max-nr` para ScyllaDB e instala Erlang/OTP y Elixir con `mise` según [`.tool-versions`](../.tool-versions).
 
