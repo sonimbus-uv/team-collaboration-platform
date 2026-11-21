@@ -34,7 +34,7 @@ Verificación local: `gradle test spotlessCheck` desde esta carpeta. Las pruebas
 
 ## Convenciones del código importado
 
-Los archivos importados conservan sus comentarios y Javadoc originales (decisión del equipo para el código de terceros, que facilita comparar con el original). El código nuevo o modificado respecto al original no lleva comentarios (§28.1).
+Los archivos importados conservan sus comentarios y Javadoc originales (decisión del usuario, para poder comparar el fork con el original). El código nuevo o modificado respecto al original no lleva comentarios (§28.1).
 
 ## Licencia
 
