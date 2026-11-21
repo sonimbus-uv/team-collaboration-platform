@@ -118,8 +118,8 @@ Anotar los valores en la tabla de abajo.
 | Condición | Memoria de `livekit` | `free -m` usado |
 |---|---|---|
 | En reposo (2026-11-21) | 13,29 MiB | 589 MB usados de 5925 MB (VM completa) |
-| 2 participantes, voz | pendiente | pendiente |
-| 2 participantes, voz y cámara | pendiente | pendiente |
+| 2 participantes, voz (2026-11-21) | 57 MiB, CPU 12-34 % | 601 MB |
+| 2 participantes, voz y cámara (2026-11-21) | 71-72 MiB estable tras 100 s (subió de 64 a 72 MiB en el primer minuto), CPU 21-73 % | 613 MB |
 
 ### 5. Al terminar
 
@@ -150,4 +150,4 @@ Probar en este orden, parando cuando Docker responda:
 
 ## Estado
 
-Servicio arrancado en la VM el 2026-11-21: 7880/TCP y 7881/TCP escuchando, respuesta 200 en 7880, `healthy`, IP del nodo `192.168.33.30` y rango ICE 50000-50200. LiveKit no abre los puertos UDP hasta que hay participantes. Falta el token real y la medición con dos participantes.
+Servicio arrancado en la VM el 2026-11-21: 7880/TCP y 7881/TCP escuchando, respuesta 200 en 7880, `healthy`, IP del nodo `192.168.33.30` y rango ICE 50000-50200. LiveKit no abre los puertos UDP hasta que hay participantes. Probado con dos participantes desde `meet.livekit.io` con tokens firmados con la clave de `.env`. Mediciones de T-09 en la tabla anterior: LiveKit consume menos de 75 MiB con dos participantes y cámara, sin cambios apreciables en la memoria de la VM.
