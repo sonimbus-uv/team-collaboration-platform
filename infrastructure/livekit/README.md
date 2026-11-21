@@ -100,19 +100,8 @@ Se espera `200`. Si responde en la VM pero no desde el anfitrión, revisar `ufw`
 
 ### 3. Pendientes de la configuración
 
-1. **Health check.** Comprobar si la imagen trae shell o `wget`:
-
-   ```bash
-   docker run --rm --entrypoint sh livekit/livekit-server:v1.13.7 -c 'ls /'
-   ```
-
-   Si falla por falta de shell, no se puede agregar un `healthcheck` de Compose a ese servicio. Documentar la comprobación del paso 2 como alternativa.
-2. **IP del nodo por variable.** Comprobar si existe el parámetro:
-
-   ```bash
-   docker run --rm livekit/livekit-server:v1.13.7 --help | grep -i node-ip
-   ```
-
+1. **Health check.** Resuelto: la imagen trae `busybox` con `wget`; el servicio lo usa contra `http://127.0.0.1:7880`.
+2. **IP del nodo por variable.** La imagen acepta `--node-ip` (variable `NODE_IP`). Se mantiene `rtc.node_ip` en `livekit.yaml` por simplicidad; no se cambia salvo que haga falta.
 3. **Token real.** Pedir un token a Core (o generarlo con la clave de `.env`) y conectar con el cliente de la PoC o con `meet.livekit.io` en modo Custom contra `ws://192.168.33.30:7880`.
 
 ### 4. Medir la memoria (T-09)
@@ -128,7 +117,7 @@ Anotar los valores en la tabla de abajo.
 
 | Condición | Memoria de `livekit` | `free -m` usado |
 |---|---|---|
-| En reposo | pendiente | pendiente |
+| En reposo (2026-11-21) | 13,29 MiB | 589 MB usados de 5925 MB (VM completa) |
 | 2 participantes, voz | pendiente | pendiente |
 | 2 participantes, voz y cámara | pendiente | pendiente |
 
@@ -161,4 +150,4 @@ Probar en este orden, parando cuando Docker responda:
 
 ## Estado
 
-Servicio y configuración agregados. Falta ejecutar la guía anterior: arranque, *health check*, token real y medición de memoria.
+Servicio arrancado en la VM el 2026-11-21: 7880/TCP y 7881/TCP escuchando, respuesta 200 en 7880, `healthy`, IP del nodo `192.168.33.30` y rango ICE 50000-50200. LiveKit no abre los puertos UDP hasta que hay participantes. Falta el token real y la medición con dos participantes.

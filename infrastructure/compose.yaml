@@ -210,6 +210,12 @@ services:
     restart: unless-stopped
     network_mode: host
     command: ["--config", "/etc/livekit/livekit.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Define LIVEKIT_API_KEY en infrastructure/.env}: ${LIVEKIT_API_SECRET:?Define LIVEKIT_API_SECRET en infrastructure/.env}"
     volumes:
