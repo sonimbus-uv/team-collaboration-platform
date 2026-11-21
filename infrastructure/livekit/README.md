@@ -32,7 +32,7 @@ docker compose --profile voice up -d livekit
 | 7881 | TCP | ICE sobre TCP (alternativa cuando UDP está bloqueado) |
 | 50000-50200 | UDP | Medios (voz y cámara) |
 
-El rango UDP es de 200 puertos: cada participante usa uno, y la expo no supera esa cifra con margen. La guía oficial propone 50000-60000 para producción; ampliar `port_range_end` si hace falta.
+El rango UDP es de 200 puertos. En la medición del 2026-11-21, dos participantes con cámara dejaron 48 sockets UDP abiertos en el rango (en reposo, ninguno), por lo que el consumo por participante no es de un puerto. La guía oficial propone 50000-60000 para producción; ampliar `port_range_end` en `livekit.yaml` y la regla de `ufw` si se esperan más de unos pocos participantes.
 
 Reglas de `ufw` en la VM:
 
@@ -40,7 +40,10 @@ Reglas de `ufw` en la VM:
 sudo ufw allow 7880/tcp
 sudo ufw allow 7881/tcp
 sudo ufw allow 50000:50200/udp
+sudo ufw status numbered
 ```
+
+Los puertos coinciden con `rtc.tcp_port`, `port` y `rtc.port_range_start`/`port_range_end` de [`livekit.yaml`](livekit.yaml). Si se cambia alguno, ajustar la regla correspondiente. Estas reglas no se han aplicado ni probado en la VM: hasta ahora `ufw` no ha bloqueado las conexiones desde el anfitrión.
 
 ## IP del nodo
 
@@ -102,7 +105,7 @@ Se espera `200`. Si responde en la VM pero no desde el anfitrión, revisar `ufw`
 
 1. **Health check.** Resuelto: la imagen trae `busybox` con `wget`; el servicio lo usa contra `http://127.0.0.1:7880`.
 2. **IP del nodo por variable.** La imagen acepta `--node-ip` (variable `NODE_IP`). Se mantiene `rtc.node_ip` en `livekit.yaml` por simplicidad; no se cambia salvo que haga falta.
-3. **Token real.** Pedir un token a Core (o generarlo con la clave de `.env`) y conectar con el cliente de la PoC o con `meet.livekit.io` en modo Custom contra `ws://192.168.33.30:7880`.
+3. **Token real.** Pedir un token a Core (o generarlo con [`generate-token.sh`](generate-token.sh) y la clave de `.env`) y conectar con el cliente de la PoC o con `meet.livekit.io` en modo Custom contra `ws://192.168.33.30:7880`.
 
 ### Token de prueba
 
