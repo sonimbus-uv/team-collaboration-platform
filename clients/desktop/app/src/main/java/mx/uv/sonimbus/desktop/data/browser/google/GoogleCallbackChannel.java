@@ -85,7 +85,6 @@ public final class GoogleCallbackChannel implements AutoCloseable {
             }
             request.sendResponseHeaders(204, -1);
             request.close();
-            // The waiting browser closes this server as soon as the result is delivered.
             if (callbackFailure == null) {
                 AuthLog.googleStage(GoogleStage.CALLBACK_RECEIVED);
                 result.complete(completion);

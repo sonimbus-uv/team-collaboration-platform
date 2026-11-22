@@ -173,7 +173,6 @@ class CoreApiTest {
         try {
             server.removeContext("/");
         } catch (IllegalArgumentException e) {
-            // Primera respuesta de la prueba.
         }
         server.createContext("/", exchange -> send(exchange, status, body));
     }

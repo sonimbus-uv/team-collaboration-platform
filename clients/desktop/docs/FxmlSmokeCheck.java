@@ -17,16 +17,6 @@ import mx.uv.sonimbus.desktop.ui.navigation.ControllerFactory;
 import mx.uv.sonimbus.desktop.ui.navigation.View;
 import mx.uv.sonimbus.desktop.ui.navigation.ViewManager;
 
-/**
- * Prueba de humo TEMPORAL: carga cada FXML del enum View con su CSS y
- * reporta los que fallan (propiedades inexistentes, imports, controladores).
- * No forma parte de la app: se copia a src/main/java/mx/uv/sonimbus/desktop/dev/,
- * se ejecuta y se borra.
- *
- * Los controladores reciben sus dependencias por constructor, así que se cargan con la
- * misma ControllerFactory que usa la app (AppContext). La URL de Auth apunta a un puerto
- * cerrado: la prueba no hace peticiones.
- */
 public final class FxmlSmokeCheck {
 
     private static final String UI = "/mx/uv/sonimbus/desktop/ui/";

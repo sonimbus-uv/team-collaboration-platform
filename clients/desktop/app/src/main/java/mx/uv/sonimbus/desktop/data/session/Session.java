@@ -6,7 +6,6 @@ import mx.uv.sonimbus.desktop.domain.session.AuthenticationError;
 import mx.uv.sonimbus.desktop.domain.session.AuthenticationException;
 import mx.uv.sonimbus.desktop.domain.session.SessionService;
 
-/** Adapta la sesi?n de Auth al cliente HTTP y WebSocket de Core. */
 public final class Session {
     private final SessionService sessions;
     private final Runnable onExpired;

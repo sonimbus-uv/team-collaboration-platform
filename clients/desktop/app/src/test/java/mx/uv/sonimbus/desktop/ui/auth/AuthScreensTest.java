@@ -64,7 +64,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Pantallas de autenticación con JavaFX real (Monocle sin pantalla) y Auth simulado. */
 @ExtendWith(ApplicationExtension.class)
 class AuthScreensTest {
 
@@ -104,15 +103,12 @@ class AuthScreensTest {
                 .register(
                         PasswordService.class,
                         new PasswordService(new HttpPasswordGateway(authApi), sessions))
-                // El trabajo corre en el mismo hilo; la respuesta llega con runLater, como en la
-                // app.
                 .register(
                         BackgroundTasks.class,
                         new BackgroundTasks(Runnable::run, Platform::runLater))
                 .register(ViewManager.class, viewManager);
     }
 
-    // --- Registro (CU-01) ---
 
     @Test
     void registerScreenShowsTheRealRuleAndHidesName(FxRobot robot) {
@@ -254,7 +250,6 @@ class AuthScreensTest {
         verify(authApi, org.mockito.Mockito.never()).exchangeGoogle(any());
     }
 
-    // --- Verificación (CU-02) ---
 
     @Test
     void failedDeliveryWarnsAndAllowsResend(FxRobot robot) throws ApiException {
@@ -373,7 +368,6 @@ class AuthScreensTest {
         verifyNoInteractions(authApi);
     }
 
-    // --- Inicio de sesión (CU-03) y recuperación (CU-05) ---
 
     @Test
     void loginRequiresBothFields(FxRobot robot) {
@@ -839,7 +833,6 @@ class AuthScreensTest {
                                 "google", "reference@gmail.com", Instant.now().toString())));
     }
 
-    // --- Utilidades ---
 
     private static final UUID ATTEMPT_ID = UUID.fromString("2f862636-cf2f-4c18-820e-7c29dc449ba0");
 

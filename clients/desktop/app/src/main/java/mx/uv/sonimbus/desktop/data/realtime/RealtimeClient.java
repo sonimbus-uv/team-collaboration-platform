@@ -8,7 +8,6 @@ import java.net.http.HttpClient;
 import mx.uv.sonimbus.desktop.data.api.ApiConfig;
 import mx.uv.sonimbus.desktop.data.session.Session;
 
-/** Crea las conexiones al WebSocket de Core; cada vista de canal abre y cierra la suya. */
 public class RealtimeClient {
 
     private final HttpClient http;
@@ -24,7 +23,6 @@ public class RealtimeClient {
         this.session = session;
     }
 
-    /** Conexión sin abrir al canal {@code channelId}; hay que llamar a {@code connect()}. */
     public ChannelConnection channel(String channelId, ChannelConnection.Listener listener) {
         return new ChannelConnection(http, socketUrl, session, channelId, listener, json);
     }

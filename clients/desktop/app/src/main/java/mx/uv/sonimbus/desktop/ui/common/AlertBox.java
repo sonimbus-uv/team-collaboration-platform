@@ -5,11 +5,6 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 
-/**
- * Muestra un aviso en las cajas {@code alert-*} de los FXML ({@code errorBox}, {@code infoBox}).
- * Cada tipo cambia color, icono y texto accesible a la vez: el estado nunca se distingue solo
- * por el color (RNF-USA-02).
- */
 public final class AlertBox {
 
     public enum Kind {
@@ -57,7 +52,6 @@ public final class AlertBox {
         setShown(box, false);
     }
 
-    /** {@code visible} y {@code managed} juntos, para que el nodo oculto no deje hueco. */
     public static void setShown(Node node, boolean shown) {
         node.setVisible(shown);
         node.setManaged(shown);

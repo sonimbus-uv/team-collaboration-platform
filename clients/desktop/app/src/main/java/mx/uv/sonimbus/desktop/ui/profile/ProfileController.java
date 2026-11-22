@@ -47,7 +47,6 @@ public class ProfileController {
     @FXML private javafx.scene.Node googleLink;
     @FXML private GoogleLinkController googleLinkController;
 
-    // Datos del perfil
     @FXML private HBox profileSavedBox;
     @FXML private Label profileSavedLabel;
     @FXML private HBox profileErrorBox;
@@ -62,7 +61,6 @@ public class ProfileController {
     @FXML private Button saveProfileButton;
     @FXML private Button discardProfileButton;
 
-    // Cambiar contraseña
     @FXML private HBox passwordSavedBox;
     @FXML private Label passwordSavedLabel;
     @FXML private HBox passwordErrorBox;
@@ -80,7 +78,6 @@ public class ProfileController {
     @FXML private Label confirmPasswordErrorLabel;
     @FXML private Button updatePasswordButton;
 
-    // Sesión
     @FXML private Button logoutButton;
     @FXML private StackPane logoutConfirmOverlay;
     @FXML private Button cancelLogoutButton;
@@ -169,28 +166,14 @@ public class ProfileController {
         logoutButton.setDisable(googleLinkController.isBusy() || !sessions.isAuthenticated());
         updatePasswordButton.setDisable(
                 googleLinkController.isBusy() || !sessions.isAuthenticated());
-        // TODO CU-07: cargar displayNameLabel, emailLabel, nameField y la foto actual
-        //             (currentAvatarView con clip circular, o iniciales en avatarInitialsLabel)
-        // TODO CU-07: llenar avatarsPane con un ToggleButton ("avatar-option") por cada imagen
-        //             del paquete predefinido (resources/.../images/avatars), todos en
-        //             avatarGroup, con accessibleText "Avatar N" y Tooltip; la opción elegida
-        //             se distingue por el borde y una palomita, no solo por color. No se
-        //             permite subir archivos
-        // TODO CU-07: ocultar los avisos y quitar "field-invalid" al editar los campos
-        // TODO: saveProfileButton es el defaultButton; pasarlo a updatePasswordButton mientras
-        //       el foco esté en los campos de contraseña y a confirmLogoutButton mientras
-        //       logoutConfirmOverlay esté visible
     }
 
     @FXML
     private void onSaveProfile() {
-        // TODO CU-07: validar nameField (profileErrorBox), guardar nombre visible y foto
-        //             elegida, mostrar profileSavedBox y actualizar el avatar del shell
     }
 
     @FXML
     private void onDiscardProfile() {
-        // TODO CU-07: restaurar el nombre y la foto guardados
     }
 
     @FXML

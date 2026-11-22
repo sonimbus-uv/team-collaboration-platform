@@ -136,7 +136,6 @@ public final class GoogleBrowserWindow implements AutoCloseable {
             stopServer();
             return;
         }
-        // Keep the local page reachable briefly so it can acknowledge and close its popup.
         CompletableFuture.delayedExecutor(10, TimeUnit.SECONDS).execute(this::stopServer);
     }
 }

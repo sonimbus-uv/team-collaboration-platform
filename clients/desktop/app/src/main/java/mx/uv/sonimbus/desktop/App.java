@@ -93,12 +93,10 @@ public class App extends Application {
         stage.setTitle(demo ? DemoNavigation.windowTitle(view) : "Sonimbus");
         stage.show();
         if (DemoNavigation.placementOf(view) == DemoNavigation.Placement.DIALOG) {
-            // Después de mostrar la ventana, para que el diálogo quede encima del shell.
             Platform.runLater(() -> viewManager.showDialog(view, DemoNavigation.dialogTitle(view)));
         }
     }
 
-    /** Índice de {@code siguiente}; avanza el contador guardado para la próxima ejecución. */
     private static int nextDemoIndex() {
         Preferences prefs = Preferences.userNodeForPackage(App.class);
         int index = Math.floorMod(prefs.getInt(DEMO_INDEX_KEY, 0), View.values().length);

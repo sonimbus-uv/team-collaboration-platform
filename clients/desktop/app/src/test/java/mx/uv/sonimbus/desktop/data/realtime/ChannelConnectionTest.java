@@ -10,7 +10,6 @@ class ChannelConnectionTest {
 
     @Test
     void tokenIsEncodedLikeThePhoenixClient() {
-        // btoa("ab?") = "YWI/" en Base64 estándar; Phoenix lo decodifica con padding: false.
         assertEquals("YWI/", ChannelConnection.encodeToken("ab?"));
         String jwt = "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1MSJ9.c2ln";
         String encoded = ChannelConnection.encodeToken(jwt);
