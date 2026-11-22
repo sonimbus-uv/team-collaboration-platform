@@ -57,16 +57,41 @@ class ChatTimelineTest {
     }
 
     @Test
-    void failedPendingKeepsItsClientIdForTheRetry() {
+    void networkPendingEntryStaysRetryableWithItsClientId() {
+        timeline.addPending(ChatEntry.pending("k1", "hola"));
+
+        assertEquals(SendState.PENDING, entries.get(0).state());
+        assertEquals("k1", timeline.pending().get(0).clientMessageId());
+    }
+
+    @Test
+    void rejectedEntryIsFailedAndNotRetried() {
         timeline.addPending(ChatEntry.pending("k1", "hola"));
 
         timeline.markFailed("k1");
 
-        assertTrue(entries.get(0).failed());
-        assertEquals("k1", timeline.pending().get(0).clientMessageId());
-        timeline.markRetrying("k1");
-        assertFalse(entries.get(0).failed());
+        assertEquals(SendState.FAILED, entries.get(0).state());
+        assertTrue(timeline.pending().isEmpty());
+        assertTrue(entries.get(0).isPending());
+    }
+
+    @Test
+    void confirmedEntryIsSent() {
+        timeline.addPending(ChatEntry.pending("k1", "hola"));
+
+        timeline.accept(message("m1", "k1", "01"));
+
+        assertEquals(SendState.SENT, entries.get(0).state());
+        assertFalse(timeline.hasUnconfirmed("k1"));
+        assertTrue(timeline.hasEntry("k1"));
+    }
+
+    @Test
+    void discardedEntryDisappears() {
+        timeline.addPending(ChatEntry.failed("k1", "hola"));
+
         timeline.removePending("k1");
+
         assertTrue(entries.isEmpty());
     }
 }

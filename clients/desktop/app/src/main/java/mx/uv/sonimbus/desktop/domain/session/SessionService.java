@@ -65,6 +65,13 @@ public final class SessionService implements AutoCloseable {
         return current == null ? Optional.empty() : Optional.ofNullable(current.email());
     }
 
+    public Optional<String> accountId() {
+        SignedInSession current = session;
+        return current == null
+                ? Optional.empty()
+                : Optional.of(current.tokens().identity().accountId().toString());
+    }
+
     public String accessToken() throws AuthenticationException {
         synchronized (operationLock) {
             SignedInSession current = requireSession();
@@ -107,7 +114,6 @@ public final class SessionService implements AutoCloseable {
             installSession(new SignedInSession(current.email(), renewed));
             return renewed.access().value();
         } catch (AuthenticationException failure) {
-            // A lost refresh response may have consumed the token; it must never be reused.
             if (failure.kind() != AuthenticationError.UNAVAILABLE
                     && failure.kind() != AuthenticationError.RATE_LIMITED) {
                 session = null;
