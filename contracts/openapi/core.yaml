@@ -5,7 +5,8 @@ info:
   description: >-
     Contrato candidato del recorrido mínimo de Core para la expo: CU-08 (crear
     grupo), CU-10 (crear invitación), CU-11 (unirse), CU-13 (crear y listar
-    canales), CU-20 (historial) y el nombre visible de D-29. Pendiente de
+    canales), CU-20 (historial), CU-22 (token de voz, D-15, D-31) y el nombre
+    visible de D-29. Pendiente de
     revisión técnica. Errores con Problem Details; `type` es una referencia
     relativa `/problems/<nombre>`. Horas en UTC (RFC 3339).
 servers:
@@ -257,6 +258,78 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/channels/{channel_id}/voice-token:
+    parameters:
+      - $ref: "#/components/parameters/ChannelId"
+    post:
+      operationId: createVoiceToken
+      summary: Token de LiveKit para entrar a un canal de voz (CU-22, D-15, D-31)
+      description: >-
+        Core verifica que el usuario sea miembro del grupo con un rol igual o
+        superior a `min_role` del canal (D-17); si no, responde 404 sin
+        distinguir el motivo, como el resto de las rutas de canal. Después firma un JWT de LiveKit con la
+        clave y el secreto de la API de LiveKit, que nunca salen de Core. Sin
+        cuerpo.
+
+
+        Cada llamada emite un token nuevo; el cliente pide uno por cada
+        conexión o reconexión a la sala.
+
+
+        Contenido del token:
+
+        - `video.room`: el `id` del canal. Una sala por canal.
+
+        - `video.roomJoin`: `true`.
+
+        - `video.canSubscribe`: `true`.
+
+        - `video.canPublish`: `true`.
+
+        - `video.canPublishSources`: `["microphone", "camera"]`, explícito. La
+        pantalla compartida queda fuera (D-31, T-15): `screen_share` y
+        `screen_share_audio` no se otorgan.
+
+        - `video.canPublishData`: `false`.
+
+        - `sub` e `identity`: el `user_id` del usuario (`auth.accounts.id`).
+
+        - `name`: el nombre visible vigente, si existe.
+
+        - `exp`: corta, ver `expires_at`. Solo rige la entrada a la sala; no
+        sustituye la desconexión por expulsión o bloqueo (CU-15).
+
+
+        Un canal de texto no admite token. Un grupo archivado es de solo
+        lectura y tampoco lo admite.
+      responses:
+        "200":
+          description: Token emitido
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/VoiceToken" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422":
+          description: El canal es de texto, `/problems/not-a-voice-channel`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: >-
+            El servidor de medios no está disponible (CU-22 EX-01),
+            `/problems/voice-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/me/profile:
     get:
       operationId: getMyProfile
@@ -310,12 +383,34 @@ components:
         `aud`. Si Core no puede obtener un JWKS vigente responde 503
         `/problems/auth-unavailable` con `Retry-After`.
   parameters:
+    ChannelId:
+      name: channel_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     GroupId:
       name: group_id
       in: path
       required: true
       schema: { type: string, format: uuid }
   schemas:
+    VoiceToken:
+      type: object
+      required: [token, url, expires_at]
+      properties:
+        token:
+          type: string
+          description: JWT de LiveKit firmado por Core; no se registra en logs
+        url:
+          type: string
+          format: uri
+          description: URL WebSocket del servidor LiveKit (`wss://` en producción)
+        expires_at:
+          type: string
+          format: date-time
+          description: >-
+            Instante en que el token deja de servir para entrar a la sala
+            (propuesta: 300 s después de emitirlo)
     Problem:
       type: object
       required: [type, title, status]
