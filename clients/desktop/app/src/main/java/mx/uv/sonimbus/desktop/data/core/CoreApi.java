@@ -24,11 +24,6 @@ import mx.uv.sonimbus.desktop.data.api.ApiErrorKind;
 import mx.uv.sonimbus.desktop.data.api.ApiException;
 import mx.uv.sonimbus.desktop.data.session.Session;
 
-/**
- * Cliente HTTP del Core Service ({@code contracts/openapi/core.yaml}). Envía el access token de
- * {@link Session} y, si Core lo rechaza, lo renueva una vez y repite la petición. Las llamadas
- * bloquean: deben hacerse fuera del hilo de JavaFX.
- */
 public class CoreApi {
 
     static final String PREFIX = "/api/v1";
@@ -39,7 +34,6 @@ public class CoreApi {
     private record CreateChannelRequest(String name, String type) {
     }
 
-    /** {@link #toString()} oculta el código: quien lo tiene puede unirse al grupo. */
     private record JoinRequest(String code) {
         @Override
         public String toString() {
@@ -70,42 +64,35 @@ public class CoreApi {
         this.session = session;
     }
 
-    /** Grupos del usuario, por nombre. */
     public List<Group> listGroups() throws ApiException {
         return list("list-groups", send("list-groups", "GET", "/groups", null), Group.class);
     }
 
-    /** CU-08: el usuario queda como administrador. */
     public Group createGroup(String name, String description) throws ApiException {
         return data("create-group", send("create-group", "POST", "/groups",
                 new CreateGroupRequest(name, description)), Group.class);
     }
 
-    /** CU-10 con los valores por omisión de Core: caduca en 7 días y sin límite de usos. */
     public Invitation createInvitation(String groupId) throws ApiException {
         return data("create-invitation", send("create-invitation", "POST",
                 "/groups/" + segment(groupId) + "/invitations", Map.of()), Invitation.class);
     }
 
-    /** CU-11. Si el usuario ya era miembro, devuelve el grupo sin descontar un uso. */
     public Group joinGroup(String code) throws ApiException {
         return data("join-group", send("join-group", "POST", "/invitations/join", new JoinRequest(code)),
                 Group.class);
     }
 
-    /** Canales que el rol del usuario puede ver, por nombre. */
     public List<Channel> listChannels(String groupId) throws ApiException {
         return list("list-channels", send("list-channels", "GET",
                 "/groups/" + segment(groupId) + "/channels", null), Channel.class);
     }
 
-    /** CU-13. {@code name}: minúsculas, dígitos y guiones. */
     public Channel createChannel(String groupId, String name, String type) throws ApiException {
         return data("create-channel", send("create-channel", "POST",
                 "/groups/" + segment(groupId) + "/channels", new CreateChannelRequest(name, type)), Channel.class);
     }
 
-    /** CU-20: página del historial anterior a {@code before} (o la más reciente si es nulo). */
     public MessagePage listMessages(String channelId, String before, int limit) throws ApiException {
         String query = "?limit=" + limit + (before == null ? "" : "&before=" + segment(before));
         HttpResponse<String> response = send("list-messages", "GET",
@@ -113,7 +100,6 @@ public class CoreApi {
         return parse("list-messages", response.body(), MessagePage.class);
     }
 
-    /** Perfil del usuario; vacío si todavía no guardó su nombre visible. */
     public Optional<Profile> myProfile() throws ApiException {
         try {
             return Optional.of(data("get-profile", send("get-profile", "GET", "/me/profile", null), Profile.class));
@@ -125,7 +111,6 @@ public class CoreApi {
         }
     }
 
-    /** Guarda el nombre visible (D-29). */
     public Profile saveDisplayName(String displayName) throws ApiException {
         return data("put-profile", send("put-profile", "PUT", "/me/profile", new ProfileRequest(displayName)),
                 Profile.class);
@@ -178,10 +163,6 @@ public class CoreApi {
         }
     }
 
-    /**
-     * Core sí distingue sus errores por {@code type} (Problem Details, {@code /problems/<nombre>}),
-     * que es parte del contrato; el código HTTP decide cuando el tipo no aporta.
-     */
     static ApiErrorKind classify(int status, String type) {
         return switch (type == null ? "" : type) {
             case "/problems/invitation-invalid" -> ApiErrorKind.INVALID_INVITATION;

@@ -7,13 +7,6 @@ import java.util.Map;
 import java.util.Objects;
 import javafx.util.Callback;
 
-/**
- * Crea los controladores de los FXML ({@code FXMLLoader.setControllerFactory}) y les inyecta
- * por constructor los servicios registrados, buscándolos por su tipo exacto.
- *
- * <p>Cada controlador debe tener un solo constructor público. Los esqueletos sin dependencias
- * conservan el constructor vacío implícito y no necesitan cambios.
- */
 public final class ControllerFactory implements Callback<Class<?>, Object> {
 
     private final Map<Class<?>, Object> services = new HashMap<>();

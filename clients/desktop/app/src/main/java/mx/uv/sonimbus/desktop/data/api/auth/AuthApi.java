@@ -343,7 +343,6 @@ public class AuthApi {
             return builder.build();
 
         } catch (JsonProcessingException serializationFailure) {
-            // Sin la causa: el mensaje de Jackson podría citar el cuerpo con la contraseña.
             throw new ApiException(ApiErrorKind.UNEXPECTED, operation.label, null);
         }
     }

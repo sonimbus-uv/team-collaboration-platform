@@ -27,35 +27,18 @@ import mx.uv.sonimbus.desktop.data.api.ApiException;
 import mx.uv.sonimbus.desktop.data.core.Message;
 import mx.uv.sonimbus.desktop.data.session.Session;
 
-/**
- * Conexión al tema {@code channel:<channel_id>} del WebSocket de Core
- * ({@code contracts/events/message.created.md}), con el serializador JSON v2 de Phoenix:
- * cada trama es {@code [join_ref, ref, topic, event, payload]}.
- *
- * <p>El access token viaja en {@code Sec-WebSocket-Protocol}, como el {@code authToken} del
- * cliente oficial, y no en la URL. Si la conexión se pierde o el token vence
- * ({@code token.expired}), reconecta con un token vigente y vuelve a unirse. El
- * {@link Listener} recibe los avisos en los hilos de red: quien toque la interfaz debe pasar al
- * hilo de JavaFX.
- */
 public final class ChannelConnection implements AutoCloseable {
 
-    /** Avisos de la conexión. */
     public interface Listener {
-        /** Unido al tema, por primera vez o después de reconectar: ya se puede enviar. */
         void onJoined();
 
-        /** {@code message.created} v1; también llega al autor, que debe deduplicar por {@code id}. */
         void onMessage(Message message);
 
-        /** Se perdió la conexión; se reintenta sola. */
         void onDisconnected();
 
-        /** El canal no existe o el usuario ya no tiene acceso; no se reintenta. */
         void onAccessDenied();
     }
 
-    /** El servidor rechazó un {@code message.create}; {@code type} es el del contrato. */
     public static final class SendException extends Exception {
         private final String type;
 
@@ -108,15 +91,10 @@ public final class ChannelConnection implements AutoCloseable {
         this.json = Objects.requireNonNull(json);
     }
 
-    /** Abre la conexión en segundo plano. */
     public void connect() {
         scheduler.execute(this::open);
     }
 
-    /**
-     * {@code message.create}. Completa con el mensaje guardado o falla con {@link SendException}.
-     * Un reintento con el mismo {@code clientMessageId} devuelve el mismo mensaje (RNF-CON-01).
-     */
     public CompletableFuture<Message> send(String clientMessageId, String content) {
         CompletableFuture<Message> result = new CompletableFuture<>();
         synchronized (this) {
@@ -175,7 +153,6 @@ public final class ChannelConnection implements AutoCloseable {
                 .buildAsync(socketUrl, new Receiver())
                 .whenComplete((ws, error) -> {
                     if (error != null) {
-                        // 403 en el upgrade: token rechazado (u Origin no permitido); se renueva.
                         Throwable cause = error instanceof CompletionException && error.getCause() != null
                                 ? error.getCause() : error;
                         if (cause instanceof WebSocketHandshakeException handshake
@@ -221,7 +198,6 @@ public final class ChannelConnection implements AutoCloseable {
             case "message.created" -> parseMessage(payload.path("payload")).ifPresent(listener::onMessage);
             case "token.expired", "phx_error", "phx_close" -> dropConnection();
             default -> {
-                // Eventos futuros del tema: se ignoran.
             }
         }
     }
@@ -264,7 +240,6 @@ public final class ChannelConnection implements AutoCloseable {
         }
     }
 
-    /** Cierra el socket actual y reconecta; en {@code token.expired} el nuevo token ya será otro. */
     private void dropConnection() {
         WebSocket current;
         synchronized (this) {
@@ -315,7 +290,6 @@ public final class ChannelConnection implements AutoCloseable {
         }
     }
 
-    /** {@code WebSocket.sendText} no admite envíos simultáneos: se encadenan. */
     private synchronized void push(String pushJoinRef, String ref, String pushTopic, String event, Object payload) {
         if (socket == null) {
             return;
@@ -332,12 +306,10 @@ public final class ChannelConnection implements AutoCloseable {
         return Integer.toString(refs.incrementAndGet());
     }
 
-    /** Base64 estándar sin relleno, como {@code btoa} en el cliente de Phoenix. */
     static String encodeToken(String token) {
         return Base64.getEncoder().withoutPadding().encodeToString(token.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Une los fragmentos de texto de cada trama antes de interpretarla. */
     private final class Receiver implements WebSocket.Listener {
         private final StringBuilder buffer = new StringBuilder();
 
@@ -350,7 +322,6 @@ public final class ChannelConnection implements AutoCloseable {
                 try {
                     handle(json.readTree(text));
                 } catch (JsonProcessingException e) {
-                    // Trama ilegible: se descarta sin registrar su contenido.
                 }
             }
             webSocket.request(1);

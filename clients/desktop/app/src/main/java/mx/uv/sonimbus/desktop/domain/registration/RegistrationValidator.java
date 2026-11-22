@@ -196,7 +196,6 @@ public final class RegistrationValidator {
                 || characterType == Character.OTHER_NUMBER;
     }
 
-    // Character.isWhitespace does not implement the same Unicode White_Space set as Rust.
     static boolean isRustWhitespace(int codePoint) {
         return (codePoint >= 0x09 && codePoint <= 0x0D)
                 || codePoint == 0x20

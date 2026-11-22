@@ -13,7 +13,6 @@ import mx.uv.sonimbus.desktop.ui.common.BusyButton;
 import mx.uv.sonimbus.desktop.ui.common.CoreMessages;
 import mx.uv.sonimbus.desktop.ui.navigation.Parameterized;
 
-/** CU-11. Une al usuario con un código de invitación; si ya era miembro, solo abre el grupo. */
 public class JoinGroupController implements Parameterized<GroupDialogParams> {
 
     private static final String FIELD_INVALID = "field-invalid";
@@ -40,7 +39,6 @@ public class JoinGroupController implements Parameterized<GroupDialogParams> {
 
     @FXML
     private void initialize() {
-        // TODO CU-11: vista previa del grupo cuando Core publique la consulta de invitaciones
         inviteCodeField.textProperty().addListener((obs, old, text) -> {
             inviteCodeField.getStyleClass().remove(FIELD_INVALID);
             AlertBox.hide(errorBox);
@@ -77,7 +75,6 @@ public class JoinGroupController implements Parameterized<GroupDialogParams> {
         });
     }
 
-    /** Acepta el código solo o un enlace que termine en él ({@code …/invite/<código>}). */
     static String extractCode(String text) {
         if (text == null) {
             return "";

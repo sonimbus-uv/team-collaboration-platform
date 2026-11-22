@@ -129,7 +129,6 @@ public final class AuthLog {
     private static final class EventFormatter extends Formatter {
         @Override
         public String format(LogRecord logRecord) {
-            // Never delegate Throwable formatting: exception messages can contain credentials.
             return logRecord.getInstant()
                     + " "
                     + logRecord.getLevel()

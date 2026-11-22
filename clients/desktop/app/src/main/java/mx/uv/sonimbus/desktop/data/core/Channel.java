@@ -1,6 +1,5 @@
 package mx.uv.sonimbus.desktop.data.core;
 
-/** Canal de un grupo; {@code type} es {@code text} o {@code voice}. */
 public record Channel(
         String id,
         String groupId,

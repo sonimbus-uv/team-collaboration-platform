@@ -15,7 +15,6 @@ import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
-/** Diálogos breves del shell con el tema de la aplicación. */
 public final class Dialogs {
 
     private static final String THEME = "/mx/uv/sonimbus/desktop/css/theme.css";
@@ -23,7 +22,6 @@ public final class Dialogs {
     private Dialogs() {
     }
 
-    /** Pide un texto; vacío si el usuario cancela. */
     public static Optional<String> askText(Node owner, String title, String header, String initial) {
         TextInputDialog dialog = new TextInputDialog(initial);
         prepare(dialog, owner, title, header);
@@ -36,7 +34,6 @@ public final class Dialogs {
         alert.showAndWait();
     }
 
-    /** Muestra el código de invitación para copiarlo; el botón Copiar lo pone en el portapapeles. */
     public static void showInvitationCode(Node owner, String groupName, String code) {
         TextField codeField = new TextField(code);
         codeField.setEditable(false);

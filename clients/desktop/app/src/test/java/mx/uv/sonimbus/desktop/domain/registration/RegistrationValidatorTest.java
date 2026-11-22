@@ -35,7 +35,6 @@ class RegistrationValidatorTest {
                 RegistrationValidator.validate(" TEST@Example.COM ", VALID, VALID).email());
     }
 
-    // --- Longitud de la contraseña (8 a 128 puntos de código) ---
 
     @Test
     void sevenCharactersIsTooShortAndEightIsEnough() {
@@ -55,13 +54,11 @@ class RegistrationValidatorTest {
 
     @Test
     void lengthCountsCodePointsNotUtf16Units() {
-        // 7 puntos de código, 8 unidades UTF-16: «😀» ocupa dos.
         String sevenCodePoints = "Abcd1!😀";
         assertEquals(8, sevenCodePoints.length());
         assertEquals(Set.of(Problem.PASSWORD_TOO_SHORT), passwordProblems(sevenCodePoints));
     }
 
-    // --- Formato de la contraseña ---
 
     @Test
     void missingUppercase() {
@@ -112,14 +109,11 @@ class RegistrationValidatorTest {
 
     @Test
     void onlyAsciiDigitsCount() {
-        // «٣» (ARABIC-INDIC THREE) es Nd: no es dígito ASCII, y tampoco cuenta como símbolo.
         assertEquals(EnumSet.of(Problem.PASSWORD_MISSING_DIGIT), passwordProblems("ValidPass٣!"));
     }
 
     @Test
     void numbersOutsideNdAreNotSymbolsAsInRust() {
-        // «²» (No) y «Ⅻ» (Nl) son alfanuméricos para Rust, aunque Character.isLetterOrDigit diga
-        // que no.
         assertFalse(Character.isLetterOrDigit('²'));
         assertTrue(RegistrationValidator.isRustAlphanumeric('²'));
         assertTrue(RegistrationValidator.isRustAlphanumeric('Ⅻ'));
@@ -132,7 +126,6 @@ class RegistrationValidatorTest {
         assertEquals(Set.of(), passwordProblems("  Ab1!  "));
     }
 
-    // --- Correo ---
 
     @ParameterizedTest
     @ValueSource(
@@ -187,19 +180,16 @@ class RegistrationValidatorTest {
 
     @Test
     void trimUsesUnicodeWhiteSpaceLikeRust() {
-        // U+00A0 es White_Space en Rust; Java String.strip() no lo quita.
         assertEquals(EMAIL, RegistrationValidator.normalizeEmail(" " + EMAIL + " "));
         assertEquals(Set.of(), emailProblems(" " + EMAIL));
     }
 
     @Test
     void kelvinSignLowercasesToAsciiLikeRust() {
-        // U+212A KELVIN SIGN → «k» tanto en Rust como en Java.
         assertEquals("kim@uv.mx", RegistrationValidator.normalizeEmail("Kim@uv.mx"));
         assertEquals(Set.of(), emailProblems("Kim@uv.mx"));
     }
 
-    // --- Campos vacíos y confirmación ---
 
     @Test
     void emptyFormReportsEachField() {

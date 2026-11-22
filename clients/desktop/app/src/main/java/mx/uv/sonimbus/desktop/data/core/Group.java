@@ -1,6 +1,5 @@
 package mx.uv.sonimbus.desktop.data.core;
 
-/** Grupo con el rol del usuario ({@code member}, {@code moderator} o {@code admin}). */
 public record Group(
         String id,
         String name,
@@ -15,7 +14,6 @@ public record Group(
         return "admin".equals(role);
     }
 
-    /** Moderador o administrador: puede crear invitaciones (CU-10). */
     public boolean canInvite() {
         return "admin".equals(role) || "moderator".equals(role);
     }

@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 
 class BackgroundTasksTest {
 
-    /** Hace de «hilo de la interfaz»: una cola que la prueba vacía en su propio hilo. */
     private final BlockingQueue<Runnable> uiQueue = new ArrayBlockingQueue<>(10);
     private final ExecutorService background = Executors.newSingleThreadExecutor();
     private final BackgroundTasks tasks = new BackgroundTasks(background, uiQueue::add);

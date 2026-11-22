@@ -86,7 +86,6 @@ class AuthMessagesTest {
                 AuthMessages.forResendVerification(noResponse(RegistrationError.TIMEOUT)));
     }
 
-    /** Ningún mensaje deja ver el código, el caso interno ni texto en inglés. */
     @ParameterizedTest
     @EnumSource(RegistrationError.class)
     void messagesHaveNoInternals(RegistrationError kind) {

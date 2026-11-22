@@ -2,7 +2,6 @@ package mx.uv.sonimbus.desktop.ui.common;
 
 import java.util.Locale;
 
-/** Iniciales para fichas y avatares sin imagen: hasta dos, de las dos primeras palabras. */
 public final class Initials {
 
     private Initials() {
