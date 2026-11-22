@@ -1,0 +1,101 @@
+package io.livekit.sdk.rtc;
+
+import dev.onvoid.webrtc.media.video.VideoDeviceSource;
+import dev.onvoid.webrtc.media.video.VideoTrack;
+
+/** Wrapper for a local video track to be published. */
+public class LocalVideoTrack {
+  private final String id;
+  private final String name;
+  private final VideoTrack nativeTrack;
+  private final int width;
+  private final int height;
+  private final VideoDeviceSource source;
+  private String sid;
+  private boolean muted;
+  private boolean disposed;
+
+  public LocalVideoTrack(String id, String name, VideoTrack nativeTrack, int width, int height) {
+    this(id, name, nativeTrack, width, height, null);
+  }
+
+  public LocalVideoTrack(
+      String id,
+      String name,
+      VideoTrack nativeTrack,
+      int width,
+      int height,
+      VideoDeviceSource source) {
+    this.id = id;
+    this.name = name;
+    this.nativeTrack = nativeTrack;
+    this.width = width;
+    this.height = height;
+    this.source = source;
+    this.muted = false;
+  }
+
+  public String getId() {
+    return id;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public String getSid() {
+    return sid;
+  }
+
+  public void setSid(String sid) {
+    this.sid = sid;
+  }
+
+  public VideoTrack getNativeTrack() {
+    return nativeTrack;
+  }
+
+  public int getWidth() {
+    return width;
+  }
+
+  public int getHeight() {
+    return height;
+  }
+
+  public boolean isMuted() {
+    return muted;
+  }
+
+  public synchronized void setMuted(boolean muted) {
+    if (disposed) {
+      return;
+    }
+    boolean changed = this.muted != muted;
+    this.muted = muted;
+    if (nativeTrack != null) {
+      nativeTrack.setEnabled(!muted);
+    }
+    if (changed && source != null) {
+      if (muted) {
+        source.stop();
+      } else {
+        source.start();
+      }
+    }
+  }
+
+  public synchronized void dispose() {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    if (nativeTrack != null) {
+      nativeTrack.dispose();
+    }
+    if (source != null) {
+      source.stop();
+      source.dispose();
+    }
+  }
+}
