@@ -25,6 +25,7 @@ defmodule CoreWeb.Router do
     end
 
     get "/channels/:channel_id/messages", MessageController, :index
+    post "/channels/:channel_id/voice-token", VoiceController, :create
 
     get "/me/profile", ProfileController, :show
     put "/me/profile", ProfileController, :update
