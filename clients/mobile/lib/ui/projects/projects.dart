@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class ProjectsAndTasksScreen extends StatefulWidget {
-  const ProjectsAndTasksScreen({Key? key}) : super(key: key);
+  const ProjectsAndTasksScreen({super.key});
 
   @override
   State<ProjectsAndTasksScreen> createState() => _ProjectsAndTasksScreenState();
@@ -18,13 +20,22 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        title: const Column(
+        surfaceTintColor: Colors.transparent,
+        iconTheme: IconThemeData(color: colorScheme.onSurface),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: appColors.divider),
+        ),
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -32,7 +43,7 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: colorScheme.onSurface,
               ),
             ),
             Text(
@@ -40,24 +51,26 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.normal,
-                color: Colors.black54,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: Icon(Icons.filter_list, color: colorScheme.onSurface),
             tooltip: 'Filtrar responsable',
-            onPressed: _showFilterDialog,
+            onPressed: () => _showFilterDialog(colorScheme, appColors),
           ),
-          // Botón '+' múltiple para elegir entre nuevo proyecto o nueva tarea
           PopupMenuButton<String>(
-            icon: const Icon(Icons.add),
+            icon: Icon(Icons.add, color: colorScheme.primary),
             tooltip: 'Crear nuevo',
+            color: colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
             offset: const Offset(0, 45),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: appColors.divider),
             ),
             onSelected: (String value) {
               if (value == 'project') {
@@ -66,21 +79,41 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
                 // TODO: Implementar lógica de creación de tarea acorde al MVP
               }
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
+            itemBuilder: (BuildContext menuContext) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
                 value: 'project',
                 child: ListTile(
-                  leading: Icon(Icons.folder_open_outlined, size: 22),
-                  title: Text('Nuevo proyecto', style: TextStyle(fontSize: 15)),
+                  leading: Icon(
+                    Icons.folder_open_outlined,
+                    size: 22,
+                    color: colorScheme.primary,
+                  ),
+                  title: Text(
+                    'Nuevo proyecto',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'task',
                 child: ListTile(
-                  leading: Icon(Icons.check_circle_outline, size: 22),
-                  title: Text('Nueva tarea', style: TextStyle(fontSize: 15)),
+                  leading: Icon(
+                    Icons.check_circle_outline,
+                    size: 22,
+                    color: colorScheme.primary,
+                  ),
+                  title: Text(
+                    'Nueva tarea',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -90,38 +123,41 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      drawer: _buildProjectsDrawer(),
-      body: _buildKanbanBoard(),
+      drawer: _buildProjectsDrawer(colorScheme, appColors),
+      body: _buildKanbanBoard(colorScheme, appColors),
     );
   }
 
-  Widget _buildProjectsDrawer() {
+  Widget _buildProjectsDrawer(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: appColors.sidePanel,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
               child: Text(
                 'PROYECTOS (0)',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Colors.black54,
+                  color: colorScheme.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),
             ),
-            const Divider(height: 1),
+            Divider(height: 1, color: appColors.divider),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
-                children: const [
+                children: [
                   ListTile(
                     title: Text(
                       'No hay proyectos',
-                      style: TextStyle(color: Colors.black38),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ),
                 ],
@@ -133,8 +169,7 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
     );
   }
 
-  Widget _buildKanbanBoard() {
-    // Modificado a scroll vertical para mostrar los paneles en forma de lista apilada
+  Widget _buildKanbanBoard(ColorScheme colorScheme, AppThemeColors appColors) {
     return ListView(
       scrollDirection: Axis.vertical,
       padding: const EdgeInsets.all(16.0),
@@ -143,27 +178,39 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
           title: 'Pendiente',
           count: 0,
           icon: Icons.circle_outlined,
-          iconColor: Colors.black54,
-          backgroundColor: const Color(0xFFF4F5F7), // Gris claro pastel
-          chipBorderColor: Colors.black12,
+          iconColor: colorScheme.onSurfaceVariant,
+          backgroundColor: appColors.highlight,
+          chipBackgroundColor: colorScheme.surface,
+          chipTextColor: colorScheme.onSurface,
+          chipBorderColor: appColors.divider,
+          colorScheme: colorScheme,
+          appColors: appColors,
         ),
         const SizedBox(height: 16),
         _buildKanbanColumn(
           title: 'En progreso',
           count: 0,
           icon: Icons.access_time,
-          iconColor: Colors.deepOrange.shade400,
-          backgroundColor: const Color(0xFFFFF7E6), // Naranja/Amarillo pastel
-          chipBorderColor: Colors.orange.shade200,
+          iconColor: colorScheme.primary,
+          backgroundColor: appColors.selectedItem.withValues(alpha: 0.45),
+          chipBackgroundColor: appColors.selectedItem,
+          chipTextColor: colorScheme.primary,
+          chipBorderColor: colorScheme.primary.withValues(alpha: 0.4),
+          colorScheme: colorScheme,
+          appColors: appColors,
         ),
         const SizedBox(height: 16),
         _buildKanbanColumn(
           title: 'Completada',
           count: 0,
           icon: Icons.check_circle_outline,
-          iconColor: Colors.green.shade600,
-          backgroundColor: const Color(0xFFEAF5EA), // Verde pastel
-          chipBorderColor: Colors.green.shade200,
+          iconColor: appColors.mintForeground,
+          backgroundColor: appColors.mintBackground.withValues(alpha: 0.45),
+          chipBackgroundColor: appColors.mintBackground,
+          chipTextColor: appColors.mintForeground,
+          chipBorderColor: appColors.mintForeground.withValues(alpha: 0.35),
+          colorScheme: colorScheme,
+          appColors: appColors,
         ),
       ],
     );
@@ -175,15 +222,19 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
     required IconData icon,
     required Color iconColor,
     required Color backgroundColor,
+    required Color chipBackgroundColor,
+    required Color chipTextColor,
     required Color chipBorderColor,
+    required ColorScheme colorScheme,
+    required AppThemeColors appColors,
   }) {
     return Container(
-      width: double.infinity, // Se adapta al ancho total de la pantalla móvil
-      height: 190, // Altura fija ideal para visualizar secciones limpias en lista vertical
+      width: double.infinity,
+      height: 190,
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: appColors.divider),
       ),
       child: Column(
         children: [
@@ -197,16 +248,9 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: chipBackgroundColor,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: chipBorderColor),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
                   ),
                   child: Row(
                     children: [
@@ -214,22 +258,25 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
                       const SizedBox(width: 6),
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
-                          color: Colors.black87,
+                          color: chipTextColor,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  '$count',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
-                    fontSize: 15,
+                Semantics(
+                  label: '$count tareas en $title',
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               ],
@@ -247,25 +294,32 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
     );
   }
 
-  void _showFilterDialog() {
+  void _showFilterDialog(ColorScheme colorScheme, AppThemeColors appColors) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: appColors.divider),
           ),
-          title: const Text(
+          title: Text(
             'Responsable',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
           ),
           content: DropdownButtonFormField<String>(
-            value: _selectedAssignee,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
+            initialValue: _selectedAssignee,
+            dropdownColor: colorScheme.surface,
+            iconEnabledColor: colorScheme.onSurfaceVariant,
+            style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 10,
               ),
@@ -281,7 +335,7 @@ class _ProjectsAndTasksScreenState extends State<ProjectsAndTasksScreen> {
                 setState(() {
                   _selectedAssignee = newValue;
                 });
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               }
             },
           ),

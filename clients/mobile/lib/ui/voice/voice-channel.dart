@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class VoiceChannelView extends StatefulWidget {
   final String channelName;
   final int participantsCount;
 
   const VoiceChannelView({
-    Key? key,
+    super.key,
     this.channelName = 'Reunión de equipo',
     this.participantsCount = 4,
-  }) : super(key: key);
+  });
 
   @override
   State<VoiceChannelView> createState() => _VoiceChannelViewState();
@@ -21,47 +23,54 @@ class _VoiceChannelViewState extends State<VoiceChannelView> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeColors = theme.extension<AppThemeColors>()!;
+
     return Scaffold(
-      backgroundColor: const Color(
-        0xFFF8F9FA,
-      ), // Estilo de fondo claro similar al tema
+      backgroundColor: colorScheme.surface,
       body: Column(
         children: [
           // ================= Avisos (Ocultos/Visibles según estado) =================
           if (_isVoiceUnavailable)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFDE8E8),
+                  color: themeColors.errorBackground,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFF8B4B4)),
+                  border: Border.all(
+                    color: colorScheme.error.withValues(alpha: 0.45),
+                  ),
                 ),
                 child: Row(
                   children: [
                     const ContainerIconBadge(text: '!', isError: true),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'La voz no está disponible por el momento',
                         style: TextStyle(
-                          color: Color(0xFF9B1C1C),
+                          color: colorScheme.error,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                    ElevatedButton(
+                    const SizedBox(width: 8),
+                    OutlinedButton(
                       onPressed: () {
                         setState(() {
-                          _isVoiceUnavailable = false; // Reintentar acción
+                          _isVoiceUnavailable = false;
                         });
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFF374151),
-                        elevation: 0,
-                        side: const BorderSide(color: Color(0xFFD1D5DB)),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: colorScheme.surface,
+                        foregroundColor: colorScheme.onSurface,
+                        side: BorderSide(color: colorScheme.outlineVariant),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       child: const Text('Reintentar'),
                     ),
@@ -79,10 +88,10 @@ class _VoiceChannelViewState extends State<VoiceChannelView> {
                 children: [
                   Text(
                     'PARTICIPANTES (${widget.participantsCount})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B7280),
+                      color: colorScheme.onSurfaceVariant,
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -93,24 +102,24 @@ class _VoiceChannelViewState extends State<VoiceChannelView> {
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
                       childAspectRatio: 1.6,
-                      children: const [
+                      children: [
                         ParticipantTile(
                           name: 'Luis Vázquez (tú)',
-                          isMuted: false,
-                          isSpeaking: true,
+                          isMuted: _isMuted,
+                          isSpeaking: !_isMuted,
                           isSelf: true,
                         ),
-                        ParticipantTile(
+                        const ParticipantTile(
                           name: 'Ana López',
                           isMuted: true,
                           isSpeaking: false,
                         ),
-                        ParticipantTile(
+                        const ParticipantTile(
                           name: 'Carlos Ruiz',
                           isMuted: false,
                           isSpeaking: false,
                         ),
-                        ParticipantTile(
+                        const ParticipantTile(
                           name: 'María Torres',
                           isMuted: true,
                           isSpeaking: false,
@@ -126,58 +135,74 @@ class _VoiceChannelViewState extends State<VoiceChannelView> {
           // ================= Controles de la llamada =================
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(top: BorderSide(color: themeColors.divider)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Toggle de Silenciar
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isMuted = !_isMuted;
-                    });
-                  },
-                  icon: Icon(_isMuted ? Icons.mic_off : Icons.mic, size: 18),
-                  label: Text(_isMuted ? 'Reactivar' : 'Silenciar'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF374151),
-                    side: const BorderSide(color: Color(0xFFD1D5DB)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
+            child: SafeArea(
+              top: false,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Toggle de Silenciar
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _isMuted = !_isMuted;
+                      });
+                    },
+                    icon: Icon(
+                      _isMuted ? Icons.mic_off : Icons.mic,
+                      size: 18,
+                      color: _isMuted
+                          ? colorScheme.error
+                          : colorScheme.onSurface,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    label: Text(_isMuted ? 'Reactivar' : 'Silenciar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _isMuted
+                          ? colorScheme.error
+                          : colorScheme.onSurface,
+                      backgroundColor: _isMuted
+                          ? themeColors.errorBackground
+                          : Colors.transparent,
+                      side: BorderSide(
+                        color: _isMuted
+                            ? colorScheme.error.withValues(alpha: 0.45)
+                            : colorScheme.outlineVariant,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                // Botón de Salir
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  icon: const Icon(Icons.logout, size: 18),
-                  label: const Text('Salir'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(
-                      0xFFC84B10,
-                    ), // Color primario de llamadas
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
+                  const SizedBox(width: 16),
+                  // Botón de Salir
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    icon: const Icon(Icons.logout, size: 18),
+                    label: const Text('Salir'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -194,21 +219,25 @@ class ParticipantTile extends StatelessWidget {
   final bool isSelf;
 
   const ParticipantTile({
-    Key? key,
+    super.key,
     required this.name,
     required this.isMuted,
     required this.isSpeaking,
     this.isSelf = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeColors = theme.extension<AppThemeColors>()!;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: themeColors.sidePanel,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelf ? const Color(0xFF111827) : const Color(0xFFE5E7EB),
+          color: isSelf ? colorScheme.primary : themeColors.divider,
           width: isSelf ? 2 : 1,
         ),
       ),
@@ -220,12 +249,16 @@ class ParticipantTile extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: const Color(0xFFF3F4F6),
+                backgroundColor: isSelf
+                    ? colorScheme.primaryContainer
+                    : themeColors.selectedItem,
                 child: Text(
-                  name.substring(0, 1),
-                  style: const TextStyle(
+                  name.isNotEmpty ? name.substring(0, 1) : '?',
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF374151),
+                    color: isSelf
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -234,7 +267,10 @@ class ParticipantTile extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.green, width: 2),
+                      border: Border.all(
+                        color: themeColors.mintForeground,
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
@@ -243,10 +279,12 @@ class ParticipantTile extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             name,
-            style: const TextStyle(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
-              color: Color(0xFF1F2937),
+              color: colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -256,14 +294,23 @@ class ParticipantTile extends StatelessWidget {
               Icon(
                 isMuted ? Icons.mic_off : Icons.mic,
                 size: 14,
-                color: isMuted ? Colors.red : Colors.grey,
+                color: isMuted
+                    ? colorScheme.error
+                    : (isSpeaking
+                          ? themeColors.mintForeground
+                          : colorScheme.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
-                isMuted ? 'Silenciado' : 'Hablando',
+                isMuted ? 'Silenciado' : (isSpeaking ? 'Hablando' : 'En línea'),
                 style: TextStyle(
                   fontSize: 11,
-                  color: isMuted ? Colors.red : Colors.grey[600],
+                  fontWeight: isSpeaking ? FontWeight.w600 : FontWeight.normal,
+                  color: isMuted
+                      ? colorScheme.error
+                      : (isSpeaking
+                            ? themeColors.mintForeground
+                            : colorScheme.onSurfaceVariant),
                 ),
               ),
             ],
@@ -279,25 +326,33 @@ class ContainerIconBadge extends StatelessWidget {
   final bool isError;
 
   const ContainerIconBadge({
-    Key? key,
+    super.key,
     required this.text,
     required this.isError,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeColors = theme.extension<AppThemeColors>()!;
+
     return Container(
       width: 24,
       height: 24,
       decoration: BoxDecoration(
-        color: isError ? const Color(0xFFF8B4B4) : Colors.blue[100],
+        color: isError
+            ? colorScheme.errorContainer
+            : themeColors.mintBackground,
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           text,
           style: TextStyle(
-            color: isError ? const Color(0xFF9B1C1C) : Colors.blue[800],
+            color: isError
+                ? colorScheme.onErrorContainer
+                : themeColors.mintForeground,
             fontWeight: FontWeight.bold,
           ),
         ),
