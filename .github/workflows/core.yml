@@ -1,0 +1,89 @@
+name: Core
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/core
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ci_admin
+          POSTGRES_PASSWORD: ci-only-postgres-password
+          POSTGRES_DB: team_collaboration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_admin -d team_collaboration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIX_ENV: test
+      CORE_DB_HOST: 127.0.0.1
+      CORE_DB_PASSWORD: ci-only-core-db-password
+      CORE_SCYLLA_NODES: 127.0.0.1:9042
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            services/core/deps
+            services/core/_build
+          key: core-${{ runner.os }}-${{ hashFiles('.tool-versions', 'services/core/mix.lock') }}
+          restore-keys: core-${{ runner.os }}-
+      - name: Start ScyllaDB
+        working-directory: .
+        run: |
+          docker run -d --name scylla -p 9042:9042 scylladb/scylla:2026.3.4 \
+            --smp 1 --memory 750M --reserve-memory 250M --overprovisioned 1 --developer-mode 1
+      - name: Initialize PostgreSQL schemas
+        working-directory: .
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGDATABASE: team_collaboration
+          PGUSER: ci_admin
+          PGPASSWORD: ci-only-postgres-password
+          AUTH_DB_PASSWORD: ci-only-auth-db-password
+          CORE_DB_PASSWORD: ci-only-core-db-password
+          FILES_DB_PASSWORD: ci-only-files-db-password
+          REPORTS_DB_PASSWORD: ci-only-reports-db-password
+        run: sh database/postgres/init.sh
+      - name: Apply ScyllaDB schema
+        working-directory: .
+        run: |
+          for attempt in $(seq 1 60); do
+            if docker exec scylla cqlsh -e "SELECT release_version FROM system.local" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs scylla | tail -50
+              echo "ScyllaDB did not become ready" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          for file in database/scylla/0*.cql; do
+            docker exec -i scylla cqlsh < "$file"
+          done
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Check formatting
+        run: mix format --check-formatted
+      - name: Compile without warnings
+        run: mix compile --warnings-as-errors
+      - name: Run tests
+        run: mix test
