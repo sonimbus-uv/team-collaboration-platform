@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+import '../theme/theme-scope.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -14,16 +17,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // Estados visuales (simulando los fx:id del FXML)
+  // Estados visuales
   int _selectedAvatarIndex = 0;
   bool _obscureCurrentPwd = true;
   bool _obscureNewPwd = true;
   bool _obscureConfirmPwd = true;
-
-  // Colores de la paleta
-  final Color _primaryOrange = const Color(0xFFC44111);
-  final Color _bgLight = const Color(0xFFF7F7F9);
-  final Color _cardBorder = const Color(0xFFE0E0E0);
 
   @override
   void dispose() {
@@ -35,20 +33,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showLogoutConfirmation() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final appColors = Theme.of(context).extension<AppThemeColors>()!;
+
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
+          backgroundColor: colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: appColors.divider),
           ),
-          title: const Text(
+          title: Text(
             '¿Cerrar sesión?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: colorScheme.onSurface,
+            ),
           ),
-          content: const Text(
+          content: Text(
             'Tendrás que volver a iniciar sesión para ver tus grupos y mensajes en este equipo.',
-            style: TextStyle(color: Colors.black87),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
           ),
           actionsPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -56,8 +63,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(), // Cancelar
-              style: TextButton.styleFrom(foregroundColor: Colors.black54),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.onSurfaceVariant,
+              ),
               child: const Text(
                 'Cancelar',
                 style: TextStyle(fontWeight: FontWeight.bold),
@@ -66,18 +75,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ElevatedButton(
               onPressed: () {
                 // TODO: Ejecutar lógica de CU-06 Cerrar sesión
-                Navigator.of(context)
+                Navigator.of(dialogContext)
                     .pushNamedAndRemoveUntil('/login', (route) => false);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black87,
-                foregroundColor: Colors.white,
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(6),
                 ),
                 elevation: 0,
               ),
-              child: const Text('Cerrar sesión'),
+              child: const Text(
+                'Cerrar sesión',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );
@@ -87,15 +99,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return Scaffold(
-      backgroundColor: _bgLight,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 1,
-        title: const Text(
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: appColors.divider),
+        ),
+        title: Text(
           'Mi perfil',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurface,
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -103,32 +126,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildProfileDataCard(),
+            _buildAppearanceCard(colorScheme, appColors),
             const SizedBox(height: 20),
-            _buildChangePasswordCard(),
+            _buildProfileDataCard(colorScheme, appColors),
             const SizedBox(height: 20),
-            _buildSessionCard(),
-            const SizedBox(height: 32), // Espacio extra al final del scroll
+            _buildChangePasswordCard(colorScheme, appColors),
+            const SizedBox(height: 20),
+            _buildSessionCard(colorScheme, appColors),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  // ================= TARJETA 1: DATOS DEL PERFIL =================
-  Widget _buildProfileDataCard() {
+  // ================= TARJETA 0: APARIENCIA Y ACCESIBILIDAD =================
+  Widget _buildAppearanceCard(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
+    final themeController = ThemeScope.of(context);
+    final isDark = themeController.isDark;
+
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(colorScheme, appColors),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
+            'Apariencia',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: Icon(
+              isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+              color: colorScheme.primary,
+            ),
+            title: Text(
+              'Modo oscuro',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            subtitle: Text(
+              isDark ? 'Activado' : 'Desactivado (modo claro)',
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+            value: isDark,
+            activeThumbColor: colorScheme.onPrimary,
+            activeTrackColor: colorScheme.primary,
+            inactiveThumbColor: colorScheme.outline,
+            inactiveTrackColor: appColors.highlight,
+            onChanged: (enabled) {
+              themeController.setThemeMode(
+                enabled ? ThemeMode.dark : ThemeMode.light,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================= TARJETA 1: DATOS DEL PERFIL =================
+  Widget _buildProfileDataCard(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _cardDecoration(colorScheme, appColors),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
             'Datos del perfil',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 20),
@@ -139,14 +227,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFFFF5F2),
-              border: Border.all(color: _primaryOrange, width: 1.5),
+              color: appColors.selectedItem,
+              border: Border.all(color: colorScheme.primary, width: 1.5),
             ),
             alignment: Alignment.center,
             child: Text(
               '?',
               style: TextStyle(
-                color: _primaryOrange,
+                color: colorScheme.primary,
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
               ),
@@ -155,25 +243,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 24),
 
           // Campo Nombre
-          _buildFieldLabel('Nombre'),
+          _buildFieldLabel('Nombre', colorScheme),
           TextFormField(
             controller: _nameController,
-            cursorColor: _primaryOrange,
+            cursorColor: colorScheme.primary,
+            style: TextStyle(color: colorScheme.onSurface),
             decoration: _inputDecoration(),
           ),
           const SizedBox(height: 20),
 
           // Selección de Avatar
-          _buildFieldLabel('Foto de perfil'),
-          const Text(
+          _buildFieldLabel('Foto de perfil', colorScheme),
+          Text(
             'Elige una del paquete.',
-            style: TextStyle(color: Colors.black54, fontSize: 12),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: List.generate(5, (index) => _buildAvatarOption(index)),
+            children: List.generate(
+              5,
+              (index) => _buildAvatarOption(index, colorScheme, appColors),
+            ),
           ),
           const SizedBox(height: 32),
 
@@ -184,17 +276,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: () {
                   // TODO: Lógica CU-07 Guardar perfil
                 },
-                style: _primaryButtonStyle(),
+                style: _primaryButtonStyle(colorScheme),
                 child: const Text('Guardar perfil'),
               ),
               const SizedBox(width: 12),
               OutlinedButton(
                 onPressed: () {
-                  // Reiniciar formulario
                   _nameController.text = 'Luis Vázquez';
                   setState(() => _selectedAvatarIndex = 0);
                 },
-                style: _secondaryButtonStyle(),
+                style: _secondaryButtonStyle(colorScheme),
                 child: const Text('Descartar'),
               ),
             ],
@@ -205,51 +296,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ================= TARJETA 2: CAMBIAR CONTRASEÑA =================
-  Widget _buildChangePasswordCard() {
+  Widget _buildChangePasswordCard(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(colorScheme, appColors),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Cambiar contraseña',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 20),
 
-          _buildFieldLabel('Contraseña actual'),
+          _buildFieldLabel('Contraseña actual', colorScheme),
           _buildPasswordField(
             _currentPasswordController,
             _obscureCurrentPwd,
-            () {
-              setState(() => _obscureCurrentPwd = !_obscureCurrentPwd);
-            },
+            () => setState(() => _obscureCurrentPwd = !_obscureCurrentPwd),
+            colorScheme,
           ),
           const SizedBox(height: 16),
 
-          _buildFieldLabel('Nueva contraseña'),
-          _buildPasswordField(_newPasswordController, _obscureNewPwd, () {
-            setState(() => _obscureNewPwd = !_obscureNewPwd);
-          }),
+          _buildFieldLabel('Nueva contraseña', colorScheme),
+          _buildPasswordField(
+            _newPasswordController,
+            _obscureNewPwd,
+            () => setState(() => _obscureNewPwd = !_obscureNewPwd),
+            colorScheme,
+          ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Mínimo 8 caracteres, con al menos una letra y un número.',
-            style: TextStyle(color: Colors.black54, fontSize: 12),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
           const SizedBox(height: 16),
 
-          _buildFieldLabel('Confirmar nueva contraseña'),
+          _buildFieldLabel('Confirmar nueva contraseña', colorScheme),
           _buildPasswordField(
             _confirmPasswordController,
             _obscureConfirmPwd,
-            () {
-              setState(() => _obscureConfirmPwd = !_obscureConfirmPwd);
-            },
+            () => setState(() => _obscureConfirmPwd = !_obscureConfirmPwd),
+            colorScheme,
           ),
           const SizedBox(height: 32),
 
@@ -257,7 +352,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () {
               // TODO: Lógica CU-07 Cambiar contraseña
             },
-            style: _secondaryButtonStyle(),
+            style: _secondaryButtonStyle(colorScheme),
             child: const Text('Actualizar contraseña'),
           ),
         ],
@@ -266,16 +361,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ================= TARJETA 3: SESIÓN =================
-  Widget _buildSessionCard() {
+  Widget _buildSessionCard(ColorScheme colorScheme, AppThemeColors appColors) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
-        // En móvil, simular el borde punteado con un borde gris con ligero espaciado,
-        // o utilizar un borde sólido distintivo para no requerir paquetes externos.
         border: Border.all(
-          color: Colors.grey.shade400,
+          color: colorScheme.outline,
           style: BorderStyle.solid,
           width: 1.5,
         ),
@@ -283,7 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -292,13 +385,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: colorScheme.onSurface,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'Sales de Sonimbus en este equipo.',
-                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -306,7 +402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(width: 16),
           ElevatedButton(
             onPressed: _showLogoutConfirmation,
-            style: _primaryButtonStyle(),
+            style: _primaryButtonStyle(colorScheme),
             child: const Text('Cerrar sesión'),
           ),
         ],
@@ -316,47 +412,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ================= COMPONENTES REUTILIZABLES =================
 
-  BoxDecoration _cardDecoration() {
+  BoxDecoration _cardDecoration(
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     return BoxDecoration(
-      color: Colors.white,
+      color: colorScheme.surface,
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: _cardBorder),
+      border: Border.all(color: appColors.divider),
     );
   }
 
-  Widget _buildFieldLabel(String text) {
+  Widget _buildFieldLabel(String text, ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 13,
-          color: Colors.black87,
+          color: colorScheme.onSurface,
         ),
       ),
     );
   }
 
-  Widget _buildAvatarOption(int index) {
+  Widget _buildAvatarOption(
+    int index,
+    ColorScheme colorScheme,
+    AppThemeColors appColors,
+  ) {
     final isSelected = _selectedAvatarIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedAvatarIndex = index),
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.grey.shade200,
-          border: Border.all(
-            color: isSelected ? _primaryOrange : Colors.transparent,
-            width: 2.5,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: 'Avatar ${index + 1}',
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedAvatarIndex = index),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected ? appColors.selectedItem : appColors.highlight,
+            border: Border.all(
+              color: isSelected ? colorScheme.primary : colorScheme.outline,
+              width: isSelected ? 2.5 : 1,
+            ),
           ),
-        ),
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.person_outline, // Placeholder del icono del avatar
-          color: isSelected ? _primaryOrange : Colors.black38,
+          alignment: Alignment.center,
+          child: Icon(
+            isSelected ? Icons.check : Icons.person_outline,
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -366,18 +476,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     TextEditingController controller,
     bool isObscured,
     VoidCallback onToggle,
+    ColorScheme colorScheme,
   ) {
     return TextFormField(
       controller: controller,
       obscureText: isObscured,
-      cursorColor: _primaryOrange,
+      cursorColor: colorScheme.primary,
+      style: TextStyle(color: colorScheme.onSurface),
       decoration: _inputDecoration().copyWith(
         suffixIcon: IconButton(
+          tooltip: isObscured ? 'Mostrar contraseña' : 'Ocultar contraseña',
           icon: Icon(
             isObscured
                 ? Icons.visibility_off_outlined
                 : Icons.visibility_outlined,
-            color: Colors.black45,
+            color: colorScheme.onSurfaceVariant,
             size: 20,
           ),
           onPressed: onToggle,
@@ -387,23 +500,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   InputDecoration _inputDecoration() {
-    return InputDecoration(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: Colors.black26),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: BorderSide(color: _primaryOrange, width: 1.5),
-      ),
+    return const InputDecoration(
+      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     );
   }
 
-  ButtonStyle _primaryButtonStyle() {
+  ButtonStyle _primaryButtonStyle(ColorScheme colorScheme) {
     return ElevatedButton.styleFrom(
-      backgroundColor: _primaryOrange,
-      foregroundColor: Colors.white,
+      backgroundColor: colorScheme.primary,
+      foregroundColor: colorScheme.onPrimary,
       elevation: 0,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -411,11 +516,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  ButtonStyle _secondaryButtonStyle() {
+  ButtonStyle _secondaryButtonStyle(ColorScheme colorScheme) {
     return OutlinedButton.styleFrom(
-      foregroundColor: Colors.black87,
+      foregroundColor: colorScheme.onSurface,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      side: const BorderSide(color: Colors.black26),
+      side: BorderSide(color: colorScheme.outline),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
     );
