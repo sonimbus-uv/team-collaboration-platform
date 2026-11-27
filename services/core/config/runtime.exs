@@ -57,6 +57,17 @@ config :core, Core.Scylla,
   nodes: System.get_env("CORE_SCYLLA_NODES", "localhost:9042") |> String.split(",", trim: true),
   keyspace: System.get_env("CORE_SCYLLA_KEYSPACE", "sonimbus_core")
 
+livekit_api_key = System.get_env("LIVEKIT_API_KEY")
+livekit_api_secret = System.get_env("LIVEKIT_API_SECRET")
+livekit_url = System.get_env("LIVEKIT_URL")
+
+if (config_env() != :test and livekit_api_key) && livekit_api_secret && livekit_url do
+  config :core, Core.Voice,
+    api_key: livekit_api_key,
+    api_secret: livekit_api_secret,
+    url: livekit_url
+end
+
 # Verificación del access JWT de Auth (contracts/token-profile.md). El issuer
 # debe ser igual a AUTH_JWT_ISSUER de Auth; las pruebas usan config/test.exs.
 if config_env() in [:dev, :prod] do

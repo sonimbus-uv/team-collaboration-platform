@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class JoinGroupDialog extends StatefulWidget {
   const JoinGroupDialog({super.key});
 
@@ -12,7 +14,6 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
 
   bool _hasError = false;
   String _errorMessage = '';
-  final Color _primaryOrange = const Color(0xFFC44111);
 
   @override
   void dispose() {
@@ -21,7 +22,6 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
   }
 
   void _handleJoin() {
-    // Validación inicial
     if (_codeController.text.trim().isEmpty) {
       setState(() {
         _hasError = true;
@@ -39,24 +39,37 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return AlertDialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      backgroundColor: colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: appColors.divider),
+      ),
       contentPadding: const EdgeInsets.all(24),
       titlePadding: const EdgeInsets.only(left: 24, top: 24, right: 24),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
+          Text(
             'Unirse a un grupo',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 18,
-              color: Colors.black87,
+              color: colorScheme.onSurface,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 20, color: Colors.black54),
+            tooltip: 'Cerrar',
+            icon: Icon(
+              Icons.close,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).pop(),
@@ -64,16 +77,17 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
         ],
       ),
       content: SizedBox(
-        width:
-            MediaQuery.of(context).size.width *
-            0.9, // Ajuste para ocupar ancho en móvil
+        width: MediaQuery.of(context).size.width * 0.9,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Escribe el código de invitación que te compartió un administrador del grupo.',
-              style: TextStyle(color: Colors.black87, fontSize: 14),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -82,15 +96,15 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
                 padding: const EdgeInsets.all(10),
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  border: Border.all(color: Colors.red.shade200),
+                  color: appColors.errorBackground,
+                  border: Border.all(color: colorScheme.error),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.error_outline,
-                      color: Colors.red.shade700,
+                      color: colorScheme.error,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -98,8 +112,9 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
                       child: Text(
                         _errorMessage,
                         style: TextStyle(
-                          color: Colors.red.shade900,
+                          color: colorScheme.error,
                           fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -107,37 +122,33 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
                 ),
               ),
 
-            const Text(
+            Text(
               'Código de invitación',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: Colors.black87,
+                color: colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 6),
             TextFormField(
               controller: _codeController,
-              cursorColor: _primaryOrange,
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(
+              cursorColor: colorScheme.primary,
+              style: TextStyle(color: colorScheme.onSurface),
+              decoration: const InputDecoration(
+                contentPadding: EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: Colors.black26),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(color: _primaryOrange, width: 1.5),
                 ),
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'También puedes pegar el enlace de invitación completo.',
-              style: TextStyle(color: Colors.black54, fontSize: 12),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -147,8 +158,8 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
         OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),
           style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.black87,
-            side: const BorderSide(color: Colors.black26),
+            foregroundColor: colorScheme.onSurface,
+            side: BorderSide(color: colorScheme.outline),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(6),
             ),
@@ -162,8 +173,8 @@ class _JoinGroupDialogState extends State<JoinGroupDialog> {
         ElevatedButton(
           onPressed: _handleJoin,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _primaryOrange,
-            foregroundColor: Colors.white,
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(6),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class CreateGroupDialog extends StatefulWidget {
   const CreateGroupDialog({super.key});
 
@@ -10,7 +12,6 @@ class CreateGroupDialog extends StatefulWidget {
 class _CreateGroupDialogState extends State<CreateGroupDialog> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
-  final Color _accentOrange = const Color(0xFFC44111);
 
   @override
   void dispose() {
@@ -21,9 +22,16 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: appColors.divider),
+      ),
+      backgroundColor: colorScheme.surface,
       surfaceTintColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: SingleChildScrollView(
@@ -35,15 +43,20 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Crear grupo',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 IconButton(
-                  icon: const Icon(
+                  tooltip: 'Cerrar',
+                  icon: Icon(
                     Icons.close,
                     size: 20,
-                    color: Colors.black54,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -52,91 +65,91 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
               ],
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'Nombre del grupo',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(
+              cursorColor: colorScheme.primary,
+              style: TextStyle(color: colorScheme.onSurface),
+              decoration: const InputDecoration(
+                contentPadding: EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.black26),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: _accentOrange, width: 2),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Descripción (opcional)',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _descController,
               maxLength: 200,
               maxLines: 4,
-              decoration: InputDecoration(
+              cursorColor: colorScheme.primary,
+              style: TextStyle(color: colorScheme.onSurface),
+              decoration: const InputDecoration(
                 hintText: '¿Para qué es este grupo?',
-                hintStyle: const TextStyle(color: Colors.black38),
-                contentPadding: const EdgeInsets.symmetric(
+                contentPadding: EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.black26),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: _accentOrange, width: 2),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Imagen (opcional)',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF5F2),
-                    borderRadius: BorderRadius.circular(12),
-                    // Corrección aplicada aquí: Border.all en lugar de BorderSide
-                    // ignore: deprecated_member_use
-                    border: Border.all(color: _accentOrange.withOpacity(0.3)),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '?',
-                    style: TextStyle(
-                      color: _accentOrange,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+                Semantics(
+                  label: 'Vista previa de la imagen del grupo',
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: appColors.selectedItem,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.primary),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '?',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 OutlinedButton(
                   onPressed: () {
-                    // Acción para elegir imagen
+                    // TODO: Acción para elegir imagen del grupo
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black87,
-                    side: const BorderSide(color: Colors.black26),
+                    foregroundColor: colorScheme.onSurface,
+                    side: BorderSide(color: colorScheme.outline),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -146,29 +159,34 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
               ],
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'Serás el administrador del grupo. Se creará el canal de texto #general.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 24),
-            const Divider(height: 1, color: Colors.black12),
+            Divider(height: 1, color: appColors.divider),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(foregroundColor: Colors.black54),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.onSurfaceVariant,
+                  ),
                   child: const Text('Cancelar'),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () {
-                    // Acción para confirmar creación
+                    // TODO: Acción para confirmar creación de grupo
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentOrange,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

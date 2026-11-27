@@ -59,6 +59,20 @@ defmodule CoreWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :not_voice_channel}) do
+    Problem.send_problem(conn, 422, "not-a-voice-channel", "Not a voice channel",
+      detail: "Voice tokens are only available for voice channels."
+    )
+  end
+
+  def call(conn, {:error, :voice_unavailable}) do
+    conn
+    |> put_resp_header("retry-after", "5")
+    |> Problem.send_problem(503, "voice-unavailable", "Voice unavailable",
+      detail: "The media server is not available right now."
+    )
+  end
+
   def call(conn, {:error, :unavailable}) do
     conn
     |> put_resp_header("retry-after", "5")
