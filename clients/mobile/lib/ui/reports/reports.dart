@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({Key? key}) : super(key: key);
+  const ReportsScreen({super.key});
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
@@ -38,7 +40,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}";
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
   void _onQuery() {
@@ -49,47 +51,84 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final appColors = theme.extension<AppThemeColors>()!;
+
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        title: const Text(
+        surfaceTintColor: Colors.transparent,
+        iconTheme: IconThemeData(color: colorScheme.onSurface),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: appColors.divider),
+        ),
+        title: Text(
           'Reportes',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.black87,
+            color: colorScheme.onSurface,
           ),
         ),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.download),
+            icon: Icon(
+              Icons.download,
+              color: _hasData
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
             tooltip: 'Exportar reporte',
             enabled: _hasData,
+            color: colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
             offset: const Offset(0, 45),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: appColors.divider),
             ),
             onSelected: (String value) {
-              // Lógica para exportar PDF o CSV (CU-30)
+              // TODO: Lógica para exportar PDF o CSV (CU-30)
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
+            itemBuilder: (BuildContext menuContext) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
                 value: 'pdf',
                 child: ListTile(
-                  leading: Icon(Icons.picture_as_pdf_outlined, size: 20),
-                  title: Text('PDF (.pdf)', style: TextStyle(fontSize: 14)),
+                  leading: Icon(
+                    Icons.picture_as_pdf_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
+                  title: Text(
+                    'PDF (.pdf)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'csv',
                 child: ListTile(
-                  leading: Icon(Icons.table_chart_outlined, size: 20),
-                  title: Text('CSV (.csv)', style: TextStyle(fontSize: 14)),
+                  leading: Icon(
+                    Icons.table_chart_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
+                  title: Text(
+                    'CSV (.csv)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -108,31 +147,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F5F7),
+                color: appColors.highlight,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black12),
+                border: Border.all(color: appColors.divider),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Tipo de reporte',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black54,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    value: _selectedReportType,
+                    initialValue: _selectedReportType,
+                    dropdownColor: colorScheme.surface,
+                    iconEnabledColor: colorScheme.onSurfaceVariant,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.black26),
-                      ),
+                      fillColor: colorScheme.surface,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 10,
@@ -141,7 +182,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     items: _reportTypes.map((String type) {
                       return DropdownMenuItem<String>(
                         value: type,
-                        child: Text(type, style: const TextStyle(fontSize: 14)),
+                        child: Text(type),
                       );
                     }).toList(),
                     onChanged: (String? newValue) {
@@ -154,94 +195,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Desde',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            InkWell(
-                              onTap: () => _selectDate(context, true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.black26),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      _formatDate(_startDate),
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      size: 16,
-                                      color: Colors.black54,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                        child: _buildDateSelector(
+                          label: 'Desde',
+                          dateText: _formatDate(_startDate),
+                          onTap: () => _selectDate(context, true),
+                          colorScheme: colorScheme,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Hasta',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            InkWell(
-                              onTap: () => _selectDate(context, false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.black26),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      _formatDate(_endDate),
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      size: 16,
-                                      color: Colors.black54,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                        child: _buildDateSelector(
+                          label: 'Hasta',
+                          dateText: _formatDate(_endDate),
+                          onTap: () => _selectDate(context, false),
+                          colorScheme: colorScheme,
                         ),
                       ),
                     ],
@@ -251,10 +218,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(
-                          0xFFD35400,
-                        ), // Color primario de la app
-                        foregroundColor: Colors.white,
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
+                        elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -280,17 +246,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _selectedReportType ?? '',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                  Expanded(
+                    child: Text(
+                      _selectedReportType ?? '',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     '${_formatDate(_startDate)} al ${_formatDate(_endDate)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -302,41 +274,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
               height: 220,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                border: Border.all(color: appColors.divider),
               ),
               child: Center(
                 child: _hasData
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.bar_chart,
                             size: 48,
-                            color: Colors.black38,
+                            color: colorScheme.primary,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Gráfica de $_selectedReportType',
-                            style: const TextStyle(
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w500,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       )
-                    : const Text(
+                    : Text(
                         'Elige un tipo de reporte y un periodo, y pulsa Consultar',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.black38, fontSize: 14),
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 14,
+                        ),
                       ),
               ),
             ),
@@ -345,9 +313,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
             // ================= Tabla de datos =================
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black12),
+                border: Border.all(color: appColors.divider),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -355,31 +323,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ? SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(
+                            appColors.highlight,
+                          ),
+                          dividerThickness: 1,
+                          headingTextStyle: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                          dataTextStyle: TextStyle(
+                            color: colorScheme.onSurface,
+                          ),
                           columns: const [
-                            DataColumn(
-                              label: Text(
-                                'Miembro',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Asignadas',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Terminadas',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Vencidas',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                            DataColumn(label: Text('Miembro')),
+                            DataColumn(label: Text('Asignadas')),
+                            DataColumn(label: Text('Terminadas')),
+                            DataColumn(label: Text('Vencidas')),
                           ],
                           rows: const [
                             DataRow(
@@ -409,13 +368,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ],
                         ),
                       )
-                    : const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
                         child: Center(
                           child: Text(
                             'Sin datos para mostrar',
                             style: TextStyle(
-                              color: Colors.black38,
+                              color: colorScheme.onSurfaceVariant,
                               fontSize: 14,
                             ),
                           ),
@@ -426,6 +385,61 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDateSelector({
+    required String label,
+    required String dateText,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Semantics(
+          button: true,
+          label: 'Seleccionar fecha $label: $dateText',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colorScheme.outline),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    dateText,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

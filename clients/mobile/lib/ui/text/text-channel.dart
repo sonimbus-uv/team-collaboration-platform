@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app-theme-extension.dart';
+
 class TextChannelView extends StatefulWidget {
   final String channelName;
   final String channelDescription;
 
   const TextChannelView({
-    Key? key,
+    super.key,
     this.channelName = 'general',
     this.channelDescription = 'Avisos y conversación general del grupo',
-  }) : super(key: key);
+  });
 
   @override
   State<TextChannelView> createState() => _TextChannelViewState();
@@ -41,14 +43,22 @@ class _TextChannelViewState extends State<TextChannelView> {
   String? _replyingToAuthor;
   String? _replyingToText;
 
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
   void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
+    final trimmed = _messageController.text.trim();
+    if (trimmed.isEmpty) return;
+
     setState(() {
       _messages.add(
         ChatMessage(
           author: 'Luis Vázquez (tú)',
           time: TimeOfDay.now().format(context),
-          text: _messageController.text,
+          text: trimmed,
           isSelf: true,
           replyTo: _isReplying ? '$_replyingToAuthor: $_replyingToText' : null,
         ),
@@ -70,41 +80,56 @@ class _TextChannelViewState extends State<TextChannelView> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeColors = theme.extension<AppThemeColors>()!;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: themeColors.divider),
+        ),
         title: Row(
           children: [
             Text(
               '#${widget.channelName}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1F2937),
+                color: colorScheme.onSurface,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 widget.channelDescription,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        iconTheme: const IconThemeData(color: Color(0xFF374151)),
+        iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
       body: Column(
         children: [
           // ================= Historial de mensajes =================
           Expanded(
             child: _messages.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'Todavía no hay mensajes en este canal',
-                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -129,159 +154,180 @@ class _TextChannelViewState extends State<TextChannelView> {
           // ================= Caja de escritura (Composer) =================
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(top: BorderSide(color: themeColors.divider)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Barra de respuesta (CU-17) - Oculta por defecto o según estado
-                if (_isReplying)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
-                      borderRadius: BorderRadius.circular(6),
-                      border: const Border(
-                        left: BorderSide(color: Color(0xFFC84B10), width: 3),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Barra de respuesta (CU-17)
+                  if (_isReplying)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Respondiendo a ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF6B7280),
+                      decoration: BoxDecoration(
+                        color: themeColors.sidePanel,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border(
+                          left: BorderSide(
+                            color: colorScheme.primary,
+                            width: 3,
                           ),
                         ),
-                        Text(
-                          _replyingToAuthor ?? '',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _replyingToText ?? '',
-                            style: const TextStyle(
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Respondiendo a ',
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF6B7280),
+                              color: colorScheme.onSurfaceVariant,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        InkWell(
-                          onTap: _cancelReply,
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Color(0xFF6B7280),
+                          Text(
+                            _replyingToAuthor ?? '',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Label descriptivo para accesibilidad (labelFor equivalente)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'Mensaje para el canal',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ),
-
-                // Fila de entrada de texto y botones
-                Row(
-                  children: [
-                    // Botón Adjuntar (CU-23 / RF-MSG-04)
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        // Lógica para adjuntar archivos o imágenes
-                      },
-                      icon: const Icon(Icons.attach_file, size: 18),
-                      label: const Text('Adjuntar'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF374151),
-                        side: const BorderSide(color: Color(0xFFD1D5DB)),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _replyingToText ?? '',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: _cancelReply,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
 
-                    // Campo de texto
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        decoration: InputDecoration(
-                          hintText: 'Escribe un mensaje…',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFF9CA3AF),
+                  // Label descriptivo para accesibilidad (WCAG 2.2)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'Mensaje para el canal',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+
+                  // Fila de entrada de texto y botones
+                  Row(
+                    children: [
+                      // Botón Adjuntar (CU-23 / RF-MSG-04)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          // Lógica para adjuntar archivos o imágenes
+                        },
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: const Text('Adjuntar'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colorScheme.onSurface,
+                          side: BorderSide(color: colorScheme.outlineVariant),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Campo de texto
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
                             fontSize: 14,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD1D5DB),
+                          decoration: InputDecoration(
+                            hintText: 'Escribe un mensaje…',
+                            hintStyle: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 14,
+                            ),
+                            filled: true,
+                            fillColor: themeColors.sidePanel,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: colorScheme.outlineVariant,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: colorScheme.outlineVariant,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: colorScheme.primary,
+                                width: 1.5,
+                              ),
                             ),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD1D5DB),
-                            ),
-                          ),
+                          onSubmitted: (_) => _sendMessage(),
                         ),
-                        onSubmitted: (_) => _sendMessage(),
                       ),
-                    ),
-                    const SizedBox(width: 8),
+                      const SizedBox(width: 8),
 
-                    // Botón Enviar (CU-16 / RF-MSG-01)
-                    ElevatedButton(
-                      onPressed: _sendMessage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(
-                          0xFFC84B10,
-                        ), // Color primario corporativo
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                      // Botón Enviar (CU-16 / RF-MSG-01)
+                      ElevatedButton(
+                        onPressed: _sendMessage,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 0,
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
+                        child: const Text('Enviar'),
                       ),
-                      child: const Text('Enviar'),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -314,11 +360,18 @@ class MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final VoidCallback onReply;
 
-  const MessageBubble({Key? key, required this.message, required this.onReply})
-    : super(key: key);
+  const MessageBubble({
+    super.key,
+    required this.message,
+    required this.onReply,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final themeColors = theme.extension<AppThemeColors>()!;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
@@ -326,13 +379,17 @@ class MessageBubble extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: const Color(0xFFE5E7EB),
+            backgroundColor: message.isSelf
+                ? colorScheme.primaryContainer
+                : themeColors.sidePanel,
             child: Text(
-              message.author.substring(0, 1),
-              style: const TextStyle(
+              message.author.isNotEmpty ? message.author.substring(0, 1) : '?',
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF374151),
+                color: message.isSelf
+                    ? colorScheme.onPrimaryContainer
+                    : colorScheme.onSurface,
               ),
             ),
           ),
@@ -346,18 +403,20 @@ class MessageBubble extends StatelessWidget {
                   children: [
                     Text(
                       message.author,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: Color(0xFF1F2937),
+                        color: message.isSelf
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       message.time,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF9CA3AF),
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -368,18 +427,25 @@ class MessageBubble extends StatelessWidget {
                 if (message.replyTo != null)
                   Container(
                     margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF9FAFB),
-                      border: const Border(
-                        left: BorderSide(color: Color(0xFF9CA3AF), width: 2),
+                      color: themeColors.sidePanel,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(4),
+                        bottomRight: Radius.circular(4),
+                      ),
+                      border: Border(
+                        left: BorderSide(color: colorScheme.primary, width: 2),
                       ),
                     ),
                     child: Text(
                       'Respondiendo a ${message.replyTo}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF6B7280),
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -387,34 +453,33 @@ class MessageBubble extends StatelessWidget {
                 // Texto del mensaje
                 Text(
                   message.text,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF374151),
-                  ),
+                  style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
                 ),
 
                 // Reacciones asociadas (CU-18)
                 if (message.reactions.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
+                    padding: const EdgeInsets.only(top: 6.0),
                     child: Wrap(
                       spacing: 4,
+                      runSpacing: 4,
                       children: message.reactions.map((r) {
                         return Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
+                            horizontal: 8,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
+                            color: themeColors.selectedItem,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            border: Border.all(color: themeColors.divider),
                           ),
                           child: Text(
                             r,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
-                              color: Color(0xFF4B5563),
+                              fontWeight: FontWeight.w500,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                         );
@@ -426,10 +491,15 @@ class MessageBubble extends StatelessWidget {
           ),
           // Botón de opciones rápidas (Responder)
           IconButton(
-            icon: const Icon(Icons.reply, size: 16, color: Color(0xFF9CA3AF)),
+            tooltip: 'Responder mensaje',
+            icon: Icon(
+              Icons.reply,
+              size: 16,
+              color: colorScheme.onSurfaceVariant,
+            ),
             onPressed: onReply,
             constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.all(4),
           ),
         ],
       ),
