@@ -26,12 +26,23 @@ defmodule CoreWeb.MessageControllerTest do
 
     %{
       owner: owner,
+      guest: guest,
       group: group,
       channel: channel,
       message: message,
       conn: authenticate(conn, owner),
       guest_conn: authenticate(build_conn(), guest)
     }
+  end
+
+  defp post_message(ctx, user, content) do
+    {:ok, message, :created} =
+      Messaging.create_message(ctx.channel, ctx.group, user, %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => content
+      })
+
+    message
   end
 
   defp path(ctx), do: ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{ctx.message.id}"
@@ -93,6 +104,38 @@ defmodule CoreWeb.MessageControllerTest do
 
     assert response(delete(ctx.conn, path(ctx)), 204)
     assert json_response(delete(ctx.conn, path(ctx)), 404)
+  end
+
+  test "DELETE by an admin moderates another member's message", ctx do
+    guest_message = post_message(ctx, ctx.guest, "ofensivo")
+
+    conn =
+      delete(
+        ctx.conn,
+        ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{guest_message.id}",
+        %{"reason" => "Spam"}
+      )
+
+    assert response(conn, 204)
+
+    conn = get(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages")
+
+    assert %{
+             "data" => [
+               %{"deleted" => true, "deleted_reason" => "moderation", "content" => nil},
+               _
+             ]
+           } =
+             json_response(conn, 200)
+  end
+
+  test "DELETE by a member without permission on another's message is 403", ctx do
+    owner_message = post_message(ctx, ctx.owner, "del admin")
+
+    conn =
+      delete(ctx.guest_conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{owner_message.id}")
+
+    assert json_response(conn, 403)
   end
 
   test "a non member gets 404", ctx do

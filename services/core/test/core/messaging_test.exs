@@ -191,7 +191,7 @@ defmodule Core.MessagingTest do
                })
 
       assert {:error, :forbidden} =
-               Messaging.delete_message(ctx.channel, ctx.group, other, message.id)
+               Messaging.delete_message(ctx.channel, ctx.group, other, :member, message.id)
 
       assert {:ok, %{messages: [%{content: "mio", edited_at: nil, deleted: false}]}} =
                Messaging.list_messages(ctx.channel, %{})
@@ -226,7 +226,7 @@ defmodule Core.MessagingTest do
                  Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, id, %{"content" => "x"})
 
         assert {:error, :not_found} =
-                 Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, id)
+                 Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, id)
       end
 
       assert {:error, :not_found} =
@@ -238,7 +238,7 @@ defmodule Core.MessagingTest do
         send_message(ctx, "secreto", %{"file_id" => Ecto.UUID.generate()})
 
       assert {:ok, deleted} =
-               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, message.id)
 
       assert %{deleted: true, content: nil, file_id: nil, deleted_reason: "author"} = deleted
 
@@ -248,7 +248,7 @@ defmodule Core.MessagingTest do
 
     test "a deleted message can be neither edited nor deleted again", ctx do
       {:ok, message, :created} = send_message(ctx, "adios")
-      {:ok, _} = Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+      {:ok, _} = Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, message.id)
 
       assert {:error, :not_found} =
                Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, %{
@@ -256,7 +256,7 @@ defmodule Core.MessagingTest do
                })
 
       assert {:error, :not_found} =
-               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, message.id)
     end
 
     test "an archived group rejects both", ctx do
@@ -269,7 +269,7 @@ defmodule Core.MessagingTest do
                })
 
       assert {:error, :group_archived} =
-               Messaging.delete_message(ctx.channel, archived, ctx.owner, message.id)
+               Messaging.delete_message(ctx.channel, archived, ctx.owner, :admin, message.id)
     end
 
     test "concurrent edit and delete never resurrect the message", ctx do
@@ -283,7 +283,7 @@ defmodule Core.MessagingTest do
             })
           end),
           Task.async(fn ->
-            Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+            Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, message.id)
           end)
         ]
         |> Task.await_many(10_000)

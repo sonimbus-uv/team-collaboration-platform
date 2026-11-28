@@ -77,13 +77,14 @@ defmodule CoreWeb.MessageChannel do
     end
   end
 
-  def handle_in("message.delete", %{"id" => message_id}, socket) do
+  def handle_in("message.delete", %{"id" => message_id} = payload, socket) do
     user_id = socket.assigns.current_user_id
 
     with {:ok, _ms_left} <- SocketToken.time_left(socket),
-         {:ok, channel, group, _role} <-
+         {:ok, channel, group, role} <-
            Community.get_channel_for_member(socket.assigns.channel_id, user_id),
-         {:ok, message} <- Messaging.delete_message(channel, group, user_id, message_id) do
+         {:ok, message} <-
+           Messaging.delete_message(channel, group, user_id, role, message_id, payload) do
       Realtime.broadcast_to_channel(channel.id, "message.deleted", MessageJSON.deleted(message))
       {:reply, {:ok, %{}}, socket}
     else

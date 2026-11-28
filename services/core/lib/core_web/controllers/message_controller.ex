@@ -29,11 +29,12 @@ defmodule CoreWeb.MessageController do
     end
   end
 
-  def delete(conn, %{"channel_id" => channel_id, "id" => message_id}) do
+  def delete(conn, %{"channel_id" => channel_id, "id" => message_id} = params) do
     user_id = conn.assigns.current_user_id
 
-    with {:ok, channel, group, _role} <- Community.get_channel_for_member(channel_id, user_id),
-         {:ok, message} <- Messaging.delete_message(channel, group, user_id, message_id) do
+    with {:ok, channel, group, role} <- Community.get_channel_for_member(channel_id, user_id),
+         {:ok, message} <-
+           Messaging.delete_message(channel, group, user_id, role, message_id, params) do
       Realtime.broadcast_to_channel(channel.id, "message.deleted", MessageJSON.deleted(message))
       send_resp(conn, :no_content, "")
     end

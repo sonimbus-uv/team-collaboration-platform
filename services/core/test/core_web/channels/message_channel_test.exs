@@ -144,6 +144,28 @@ defmodule CoreWeb.MessageChannelTest do
     assert_reply ref, :error, %{type: "forbidden"}
   end
 
+  test "un moderador elimina un mensaje ajeno y el canal ve el motivo", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    guest = user_id()
+    member_fixture(ctx.group, guest, :member)
+    {:ok, guest_socket} = connect(UserSocket, %{}, connect_info: %{auth_token: token_for(guest)})
+    {:ok, _, guest_socket} = subscribe_and_join(guest_socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(guest_socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "ofensivo"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+
+    ref = push(socket, "message.delete", %{"id" => id, "reason" => "Spam"})
+    assert_reply ref, :ok, %{}
+
+    assert_push "message.deleted", %{payload: %{id: ^id, deleted_reason: "moderation"}}
+  end
+
   test "errores de validación en la respuesta", ctx do
     {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
 

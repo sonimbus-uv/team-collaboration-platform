@@ -11,8 +11,12 @@ defmodule Core.Messaging do
   `003_messages_by_client_id.cql`.
   """
   import Ecto.Changeset
+  import Ecto.Query, only: [from: 2]
 
-  alias Core.Community.{Channel, Group}
+  require Logger
+
+  alias Core.{Authorization, Community, Realtime, Repo}
+  alias Core.Community.{Channel, Group, Member, ModerationAction}
   alias Core.Messaging.TimeUUID
   alias Core.Scylla
 
@@ -162,16 +166,84 @@ defmodule Core.Messaging do
   end
 
   @doc """
-  Elimina un mensaje propio (CU-19 FA-01). No borra la fila: marca `deleted`
-  con `deleted_reason = "author"` (D-24).
+  Elimina un mensaje (CU-19 FA-01, CU-15 FA-01). No borra la fila: marca
+  `deleted` con su motivo (D-24).
+
+  - El autor lo elimina con `deleted_reason = "author"`; no se admite en un
+    grupo archivado.
+  - Quien tenga el permiso `moderate` y un rol estrictamente superior al del
+    autor (o el autor ya no sea miembro) lo elimina con `deleted_reason =
+    "moderation"`, aunque el grupo esté archivado. Se registra la acción y se
+    avisa al autor. No hay transacción entre ScyllaDB y PostgreSQL: si la
+    auditoría falla, el borrado se mantiene y el fallo queda en el registro.
   """
-  def delete_message(%Channel{} = channel, %Group{} = group, user_id, message_id) do
+  def delete_message(
+        %Channel{} = channel,
+        %Group{} = group,
+        actor_id,
+        actor_role,
+        message_id,
+        attrs \\ %{}
+      ) do
     with :ok <- require_text(channel),
-         :ok <- require_writable(group),
-         {:ok, message} <- fetch_visible(channel, message_id),
-         :ok <- require_author(message, user_id) do
-      mark_deleted(channel, message, "author", user_id)
+         {:ok, message} <- fetch_visible(channel, message_id) do
+      if message.author_id == actor_id do
+        with :ok <- require_writable(group) do
+          mark_deleted(channel, message, "author", actor_id)
+        end
+      else
+        moderate_delete(channel, group, actor_id, actor_role, message, attrs)
+      end
     end
+  end
+
+  defp moderate_delete(channel, group, actor_id, actor_role, message, attrs) do
+    with :ok <- Authorization.authorize(group.id, actor_role, :moderate),
+         :ok <- require_higher_role(actor_role, author_role(group.id, message.author_id)),
+         {:ok, reason} <- Community.cast_reason(attrs),
+         {:ok, deleted} <- mark_deleted(channel, message, "moderation", actor_id) do
+      audit_deletion(group, actor_id, message, reason)
+
+      Realtime.broadcast_to_user(message.author_id, "moderation.applied", %{
+        group_id: group.id,
+        action: :delete_message,
+        message_id: message.id,
+        reason: reason
+      })
+
+      {:ok, deleted}
+    end
+  end
+
+  defp audit_deletion(group, actor_id, message, reason) do
+    case Repo.insert(%ModerationAction{
+           group_id: group.id,
+           actor_id: actor_id,
+           target_user_id: message.author_id,
+           action: :delete_message,
+           target_ref: message.id,
+           reason: reason
+         }) do
+      {:ok, _action} ->
+        :ok
+
+      {:error, _changeset} ->
+        Logger.error("no se pudo registrar la eliminación moderada del mensaje #{message.id}")
+    end
+  end
+
+  defp author_role(group_id, author_id) do
+    Repo.one(
+      from m in Member, where: m.group_id == ^group_id and m.user_id == ^author_id, select: m.role
+    )
+  end
+
+  defp require_higher_role(_actor_role, nil), do: :ok
+
+  defp require_higher_role(actor_role, author_role) do
+    if actor_role != author_role and Member.role_at_least?(actor_role, author_role),
+      do: :ok,
+      else: {:error, :forbidden}
   end
 
   defp mark_deleted(channel, message, reason, deleted_by) do
