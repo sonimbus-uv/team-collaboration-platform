@@ -284,6 +284,29 @@ paths:
   /api/v1/groups/{group_id}/invitations:
     parameters:
       - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listInvitations
+      summary: Listar invitaciones vigentes (CU-10); rol moderator o superior
+      description: >-
+        Requiere el permiso `invite_members`. Devuelve solo las invitaciones
+        que se pueden usar: no revocadas, no caducadas y con usos restantes,
+        de la más reciente a la más antigua. `remaining_uses` es nulo cuando
+        los usos son ilimitados.
+      responses:
+        "200":
+          description: Invitaciones vigentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: createInvitation
       summary: Crear invitación (CU-10); rol moderator o superior
@@ -307,6 +330,24 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/GroupArchived" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/invitations/{invitation_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/InvitationId"
+    delete:
+      operationId: revokeInvitation
+      summary: Revocar una invitación (CU-10 FA-01); rol moderator o superior
+      description: >-
+        Requiere el permiso `invite_members`. Marca la invitación como
+        revocada: no admite nuevos ingresos (CU-11 EX-01), pero quienes ya se
+        unieron conservan su membresía. Revocar una invitación ya revocada
+        también responde 204.
+      responses:
+        "204": { description: Invitación revocada }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/invitations/join:
     post:
       operationId: joinGroup
@@ -588,6 +629,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitation_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     RoleName:
       name: role
       in: path
@@ -732,6 +778,9 @@ components:
         expires_at: { type: string, format: date-time }
         max_uses: { type: [integer, "null"] }
         uses: { type: integer }
+        remaining_uses:
+          type: [integer, "null"]
+          description: Solo en el listado; nulo si los usos son ilimitados
         created_at: { type: string, format: date-time }
     CreateChannel:
       type: object
