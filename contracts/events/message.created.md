@@ -100,6 +100,7 @@ guardar el mensaje.
     "client_message_id": "8f0e7c52-3a59-4f7e-9d43-4a5b7a3c2e10",
     "content": "Hola, equipo",
     "reply_to": null,
+    "reply_preview": null,
     "file_id": null,
     "created_at": "2026-10-29T15:04:05.123456Z",
     "edited_at": null,
@@ -111,6 +112,10 @@ guardar el mensaje.
 - `id` es un timeuuid que asigna Core y define el orden (D-08); `created_at`
   sale de él.
 - Con `deleted = true`, `content` y `file_id` son `null` (D-24).
+- `reply_preview` es `null` si el mensaje no responde a otro. Si responde, lleva
+  `{id, unavailable, author, content}` del original (primeros 100 caracteres);
+  con el original eliminado, `{id, unavailable: true}` (CU-17 EX-01). La forma
+  es la misma en el historial REST y en `message.updated`.
 - `author.display_name` es el nombre del autor al enviar (`user_profiles`);
   es `null` si no tiene perfil o su cuenta está eliminada. Un cambio
   posterior de nombre no corrige los mensajes ya recibidos: el vigente está

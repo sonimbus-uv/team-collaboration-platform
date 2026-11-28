@@ -16,6 +16,7 @@ autor, cuando el autor edita un mensaje (CU-19). Mismo sobre y conexión que
     "client_message_id": "8f0e7c52-3a59-4f7e-9d43-4a5b7a3c2e10",
     "content": "Hola a todos",
     "reply_to": null,
+    "reply_preview": null,
     "file_id": null,
     "created_at": "2026-10-29T15:04:05.123456Z",
     "edited_at": "2026-10-29T15:10:00.000000Z",

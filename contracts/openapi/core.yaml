@@ -409,11 +409,26 @@ paths:
       description: >-
         Paginación por cursor. El envío va por WebSocket
         (contracts/events/message.created.md).
+
+
+        Con `around` la página se centra en ese mensaje (CU-20 FA-01, "ir al
+        mensaje original"): lo incluye, hasta `limit / 2` mensajes posteriores
+        y el resto anteriores, siempre del más reciente al más antiguo.
+        `next_cursor` sigue siendo el cursor hacia atrás. Cargar páginas más
+        nuevas que la entregada no está en esta versión. `around` y `before` no
+        se combinan.
       parameters:
         - name: before
           in: query
           required: false
           description: Cursor; `next_cursor` de la página anterior
+          schema: { type: string, format: uuid }
+        - name: around
+          in: query
+          required: false
+          description: >-
+            `id` de un mensaje del canal; el mensaje no existe en el canal:
+            404. Con `before` responde 422.
           schema: { type: string, format: uuid }
         - name: limit
           in: query
@@ -866,6 +881,11 @@ components:
         client_message_id: { type: string, format: uuid }
         content: { type: [string, "null"], description: Nulo si está eliminado }
         reply_to: { type: [string, "null"], format: uuid }
+        reply_preview:
+          oneOf:
+            - type: "null"
+            - { $ref: "#/components/schemas/ReplyPreview" }
+          description: Nulo si el mensaje no responde a otro (CU-17)
         file_id: { type: [string, "null"], format: uuid }
         created_at: { type: string, format: date-time }
         edited_at: { type: [string, "null"], format: date-time }
@@ -877,6 +897,27 @@ components:
             Quién eliminó el mensaje: `author` ("Mensaje eliminado") o
             `moderation` ("Mensaje eliminado por moderación"). Nulo si no está
             eliminado.
+    ReplyPreview:
+      type: object
+      required: [id, unavailable]
+      description: >-
+        Vista previa del mensaje al que responde (CU-17). Si el original se
+        eliminó o ya no existe, `unavailable` es `true` y el cliente muestra
+        "Mensaje original no disponible" (EX-01).
+      properties:
+        id: { type: string, format: uuid }
+        unavailable: { type: boolean }
+        author:
+          type: object
+          required: [id, display_name]
+          description: Solo cuando `unavailable` es `false`
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: [string, "null"] }
+        content:
+          type: string
+          maxLength: 100
+          description: Primeros 100 caracteres del original; solo cuando `unavailable` es `false`
     EditMessage:
       type: object
       required: [content]
