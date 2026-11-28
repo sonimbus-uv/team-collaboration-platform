@@ -33,4 +33,18 @@ defmodule Core.Community.Group do
     |> check_constraint(:name, name: :groups_name_length)
     |> check_constraint(:description, name: :groups_description_length)
   end
+
+  def update_changeset(group, attrs) do
+    group
+    |> cast(attrs, [:name, :description, :image_id])
+    |> update_change(:name, &trim/1)
+    |> validate_required([:name])
+    |> validate_length(:name, min: 2, max: 100)
+    |> validate_length(:description, max: 500)
+    |> check_constraint(:name, name: :groups_name_length)
+    |> check_constraint(:description, name: :groups_description_length)
+  end
+
+  defp trim(value) when is_binary(value), do: String.trim(value)
+  defp trim(value), do: value
 end

@@ -21,7 +21,7 @@ defmodule CoreWeb.MessageChannel do
   alias Core.{Community, Messaging}
   alias CoreWeb.{MessageJSON, Problem, SocketToken}
 
-  intercept ["access.revoked"]
+  intercept ["access.revoked", "channel.closed"]
 
   @impl true
   def join("channel:" <> channel_id, _payload, socket) do
@@ -74,6 +74,9 @@ defmodule CoreWeb.MessageChannel do
       {:noreply, socket}
     end
   end
+
+  def handle_out("channel.closed", _payload, socket),
+    do: {:stop, {:shutdown, :channel_deleted}, socket}
 
   @impl true
   def handle_info(:token_expired, socket) do

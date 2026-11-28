@@ -66,6 +66,72 @@ paths:
               schema: { $ref: "#/components/schemas/GroupEnvelope" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateGroup
+      summary: Editar el grupo (CU-09); solo administradores
+      description: >-
+        Requiere el permiso `manage_group`. Solo se envían los campos que
+        cambian. Los miembros reciben [`group.updated`](../events/group.updated.md).
+        No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateGroup" }
+      responses:
+        "200":
+          description: Grupo actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: deleteGroup
+      summary: Eliminar el grupo (CU-09 FA-02); solo administradores
+      description: >-
+        Requiere el permiso `manage_group` y que el cuerpo lleve el nombre
+        exacto del grupo (CU-09 EX-02): si no coincide responde 422 y no se
+        elimina nada. Borrado lógico: el grupo, sus canales y su historial
+        dejan de servirse para todos. Core cierra los temas de los canales del
+        grupo y avisa con [`group.deleted`](../events/group.deleted.md). Se
+        admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteGroup" }
+      responses:
+        "204": { description: Grupo eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    post:
+      operationId: archiveGroup
+      summary: Archivar el grupo (CU-09 FA-01); solo administradores
+      description: >-
+        Requiere el permiso `manage_group`. El grupo queda en solo lectura: se
+        rechazan mensajes, canales nuevos, invitaciones y cambios de roles, y
+        el historial sigue consultable. Los miembros reciben
+        [`group.archived`](../events/group.archived.md). Archivar un grupo ya
+        archivado responde 409.
+      responses:
+        "200":
+          description: Grupo archivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/groups/{group_id}/members:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -91,6 +157,31 @@ paths:
                     items: { $ref: "#/components/schemas/Member" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/members/me:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    delete:
+      operationId: leaveGroup
+      summary: Abandonar el grupo (CU-12)
+      description: >-
+        El usuario autenticado deja el grupo. Sus mensajes permanecen. Si es el
+        único administrador responde 409 `/problems/last-admin` (CU-12 EX-01):
+        debe transferir el rol de administrador con `changeMemberRole` o
+        eliminar el grupo. La comprobación bloquea las filas de los
+        administradores y es segura ante salidas concurrentes. Se admite en
+        grupos archivados. Core cierra sus temas `channel:<channel_id>` y
+        `voice:<channel_id>` del grupo y avisa a los demás miembros con
+        [`member.left`](../events/member.left.md). La confirmación previa
+        (CU-12 FA-01) es del cliente.
+      responses:
+        "204": { description: El usuario dejó el grupo }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Es el único administrador, `/problems/last-admin`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/groups/{group_id}/members/{user_id}:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -284,6 +375,29 @@ paths:
   /api/v1/groups/{group_id}/invitations:
     parameters:
       - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listInvitations
+      summary: Listar invitaciones vigentes (CU-10); rol moderator o superior
+      description: >-
+        Requiere el permiso `invite_members`. Devuelve solo las invitaciones
+        que se pueden usar: no revocadas, no caducadas y con usos restantes,
+        de la más reciente a la más antigua. `remaining_uses` es nulo cuando
+        los usos son ilimitados.
+      responses:
+        "200":
+          description: Invitaciones vigentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: createInvitation
       summary: Crear invitación (CU-10); rol moderator o superior
@@ -307,6 +421,24 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/GroupArchived" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/invitations/{invitation_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/InvitationId"
+    delete:
+      operationId: revokeInvitation
+      summary: Revocar una invitación (CU-10 FA-01); rol moderator o superior
+      description: >-
+        Requiere el permiso `invite_members`. Marca la invitación como
+        revocada: no admite nuevos ingresos (CU-11 EX-01), pero quienes ya se
+        unieron conservan su membresía. Revocar una invitación ya revocada
+        también responde 204.
+      responses:
+        "204": { description: Invitación revocada }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/invitations/join:
     post:
       operationId: joinGroup
@@ -397,6 +529,60 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/channels/{channel_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/ChannelId"
+    patch:
+      operationId: updateChannel
+      summary: Editar nombre o descripción de un canal (CU-13 FA-01); rol admin
+      description: >-
+        Requiere el permiso `manage_channels`. Solo se envían los campos que
+        cambian. El tipo y `min_role` no se pueden cambiar. Los miembros que
+        ven el canal reciben [`channel.updated`](../events/channel.updated.md).
+        No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateChannel" }
+      responses:
+        "200":
+          description: Canal actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            Nombre repetido en el grupo (`/problems/conflict`, CU-13 EX-01) o
+            grupo archivado (`/problems/group-archived`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: deleteChannel
+      summary: Eliminar un canal (CU-13 FA-02); rol admin
+      description: >-
+        Requiere el permiso `manage_channels`. Borrado lógico: el canal y su
+        historial dejan de servirse y el nombre queda libre. Core cierra los
+        temas `channel:<channel_id>` y `voice:<channel_id>` de todos los
+        conectados y avisa con
+        [`channel.deleted`](../events/channel.deleted.md). Eliminar un canal ya
+        eliminado responde 404. No se admite en grupos archivados.
+      responses:
+        "204": { description: Canal eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/channels/{channel_id}/messages:
     parameters:
       - name: channel_id
@@ -588,6 +774,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitation_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     RoleName:
       name: role
       in: path
@@ -636,6 +827,19 @@ components:
         name: { type: string, minLength: 2, maxLength: 100 }
         description: { type: string, maxLength: 500 }
         image_id: { type: string, format: uuid, description: Archivo del File Service }
+    UpdateGroup:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: [string, "null"], maxLength: 500 }
+        image_id: { type: [string, "null"], format: uuid, description: Archivo del File Service }
+    DeleteGroup:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, description: Nombre exacto del grupo, como confirmación }
     Group:
       type: object
       required: [id, name, created_by, role, created_at]
@@ -732,6 +936,9 @@ components:
         expires_at: { type: string, format: date-time }
         max_uses: { type: [integer, "null"] }
         uses: { type: integer }
+        remaining_uses:
+          type: [integer, "null"]
+          description: Solo en el listado; nulo si los usos son ilimitados
         created_at: { type: string, format: date-time }
     CreateChannel:
       type: object
@@ -741,6 +948,13 @@ components:
         description: { type: string, maxLength: 500 }
         type: { type: string, enum: [text, voice] }
         min_role: { $ref: "#/components/schemas/Role" }
+    UpdateChannel:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, pattern: "^[a-z0-9-]+$" }
+        description: { type: [string, "null"], maxLength: 500 }
     Channel:
       type: object
       required: [id, group_id, name, type, min_role, created_at]

@@ -16,6 +16,7 @@ defmodule Core.Application do
       CoreWeb.Presence,
       Core.AccessToken.JWKS,
       Core.Scylla,
+      {Task.Supervisor, name: Core.TaskSupervisor},
       # Start to serve requests, typically the last entry
       CoreWeb.Endpoint
     ]

@@ -28,6 +28,12 @@ defmodule CoreWeb.CommunityJSON do
     }
   end
 
+  def invitation(%Invitation{} = invitation, :listing) do
+    remaining = if invitation.max_uses, do: invitation.max_uses - invitation.uses
+
+    invitation |> invitation() |> Map.put(:remaining_uses, remaining)
+  end
+
   def channel(%Channel{} = channel) do
     %{
       id: channel.id,

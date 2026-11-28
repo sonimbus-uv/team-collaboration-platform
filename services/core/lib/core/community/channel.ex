@@ -42,4 +42,25 @@ defmodule Core.Community.Channel do
       message: "has already been taken"
     )
   end
+
+  def update_changeset(channel, attrs) do
+    channel
+    |> cast(attrs, [:name, :description])
+    |> update_change(:name, &trim/1)
+    |> validate_required([:name])
+    |> validate_length(:name, min: 1, max: 80)
+    |> validate_format(:name, ~r/^[a-z0-9-]+$/,
+      message: "must contain only lowercase letters, digits and hyphens"
+    )
+    |> validate_length(:description, max: 500)
+    |> check_constraint(:name, name: :channels_name_format)
+    |> check_constraint(:description, name: :channels_description_length)
+    |> unique_constraint(:name,
+      name: :channels_group_id_name_active_index,
+      message: "has already been taken"
+    )
+  end
+
+  defp trim(value) when is_binary(value), do: String.trim(value)
+  defp trim(value), do: value
 end

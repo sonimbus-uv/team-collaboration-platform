@@ -63,4 +63,15 @@ defmodule Core.RoleConcurrencyTest do
     assert [{:error, :last_admin}, {:ok, _member}] = Enum.sort_by(results, &elem(&1, 0))
     assert length(admins(ctx.group)) == 1
   end
+
+  test "two admins leaving at once cannot empty the group", ctx do
+    results =
+      race(
+        fn -> Community.leave_group(ctx.group.id, ctx.first) end,
+        fn -> Community.leave_group(ctx.group.id, ctx.second) end
+      )
+
+    assert [{:error, :last_admin}, :ok] = Enum.sort_by(results, &(&1 == :ok))
+    assert length(admins(ctx.group)) == 1
+  end
 end

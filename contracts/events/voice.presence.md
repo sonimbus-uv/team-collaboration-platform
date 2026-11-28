@@ -71,5 +71,12 @@ Respuesta `ok`: `{}`. Respuesta `error`: `{"type": "validation-error",
 
 Si el usuario es expulsado o bloqueado (CU-15), Core cierra su tema
 `voice:<channel_id>` y deja de ser participante (CU-22 FA-03); ver
-[`user:<user_id>`](user.topic.md#pérdida-de-acceso-a-un-grupo). Desconectarlo
-de LiveKit es una operación aparte.
+[`user:<user_id>`](user.topic.md#pérdida-de-acceso-a-un-grupo).
+
+Además, Core pide a LiveKit sacarlo de la sala de cada canal de voz del grupo
+(`RemoveParticipant`, con room = id del canal e identity = `user_id`). Es de
+mejor esfuerzo y no bloquea la moderación: si LiveKit no responde o no está
+configurado, la expulsión o el bloqueo se aplican igual y no hay reintentos
+duraderos. LiveKit no revoca tokens ya emitidos, así que un token vigente
+(hasta `expires_at`) podría volver a entrar a la sala; Core no emite tokens
+nuevos para quien ya no es miembro.

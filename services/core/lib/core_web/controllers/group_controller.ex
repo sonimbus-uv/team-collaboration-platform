@@ -27,4 +27,23 @@ defmodule CoreWeb.GroupController do
       json(conn, %{data: CommunityJSON.group(group, role)})
     end
   end
+
+  def update(conn, %{"id" => id} = params) do
+    with {:ok, group, role} <-
+           Community.update_group(id, conn.assigns.current_user_id, params) do
+      json(conn, %{data: CommunityJSON.group(group, role)})
+    end
+  end
+
+  def archive(conn, %{"id" => id}) do
+    with {:ok, group, role} <- Community.archive_group(id, conn.assigns.current_user_id) do
+      json(conn, %{data: CommunityJSON.group(group, role)})
+    end
+  end
+
+  def delete(conn, %{"id" => id} = params) do
+    with :ok <- Community.delete_group(id, conn.assigns.current_user_id, params) do
+      send_resp(conn, :no_content, "")
+    end
+  end
 end

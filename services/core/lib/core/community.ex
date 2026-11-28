@@ -62,6 +62,72 @@ defmodule Core.Community do
     end
   end
 
+  def update_group(group_id, user_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         :ok <- require_writable(group),
+         {:ok, updated} <-
+           group
+           |> Group.update_changeset(Map.take(attrs, ["name", "description", "image_id"]))
+           |> Repo.update() do
+      if updated != group do
+        Core.Realtime.broadcast_to_members(updated.id, "group.updated", group_event(updated))
+      end
+
+      {:ok, updated, role}
+    end
+  end
+
+  def archive_group(group_id, user_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         {1, [archived]} <-
+           Repo.update_all(
+             from(g in Group,
+               where: g.id == ^group.id and is_nil(g.archived_at) and is_nil(g.deleted_at),
+               select: g
+             ),
+             set: [archived_at: DateTime.utc_now()]
+           ) do
+      Core.Realtime.broadcast_to_members(archived.id, "group.archived", group_event(archived))
+      {:ok, archived, role}
+    else
+      {0, _} -> {:error, :group_archived}
+      error -> error
+    end
+  end
+
+  def delete_group(group_id, user_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         :ok <- confirm_group_name(group, attrs),
+         {1, _} <-
+           Repo.update_all(
+             from(g in Group, where: g.id == ^group.id and is_nil(g.deleted_at)),
+             set: [deleted_at: DateTime.utc_now()]
+           ) do
+      Core.Realtime.broadcast_to_members(group.id, "group.deleted", %{id: group.id})
+      Core.Realtime.close_group(group.id)
+      :ok
+    else
+      {0, _} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp confirm_group_name(%Group{name: name}, %{"name" => name}), do: :ok
+  defp confirm_group_name(_group, _attrs), do: {:error, field_error(:name, "does not match")}
+
+  defp group_event(%Group{} = group) do
+    %{
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      image_id: group.image_id,
+      archived_at: group.archived_at
+    }
+  end
+
   ## Miembros
 
   @doc """
@@ -99,6 +165,55 @@ defmodule Core.Community do
     do: member |> Map.delete(:account_status) |> Map.put(:display_name, nil)
 
   defp anonymize(member), do: Map.delete(member, :account_status)
+
+  def leave_group(group_id, user_id) do
+    with {:ok, group, _role} <- get_group_for_member(group_id, user_id),
+         {:ok, _member} <- remove_own_membership(group.id, user_id) do
+      Core.Realtime.disconnect_user_from_group(group.id, user_id)
+
+      Core.Realtime.broadcast_to_members(group.id, "member.left", %{
+        group_id: group.id,
+        user_id: user_id
+      })
+
+      :ok
+    end
+  end
+
+  defp remove_own_membership(group_id, user_id) do
+    Repo.transact(fn ->
+      admin_ids =
+        Repo.all(
+          from m in Member,
+            where: m.group_id == ^group_id and m.role == :admin,
+            order_by: m.user_id,
+            select: m.user_id,
+            lock: "FOR UPDATE"
+        )
+
+      member =
+        Repo.one(
+          from m in Member,
+            where: m.group_id == ^group_id and m.user_id == ^user_id,
+            lock: "FOR UPDATE"
+        )
+
+      cond do
+        is_nil(member) ->
+          {:error, :not_found}
+
+        member.role == :admin and admin_ids == [user_id] ->
+          {:error, :last_admin}
+
+        true ->
+          Repo.delete_all(
+            from m in Member, where: m.group_id == ^group_id and m.user_id == ^user_id
+          )
+
+          {:ok, member}
+      end
+    end)
+  end
 
   ## Roles y permisos
 
@@ -421,6 +536,55 @@ defmodule Core.Community do
     end
   end
 
+  def list_invitations(group_id, user_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :invite_members) do
+      now = DateTime.utc_now()
+
+      invitations =
+        from(i in Invitation,
+          where:
+            i.group_id == ^group.id and is_nil(i.revoked_at) and i.expires_at > ^now and
+              (is_nil(i.max_uses) or i.uses < i.max_uses),
+          order_by: [desc: i.created_at, asc: i.id]
+        )
+        |> Repo.all()
+
+      {:ok, invitations}
+    end
+  end
+
+  def revoke_invitation(group_id, user_id, invitation_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :invite_members),
+         :ok <- require_writable(group),
+         {:ok, invitation_id} <- cast_invitation_id(invitation_id) do
+      case Repo.update_all(
+             from(i in Invitation,
+               where: i.id == ^invitation_id and i.group_id == ^group.id and is_nil(i.revoked_at)
+             ),
+             set: [revoked_at: DateTime.utc_now()]
+           ) do
+        {1, _} ->
+          :ok
+
+        {0, _} ->
+          if Repo.exists?(
+               from i in Invitation, where: i.id == ^invitation_id and i.group_id == ^group.id
+             ),
+             do: :ok,
+             else: {:error, :not_found}
+      end
+    end
+  end
+
+  defp cast_invitation_id(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> {:ok, id}
+      :error -> {:error, :not_found}
+    end
+  end
+
   @doc """
   Une al usuario al grupo de la invitación `code` (CU-11).
 
@@ -547,6 +711,61 @@ defmodule Core.Community do
       %Channel{group_id: group.id}
       |> Channel.create_changeset(attrs)
       |> Repo.insert()
+    end
+  end
+
+  def update_channel(group_id, user_id, channel_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_channels),
+         :ok <- require_writable(group),
+         {:ok, channel} <- fetch_group_channel(group.id, channel_id),
+         {:ok, updated} <-
+           channel
+           |> Channel.update_changeset(Map.take(attrs, ["name", "description"]))
+           |> Repo.update() do
+      if updated != channel do
+        Core.Realtime.broadcast_to_members(
+          group.id,
+          "channel.updated",
+          CoreWeb.CommunityJSON.channel(updated),
+          updated.min_role
+        )
+      end
+
+      {:ok, updated}
+    end
+  end
+
+  def delete_channel(group_id, user_id, channel_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_channels),
+         :ok <- require_writable(group),
+         {:ok, channel} <- fetch_group_channel(group.id, channel_id),
+         {:ok, deleted} <-
+           channel |> Ecto.Changeset.change(deleted_at: DateTime.utc_now()) |> Repo.update() do
+      Core.Realtime.broadcast_to_members(
+        group.id,
+        "channel.deleted",
+        %{id: deleted.id, group_id: group.id},
+        deleted.min_role
+      )
+
+      Core.Realtime.close_channel(deleted)
+      :ok
+    end
+  end
+
+  defp fetch_group_channel(group_id, channel_id) do
+    with {:ok, channel_id} <- Ecto.UUID.cast(channel_id),
+         %Channel{} = channel <-
+           Repo.one(
+             from c in Channel,
+               where: c.id == ^channel_id and c.group_id == ^group_id and is_nil(c.deleted_at),
+               lock: "FOR UPDATE"
+           ) do
+      {:ok, channel}
+    else
+      _ -> {:error, :not_found}
     end
   end
 

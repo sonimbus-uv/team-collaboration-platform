@@ -18,4 +18,10 @@ defmodule CoreWeb.MemberController do
       json(conn, %{data: member})
     end
   end
+
+  def leave(conn, %{"group_id" => group_id}) do
+    with :ok <- Community.leave_group(group_id, conn.assigns.current_user_id) do
+      send_resp(conn, :no_content, "")
+    end
+  end
 end

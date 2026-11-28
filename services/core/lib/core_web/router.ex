@@ -18,12 +18,14 @@ defmodule CoreWeb.Router do
   scope "/api/v1", CoreWeb do
     pipe_through [:api, :authenticated]
 
-    resources "/groups", GroupController, only: [:index, :create, :show] do
-      resources "/channels", ChannelController, only: [:index, :create]
+    resources "/groups", GroupController, only: [:index, :create, :show, :update, :delete] do
+      resources "/channels", ChannelController, only: [:index, :create, :update, :delete]
       resources "/members", MemberController, only: [:index]
-      resources "/invitations", InvitationController, only: [:create]
+      resources "/invitations", InvitationController, only: [:index, :create, :delete]
     end
 
+    post "/groups/:id/archive", GroupController, :archive
+    delete "/groups/:group_id/members/me", MemberController, :leave
     patch "/groups/:group_id/members/:user_id", MemberController, :update
     post "/groups/:group_id/members/:user_id/expel", ModerationController, :expel
     post "/groups/:group_id/members/:user_id/ban", ModerationController, :ban
