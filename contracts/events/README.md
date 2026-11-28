@@ -17,6 +17,7 @@ Formato de nombre: `<recurso>.<evento>` (por ejemplo, `message.created`). Cada e
 | Evento | Productor | Estado |
 |---|---|---|
 | [`message.created` v1](message.created.md) | Core | Candidato; implementado en Core para la expo |
+| [`user:<user_id>` v1](user.topic.md) | Core | Candidato; tema personal, eventos concretos por caso de uso |
 
 ## Eventos entre servicios (RabbitMQ, D-04)
 
