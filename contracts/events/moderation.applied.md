@@ -31,3 +31,6 @@ moderación del grupo. Retirar un bloqueo (`unban`) no genera este evento.
 Además del aviso, Core cierra los temas `channel:<channel_id>` y
 `voice:<channel_id>` del grupo para ese usuario
 ([`user:<user_id>`](user.topic.md#pérdida-de-acceso-a-un-grupo)).
+También pide a LiveKit sacarlo de las salas de voz del grupo, de mejor
+esfuerzo y sin bloquear la moderación
+([`voice:<channel_id>`](voice.presence.md#expulsión)).
