@@ -166,6 +166,34 @@ defmodule CoreWeb.MessageChannelTest do
     assert_push "message.deleted", %{payload: %{id: ^id, deleted_reason: "moderation"}}
   end
 
+  test "reacciona por el canal, alterna y difunde reaction.updated", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "hola"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+    owner = ctx.owner
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "👍"})
+    assert_reply ref, :ok, %{emoji: "👍", count: 1, active: true}
+
+    assert_push "reaction.updated", %{
+      type: "reaction.updated",
+      version: 1,
+      payload: %{message_id: ^id, emoji: "👍", count: 1, active: true, user_id: ^owner}
+    }
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "👍"})
+    assert_reply ref, :ok, %{count: 0, active: false}
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "a"})
+    assert_reply ref, :error, %{type: "validation-error", errors: %{emoji: [_]}}
+  end
+
   test "errores de validación en la respuesta", ctx do
     {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
 

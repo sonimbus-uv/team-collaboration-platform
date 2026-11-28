@@ -184,6 +184,60 @@ defmodule CoreWeb.MessageControllerTest do
     assert %{"errors" => %{"around" => [_]}} = json_response(conn, 422)
   end
 
+  test "POST reactions toggles the reaction and the history reports it", ctx do
+    path = ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{ctx.message.id}/reactions"
+
+    conn = post(ctx.conn, path, %{"emoji" => "👍"})
+
+    assert %{"data" => %{"emoji" => "👍", "count" => 1, "active" => true}} =
+             json_response(conn, 200)
+
+    conn = get(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages")
+
+    assert %{
+             "data" => [
+               %{"reactions" => [%{"emoji" => "👍", "count" => 1, "reacted_by_me" => true}]}
+             ]
+           } =
+             json_response(conn, 200)
+
+    conn = get(ctx.guest_conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages")
+
+    assert %{"data" => [%{"reactions" => [%{"count" => 1, "reacted_by_me" => false}]}]} =
+             json_response(conn, 200)
+
+    conn = post(ctx.conn, path, %{"emoji" => "👍"})
+    assert %{"data" => %{"count" => 0, "active" => false}} = json_response(conn, 200)
+  end
+
+  test "POST reactions rejects bad emojis (422), deleted messages (409) and unknown ones (404)",
+       ctx do
+    path = ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{ctx.message.id}/reactions"
+
+    conn = post(ctx.conn, path, %{"emoji" => "hola"})
+    assert %{"errors" => %{"emoji" => [_]}} = json_response(conn, 422)
+
+    conn = post(ctx.conn, path, %{})
+    assert json_response(conn, 422)
+
+    conn =
+      post(
+        ctx.conn,
+        ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{Ecto.UUID.generate()}/reactions",
+        %{"emoji" => "👍"}
+      )
+
+    assert json_response(conn, 404)
+
+    assert response(
+             delete(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{ctx.message.id}"),
+             204
+           )
+
+    conn = post(ctx.conn, path, %{"emoji" => "👍"})
+    assert %{"type" => "/problems/message-deleted"} = json_response(conn, 409)
+  end
+
   test "a non member gets 404", ctx do
     conn = delete(authenticate(build_conn(), user_id()), path(ctx))
     assert json_response(conn, 404)

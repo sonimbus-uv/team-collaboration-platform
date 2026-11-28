@@ -41,6 +41,12 @@ defmodule CoreWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :message_deleted}) do
+    Problem.send_problem(conn, 409, "message-deleted", "Message deleted",
+      detail: "The message was deleted and cannot receive reactions."
+    )
+  end
+
   def call(conn, {:error, :invalid_invitation}) do
     Problem.send_problem(conn, 422, "invitation-invalid", "Invalid invitation",
       detail: "The invitation does not exist, has expired, was revoked or has no uses left."

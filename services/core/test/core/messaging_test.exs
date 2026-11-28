@@ -450,6 +450,104 @@ defmodule Core.MessagingTest do
     end
   end
 
+  describe "reactions (CU-18)" do
+    setup ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+      %{message: message, guest: user_id()}
+    end
+
+    defp react(ctx, user, message, emoji \\ "👍") do
+      Messaging.toggle_reaction(ctx.channel, ctx.group, user, message.id, emoji)
+    end
+
+    test "adds a reaction and counts it", ctx do
+      assert {:ok, %{emoji: "👍", count: 1, active: true, user_id: user_id}} =
+               react(ctx, ctx.owner, ctx.message)
+
+      assert user_id == ctx.owner
+    end
+
+    test "repeating the same reaction removes it (FA-01) and a third time adds it back", ctx do
+      assert {:ok, %{count: 1, active: true}} = react(ctx, ctx.owner, ctx.message)
+      assert {:ok, %{count: 0, active: false}} = react(ctx, ctx.owner, ctx.message)
+      assert {:ok, %{count: 1, active: true}} = react(ctx, ctx.owner, ctx.message)
+    end
+
+    test "each user counts once per emoji and emojis are independent", ctx do
+      assert {:ok, %{count: 1}} = react(ctx, ctx.owner, ctx.message)
+      assert {:ok, %{count: 2}} = react(ctx, ctx.guest, ctx.message)
+      assert {:ok, %{count: 1, emoji: "❤️"}} = react(ctx, ctx.guest, ctx.message, "❤️")
+    end
+
+    test "the history lists reactions sorted, with reacted_by_me for the reader", ctx do
+      {:ok, _} = react(ctx, ctx.owner, ctx.message)
+      {:ok, _} = react(ctx, ctx.guest, ctx.message)
+      {:ok, _} = react(ctx, ctx.guest, ctx.message, "🎉")
+      {:ok, _} = react(ctx, ctx.guest, ctx.message, "😀")
+      {:ok, _} = react(ctx, ctx.guest, ctx.message, "😀")
+
+      assert {:ok, %{messages: [mine]}} = Messaging.list_messages(ctx.channel, %{}, ctx.owner)
+
+      assert mine.reactions == [
+               %{emoji: "🎉", count: 1, reacted_by_me: false},
+               %{emoji: "👍", count: 2, reacted_by_me: true}
+             ]
+
+      assert {:ok, %{messages: [theirs]}} = Messaging.list_messages(ctx.channel, %{}, ctx.guest)
+      assert Enum.all?(theirs.reactions, & &1.reacted_by_me)
+      assert {:ok, %{messages: [anonymous]}} = Messaging.list_messages(ctx.channel, %{})
+      refute Enum.any?(anonymous.reactions, & &1.reacted_by_me)
+    end
+
+    test "a deleted message rejects reactions and lists none (EX-01)", ctx do
+      {:ok, _} = react(ctx, ctx.owner, ctx.message)
+
+      {:ok, _} =
+        Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, ctx.message.id)
+
+      assert {:error, :message_deleted} = react(ctx, ctx.guest, ctx.message)
+
+      assert {:ok, %{messages: [%{deleted: true, reactions: []}]}} =
+               Messaging.list_messages(ctx.channel, %{})
+    end
+
+    test "unknown messages are not found", ctx do
+      assert {:error, :not_found} = react(ctx, ctx.owner, %{id: TimeUUID.generate()})
+      assert {:error, :not_found} = react(ctx, ctx.owner, %{id: "no-es-uuid"})
+    end
+
+    test "only a single emoji is accepted", ctx do
+      for emoji <- ["", "a", "7", " ", "👍👍", "ok", String.duplicate("👍", 9), nil, 42] do
+        assert {:error, %Ecto.Changeset{} = changeset} = react(ctx, ctx.owner, ctx.message, emoji)
+        assert %{emoji: [_]} = errors_on(changeset)
+      end
+
+      assert {:ok, _} = react(ctx, ctx.owner, ctx.message, "1️⃣")
+      assert {:ok, _} = react(ctx, ctx.owner, ctx.message, "🇲🇽")
+    end
+
+    test "an archived group rejects reactions", ctx do
+      archived = %{ctx.group | archived_at: DateTime.utc_now()}
+
+      assert {:error, :group_archived} =
+               Messaging.toggle_reaction(ctx.channel, archived, ctx.owner, ctx.message.id, "👍")
+    end
+
+    test "concurrent toggles by one user never duplicate the reaction", ctx do
+      results =
+        1..3
+        |> Enum.map(fn _ -> Task.async(fn -> react(ctx, ctx.owner, ctx.message) end) end)
+        |> Task.await_many(15_000)
+
+      applied = Enum.count(results, &match?({:ok, _}, &1))
+      assert applied >= 1
+
+      {:ok, %{messages: [message]}} = Messaging.list_messages(ctx.channel, %{}, ctx.owner)
+      expected = if rem(applied, 2) == 1, do: 1, else: 0
+      assert Enum.sum(for %{count: count} <- message.reactions, do: count) == expected
+    end
+  end
+
   test "responder a un mensaje del mismo canal (CU-17)", ctx do
     {:ok, original, :created} = send_message(ctx, "pregunta")
 

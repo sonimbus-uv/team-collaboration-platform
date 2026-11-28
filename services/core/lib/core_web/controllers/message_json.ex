@@ -15,6 +15,7 @@ defmodule CoreWeb.MessageJSON do
     :reply_to,
     :reply_preview,
     :file_id,
+    :reactions,
     :created_at,
     :edited_at,
     :deleted,

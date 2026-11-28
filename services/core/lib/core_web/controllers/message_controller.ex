@@ -11,7 +11,11 @@ defmodule CoreWeb.MessageController do
     with {:ok, channel, _group, _role} <-
            Community.get_channel_for_member(channel_id, conn.assigns.current_user_id),
          {:ok, page} <-
-           Messaging.list_messages(channel, Map.take(params, ["before", "around", "limit"])) do
+           Messaging.list_messages(
+             channel,
+             Map.take(params, ["before", "around", "limit"]),
+             conn.assigns.current_user_id
+           ) do
       json(conn, %{
         data: MessageJSON.messages(page.messages),
         next_cursor: page.next_cursor
@@ -38,6 +42,17 @@ defmodule CoreWeb.MessageController do
            Messaging.delete_message(channel, group, user_id, role, message_id, params) do
       Realtime.broadcast_to_channel(channel.id, "message.deleted", MessageJSON.deleted(message))
       send_resp(conn, :no_content, "")
+    end
+  end
+
+  def react(conn, %{"channel_id" => channel_id, "id" => message_id} = params) do
+    user_id = conn.assigns.current_user_id
+
+    with {:ok, channel, group, _role} <- Community.get_channel_for_member(channel_id, user_id),
+         {:ok, reaction} <-
+           Messaging.toggle_reaction(channel, group, user_id, message_id, params["emoji"]) do
+      Realtime.broadcast_to_channel(channel.id, "reaction.updated", reaction)
+      json(conn, %{data: Map.take(reaction, [:emoji, :count, :active])})
     end
   end
 end

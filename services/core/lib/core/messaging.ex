@@ -52,6 +52,20 @@ defmodule Core.Messaging do
 
   @get_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
   @page_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? LIMIT ?"
+  @reaction_insert_cql """
+  INSERT INTO reactions_by_channel (channel_id, bucket, message_id, emoji, user_id, active, updated_at)
+  VALUES (?, ?, ?, ?, ?, true, ?) IF NOT EXISTS
+  """
+
+  @reaction_flip_cql """
+  UPDATE reactions_by_channel SET active = ?, updated_at = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ? AND emoji = ? AND user_id = ?
+  IF active = ?
+  """
+
+  @reactions_of_message_cql "SELECT emoji, user_id, active FROM reactions_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
+  @reactions_in_cql "SELECT message_id, emoji, user_id, active FROM reactions_by_channel WHERE channel_id = ? AND bucket = ? AND message_id IN ?"
+  @reaction_attempts 4
   @newer_after_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id > ? ORDER BY message_id ASC LIMIT ?"
   @newer_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? ORDER BY message_id ASC LIMIT ?"
   @page_before_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id < ? LIMIT ?"
@@ -168,8 +182,12 @@ defmodule Core.Messaging do
 
       case conditional_update(@update_cql, params) do
         :applied ->
+          edited = %{message | content: content, edited_at: edited_at}
+
           {:ok,
-           with_reply_preview(%{message | content: content, edited_at: edited_at}, channel.id)}
+           [with_reply_preview(edited, channel.id)]
+           |> with_reactions(channel.id, user_id)
+           |> hd()}
 
         :not_applied ->
           {:error, :not_found}
@@ -287,13 +305,27 @@ defmodule Core.Messaging do
   end
 
   defp fetch_visible(channel, message_id) do
+    case fetch_existing(channel, message_id) do
+      {:ok, %{deleted: false} = message} -> {:ok, message}
+      {:ok, _deleted} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp fetch_reactable(channel, message_id) do
+    case fetch_existing(channel, message_id) do
+      {:ok, %{deleted: false} = message} -> {:ok, message}
+      {:ok, _deleted} -> {:error, :message_deleted}
+      error -> error
+    end
+  end
+
+  defp fetch_existing(channel, message_id) do
     with {:ok, message_id} <- Ecto.UUID.cast(message_id),
          {:ok, _datetime} <- TimeUUID.to_datetime(message_id),
-         {:ok, %{deleted: false} = message} <-
-           fetch(channel.id, bucket_of!(message_id), message_id) do
-      {:ok, message}
+         {:ok, message} <- fetch(channel.id, bucket_of!(message_id), message_id) do
+      if message, do: {:ok, message}, else: {:error, :not_found}
     else
-      {:ok, _missing_or_deleted} -> {:error, :not_found}
       :error -> {:error, :not_found}
       error -> error
     end
@@ -321,6 +353,128 @@ defmodule Core.Messaging do
   defp validate_edit_minimum(changeset, _message), do: changeset
 
   @doc """
+  Agrega o retira la reacción del usuario (CU-18). Una fila por `(mensaje,
+  emoji, usuario)`: `INSERT ... IF NOT EXISTS` para la primera vez y `UPDATE ...
+  IF active = ?` para alternar, con reintento si otra petición cambió la fila
+  entretanto. Sin contadores `counter` (D-05).
+  """
+  def toggle_reaction(%Channel{} = channel, %Group{} = group, user_id, message_id, emoji) do
+    with :ok <- require_text(channel),
+         :ok <- require_writable(group),
+         {:ok, emoji} <- validate_emoji(emoji),
+         {:ok, message} <- fetch_reactable(channel, message_id),
+         bucket = bucket_of!(message.id),
+         {:ok, active} <-
+           flip_reaction(channel.id, bucket, message.id, emoji, user_id, @reaction_attempts),
+         {:ok, count} <- count_reaction(channel.id, bucket, message.id, emoji) do
+      {:ok,
+       %{
+         channel_id: channel.id,
+         message_id: message.id,
+         emoji: emoji,
+         count: count,
+         active: active,
+         user_id: user_id
+       }}
+    end
+  end
+
+  defp flip_reaction(_channel_id, _bucket, _message_id, _emoji, _user_id, 0),
+    do: {:error, :unavailable}
+
+  defp flip_reaction(channel_id, bucket, message_id, emoji, user_id, attempts) do
+    now = DateTime.utc_now()
+
+    with {:ok, result} <-
+           Scylla.execute(@reaction_insert_cql, [
+             channel_id,
+             bucket,
+             message_id,
+             emoji,
+             user_id,
+             now
+           ]) do
+      case Scylla.rows(result) do
+        [%{"[applied]" => true}] ->
+          {:ok, true}
+
+        [%{"[applied]" => false, "active" => current}] ->
+          flip_existing(channel_id, bucket, message_id, emoji, user_id, current, attempts, now)
+
+        _ ->
+          {:error, :unavailable}
+      end
+    end
+  end
+
+  defp flip_existing(channel_id, bucket, message_id, emoji, user_id, current, attempts, now) do
+    params = [!current, now, channel_id, bucket, message_id, emoji, user_id, current]
+
+    case conditional_update(@reaction_flip_cql, params) do
+      :applied -> {:ok, !current}
+      :not_applied -> flip_reaction(channel_id, bucket, message_id, emoji, user_id, attempts - 1)
+      error -> error
+    end
+  end
+
+  defp count_reaction(channel_id, bucket, message_id, emoji) do
+    with {:ok, result} <-
+           Scylla.execute(@reactions_of_message_cql, [channel_id, bucket, message_id]) do
+      {:ok,
+       result |> Scylla.rows() |> Enum.count(&(&1["emoji"] == emoji and &1["active"] == true))}
+    end
+  end
+
+  defp with_reactions(messages, channel_id, viewer_id) do
+    summaries =
+      messages
+      |> Enum.reject(& &1.deleted)
+      |> Enum.group_by(&bucket_of!(&1.id), & &1.id)
+      |> Enum.reduce(%{}, fn {bucket, ids}, acc ->
+        case Scylla.execute(@reactions_in_cql, [channel_id, bucket, ids]) do
+          {:ok, result} ->
+            Enum.reduce(Scylla.rows(result), acc, &tally_reaction(&1, &2, viewer_id))
+
+          _error ->
+            acc
+        end
+      end)
+
+    Enum.map(messages, fn message ->
+      Map.put(message, :reactions, reaction_list(Map.get(summaries, message.id, %{})))
+    end)
+  end
+
+  defp tally_reaction(%{"active" => true} = row, acc, viewer_id) do
+    mine = viewer_id != nil and row["user_id"] == viewer_id
+
+    Map.update(acc, row["message_id"], %{row["emoji"] => {1, mine}}, fn emojis ->
+      Map.update(emojis, row["emoji"], {1, mine}, fn {count, was_mine} ->
+        {count + 1, was_mine or mine}
+      end)
+    end)
+  end
+
+  defp tally_reaction(_row, acc, _viewer_id), do: acc
+
+  defp reaction_list(emojis) do
+    emojis
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(fn {emoji, {count, mine}} ->
+      %{emoji: emoji, count: count, reacted_by_me: mine}
+    end)
+  end
+
+  defp validate_emoji(emoji) when is_binary(emoji) do
+    if byte_size(emoji) <= 32 and length(String.graphemes(emoji)) == 1 and
+         not Regex.match?(~r/^[\p{L}\p{N}\p{Z}\p{C}]+$/u, emoji),
+       do: {:ok, emoji},
+       else: {:error, invalid(:emoji, "is not a valid emoji")}
+  end
+
+  defp validate_emoji(_emoji), do: {:error, invalid(:emoji, "is not a valid emoji")}
+
+  @doc """
   Página del historial, del más reciente al más antiguo (CU-20).
 
   Opciones: `"before"` (cursor: el `id` del último mensaje entregado) y
@@ -328,12 +482,18 @@ defmodule Core.Messaging do
   atrás hasta llenar la página o llegar al mes de creación del canal.
   `next_cursor` es `nil` cuando no quedan mensajes.
   """
-  def list_messages(%Channel{} = channel, params) do
+  def list_messages(%Channel{} = channel, params, viewer_id \\ nil) do
     with :ok <- require_text(channel),
          {:ok, page} <- validate_page(params),
          {:ok, messages} <- history(channel, page) do
       next_cursor = if length(messages) == page.limit, do: List.last(messages).id
-      {:ok, %{messages: with_reply_previews(messages, channel.id), next_cursor: next_cursor}}
+
+      messages =
+        messages
+        |> with_reply_previews(channel.id)
+        |> with_reactions(channel.id, viewer_id)
+
+      {:ok, %{messages: messages, next_cursor: next_cursor}}
     end
   end
 
@@ -489,7 +649,8 @@ defmodule Core.Messaging do
       created_at: created_at,
       edited_at: row["edited_at"],
       deleted: deleted,
-      deleted_reason: if(deleted, do: row["deleted_reason"], else: nil)
+      deleted_reason: if(deleted, do: row["deleted_reason"], else: nil),
+      reactions: []
     }
   end
 
