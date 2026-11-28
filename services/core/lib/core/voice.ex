@@ -1,8 +1,14 @@
 defmodule Core.Voice do
+  require Logger
+
   alias Core.{Community, Profiles}
   alias Core.Community.{Channel, Group}
 
   @ttl_seconds 300
+  @admin_ttl_seconds 60
+  @remove_path "/twirp/livekit.RoomService/RemoveParticipant"
+  @http_timeout 2_000
+  @http_connect_timeout 1_000
   @min_secret_bytes 32
   @sources ["microphone", "camera"]
 
@@ -31,6 +37,73 @@ defmodule Core.Voice do
   end
 
   def ttl_seconds, do: @ttl_seconds
+
+  @spec remove_participant(Ecto.UUID.t(), Ecto.UUID.t(), keyword()) ::
+          :ok | {:error, :voice_unavailable | :livekit_failed}
+  def remove_participant(channel_id, user_id, opts \\ []) do
+    now = Keyword.get_lazy(opts, :now, fn -> System.system_time(:second) end)
+
+    with {:ok, config} <- fetch_config() do
+      claims = %{
+        "iss" => config.api_key,
+        "nbf" => now,
+        "exp" => now + @admin_ttl_seconds,
+        "video" => %{"roomAdmin" => true, "room" => channel_id}
+      }
+
+      body = Jason.encode!(%{"room" => channel_id, "identity" => user_id})
+      url = http_url(config.url) <> @remove_path
+
+      case post(url, sign(claims, config.api_secret), body) do
+        {:ok, status} when status in [200, 404] ->
+          :ok
+
+        result ->
+          Logger.warning(
+            "LiveKit no pudo sacar a un participante: canal=#{channel_id} " <>
+              "resultado=#{describe(result)}"
+          )
+
+          {:error, :livekit_failed}
+      end
+    end
+  end
+
+  defp http_url("wss://" <> rest), do: "https://" <> String.trim_trailing(rest, "/")
+  defp http_url("ws://" <> rest), do: "http://" <> String.trim_trailing(rest, "/")
+  defp http_url(url), do: String.trim_trailing(url, "/")
+
+  defp post(url, jwt, body) do
+    request =
+      {String.to_charlist(url), [{~c"authorization", String.to_charlist("Bearer " <> jwt)}],
+       ~c"application/json", body}
+
+    http_options = [
+      timeout: @http_timeout,
+      connect_timeout: @http_connect_timeout,
+      autoredirect: false,
+      ssl: ssl_options(url)
+    ]
+
+    case :httpc.request(:post, request, http_options, body_format: :binary) do
+      {:ok, {{_version, status, _reason}, _headers, _body}} -> {:ok, status}
+      {:error, _reason} -> :error
+    end
+  end
+
+  defp ssl_options("https://" <> _) do
+    [
+      verify: :verify_peer,
+      cacerts: :public_key.cacerts_get(),
+      depth: 4,
+      customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
+    ]
+  end
+
+  defp ssl_options(_url), do: []
+
+  defp describe({:ok, status}), do: "http #{status}"
+  defp describe(_error), do: "sin respuesta"
 
   defp require_active(%Group{archived_at: nil}), do: :ok
   defp require_active(%Group{}), do: {:error, :group_archived}

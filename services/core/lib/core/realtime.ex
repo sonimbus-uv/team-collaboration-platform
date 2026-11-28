@@ -25,6 +25,23 @@ defmodule Core.Realtime do
       Endpoint.broadcast(topic, "access.revoked", %{user_id: user_id})
     end
 
+    remove_from_voice_rooms(group_id, user_id)
+
+    :ok
+  end
+
+  defp remove_from_voice_rooms(group_id, user_id) do
+    voice_ids =
+      Repo.all(
+        from c in Channel, where: c.group_id == ^group_id and c.type == :voice, select: c.id
+      )
+
+    for channel_id <- voice_ids do
+      Task.Supervisor.start_child(Core.TaskSupervisor, fn ->
+        Core.Voice.remove_participant(channel_id, user_id)
+      end)
+    end
+
     :ok
   end
 
