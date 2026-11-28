@@ -9,6 +9,10 @@ defmodule Core.Realtime do
     Endpoint.broadcast("user:#{user_id}", event, envelope(event, payload))
   end
 
+  def broadcast_to_channel(channel_id, event, payload) do
+    Endpoint.broadcast("channel:#{channel_id}", event, envelope(event, payload))
+  end
+
   def broadcast_to_group(group_id, event, payload) do
     message = envelope(event, payload)
 

@@ -20,7 +20,7 @@ defmodule Core.Messaging do
   @default_page_size 50
   @max_page_size 100
 
-  @columns "channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, edited_at, deleted"
+  @columns "channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, edited_at, deleted, deleted_reason"
 
   @reserve_cql """
   INSERT INTO messages_by_client_id (author_id, client_message_id, channel_id, bucket, message_id)
@@ -31,6 +31,18 @@ defmodule Core.Messaging do
   INSERT INTO messages_by_channel
     (channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, deleted)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)
+  """
+
+  @update_cql """
+  UPDATE messages_by_channel SET content = ?, edited_at = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ?
+  IF deleted = false
+  """
+
+  @delete_cql """
+  UPDATE messages_by_channel SET deleted = true, deleted_reason = ?, deleted_by = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ?
+  IF deleted = false
   """
 
   @get_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
@@ -129,6 +141,99 @@ defmodule Core.Messaging do
   end
 
   @doc """
+  Edita el contenido de un mensaje propio (CU-19). La condición `IF deleted =
+  false` evita editar un mensaje que se eliminó entretanto.
+  """
+  def edit_message(%Channel{} = channel, %Group{} = group, user_id, message_id, attrs) do
+    with :ok <- require_text(channel),
+         :ok <- require_writable(group),
+         {:ok, message} <- fetch_visible(channel, message_id),
+         :ok <- require_author(message, user_id),
+         {:ok, content} <- validate_edit(message, attrs) do
+      edited_at = DateTime.utc_now()
+      params = [content, edited_at, channel.id, bucket_of!(message.id), message.id]
+
+      case conditional_update(@update_cql, params) do
+        :applied -> {:ok, %{message | content: content, edited_at: edited_at}}
+        :not_applied -> {:error, :not_found}
+        error -> error
+      end
+    end
+  end
+
+  @doc """
+  Elimina un mensaje propio (CU-19 FA-01). No borra la fila: marca `deleted`
+  con `deleted_reason = "author"` (D-24).
+  """
+  def delete_message(%Channel{} = channel, %Group{} = group, user_id, message_id) do
+    with :ok <- require_text(channel),
+         :ok <- require_writable(group),
+         {:ok, message} <- fetch_visible(channel, message_id),
+         :ok <- require_author(message, user_id) do
+      mark_deleted(channel, message, "author", user_id)
+    end
+  end
+
+  defp mark_deleted(channel, message, reason, deleted_by) do
+    params = [reason, deleted_by, channel.id, bucket_of!(message.id), message.id]
+
+    case conditional_update(@delete_cql, params) do
+      :applied ->
+        {:ok, %{message | deleted: true, content: nil, file_id: nil, deleted_reason: reason}}
+
+      :not_applied ->
+        {:error, :not_found}
+
+      error ->
+        error
+    end
+  end
+
+  defp conditional_update(cql, params) do
+    with {:ok, result} <- Scylla.execute(cql, params) do
+      case Scylla.rows(result) do
+        [%{"[applied]" => true}] -> :applied
+        [%{"[applied]" => false}] -> :not_applied
+        _ -> {:error, :unavailable}
+      end
+    end
+  end
+
+  defp fetch_visible(channel, message_id) do
+    with {:ok, message_id} <- Ecto.UUID.cast(message_id),
+         {:ok, _datetime} <- TimeUUID.to_datetime(message_id),
+         {:ok, %{deleted: false} = message} <-
+           fetch(channel.id, bucket_of!(message_id), message_id) do
+      {:ok, message}
+    else
+      {:ok, _missing_or_deleted} -> {:error, :not_found}
+      :error -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp require_author(%{author_id: author_id}, author_id), do: :ok
+  defp require_author(_message, _user_id), do: {:error, :forbidden}
+
+  defp validate_edit(message, attrs) do
+    {%{}, %{content: :string}}
+    |> cast(attrs, [:content], empty_values: [])
+    |> validate_required([:content], message: "can't be blank")
+    |> validate_length(:content, max: @max_content_length)
+    |> validate_edit_minimum(message)
+    |> apply_action(:update)
+    |> case do
+      {:ok, %{content: content}} -> {:ok, content}
+      error -> error
+    end
+  end
+
+  defp validate_edit_minimum(changeset, %{file_id: nil}),
+    do: validate_length(changeset, :content, min: 1)
+
+  defp validate_edit_minimum(changeset, _message), do: changeset
+
+  @doc """
   Página del historial, del más reciente al más antiguo (CU-20).
 
   Opciones: `"before"` (cursor: el `id` del último mensaje entregado) y
@@ -200,7 +305,8 @@ defmodule Core.Messaging do
       file_id: if(deleted, do: nil, else: row["file_id"]),
       created_at: created_at,
       edited_at: row["edited_at"],
-      deleted: deleted
+      deleted: deleted,
+      deleted_reason: if(deleted, do: row["deleted_reason"], else: nil)
     }
   end
 

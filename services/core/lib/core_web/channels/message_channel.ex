@@ -18,7 +18,7 @@ defmodule CoreWeb.MessageChannel do
   """
   use CoreWeb, :channel
 
-  alias Core.{Community, Messaging}
+  alias Core.{Community, Messaging, Realtime}
   alias CoreWeb.{MessageJSON, Problem, SocketToken}
 
   intercept ["access.revoked"]
@@ -62,6 +62,35 @@ defmodule CoreWeb.MessageChannel do
     end
   end
 
+  def handle_in("message.update", %{"id" => message_id} = payload, socket) do
+    user_id = socket.assigns.current_user_id
+
+    with {:ok, _ms_left} <- SocketToken.time_left(socket),
+         {:ok, channel, group, _role} <-
+           Community.get_channel_for_member(socket.assigns.channel_id, user_id),
+         {:ok, message} <- Messaging.edit_message(channel, group, user_id, message_id, payload) do
+      data = MessageJSON.message(message)
+      Realtime.broadcast_to_channel(channel.id, "message.updated", data)
+      {:reply, {:ok, %{message: data}}, socket}
+    else
+      {:error, reason} -> {:reply, {:error, error_payload(reason)}, socket}
+    end
+  end
+
+  def handle_in("message.delete", %{"id" => message_id}, socket) do
+    user_id = socket.assigns.current_user_id
+
+    with {:ok, _ms_left} <- SocketToken.time_left(socket),
+         {:ok, channel, group, _role} <-
+           Community.get_channel_for_member(socket.assigns.channel_id, user_id),
+         {:ok, message} <- Messaging.delete_message(channel, group, user_id, message_id) do
+      Realtime.broadcast_to_channel(channel.id, "message.deleted", MessageJSON.deleted(message))
+      {:reply, {:ok, %{}}, socket}
+    else
+      {:error, reason} -> {:reply, {:error, error_payload(reason)}, socket}
+    end
+  end
+
   def handle_in(_event, _payload, socket) do
     {:reply, {:error, %{type: "unknown-event"}}, socket}
   end
@@ -86,6 +115,7 @@ defmodule CoreWeb.MessageChannel do
 
   defp error_payload(:token_expired), do: %{type: "token-expired"}
   defp error_payload(:not_found), do: %{type: "not-found"}
+  defp error_payload(:forbidden), do: %{type: "forbidden"}
   defp error_payload(:group_archived), do: %{type: "group-archived"}
   defp error_payload(:client_message_id_conflict), do: %{type: "client-message-id-conflict"}
   defp error_payload(:unavailable), do: %{type: "messages-unavailable"}

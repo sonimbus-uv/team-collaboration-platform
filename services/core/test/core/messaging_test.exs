@@ -164,6 +164,137 @@ defmodule Core.MessagingTest do
     end
   end
 
+  describe "editing and deleting own messages (CU-19)" do
+    test "the author edits and the history shows the new text as edited", ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+
+      assert {:ok, edited} =
+               Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, %{
+                 "content" => "hola a todos"
+               })
+
+      assert edited.content == "hola a todos"
+      assert %DateTime{} = edited.edited_at
+
+      assert {:ok, %{messages: [stored]}} = Messaging.list_messages(ctx.channel, %{})
+      assert stored.content == "hola a todos"
+      assert stored.edited_at
+    end
+
+    test "someone else cannot edit or delete it (EX-01)", ctx do
+      {:ok, message, :created} = send_message(ctx, "mio")
+      other = user_id()
+
+      assert {:error, :forbidden} =
+               Messaging.edit_message(ctx.channel, ctx.group, other, message.id, %{
+                 "content" => "x"
+               })
+
+      assert {:error, :forbidden} =
+               Messaging.delete_message(ctx.channel, ctx.group, other, message.id)
+
+      assert {:ok, %{messages: [%{content: "mio", edited_at: nil, deleted: false}]}} =
+               Messaging.list_messages(ctx.channel, %{})
+    end
+
+    test "empty, missing or too long content is a validation error (EX-02)", ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+
+      for attrs <- [%{"content" => ""}, %{}, %{"content" => String.duplicate("a", 4_001)}] do
+        assert {:error, changeset} =
+                 Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, attrs)
+
+        assert %{content: [_ | _]} = errors_on(changeset)
+      end
+    end
+
+    test "a message with a file may be edited down to empty text", ctx do
+      {:ok, message, :created} = send_message(ctx, "foto", %{"file_id" => Ecto.UUID.generate()})
+
+      assert {:ok, %{content: ""}} =
+               Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, %{
+                 "content" => ""
+               })
+    end
+
+    test "unknown, malformed and other-channel ids are not found", ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+      other = channel_fixture(ctx.group, ctx.owner, %{"name" => "otro"})
+
+      for id <- [TimeUUID.generate(), "no-es-uuid", Ecto.UUID.generate()] do
+        assert {:error, :not_found} =
+                 Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, id, %{"content" => "x"})
+
+        assert {:error, :not_found} =
+                 Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, id)
+      end
+
+      assert {:error, :not_found} =
+               Messaging.edit_message(other, ctx.group, ctx.owner, message.id, %{"content" => "x"})
+    end
+
+    test "deleting leaves a notice without text or file", ctx do
+      {:ok, message, :created} =
+        send_message(ctx, "secreto", %{"file_id" => Ecto.UUID.generate()})
+
+      assert {:ok, deleted} =
+               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+
+      assert %{deleted: true, content: nil, file_id: nil, deleted_reason: "author"} = deleted
+
+      assert {:ok, %{messages: [stored]}} = Messaging.list_messages(ctx.channel, %{})
+      assert %{deleted: true, content: nil, file_id: nil, deleted_reason: "author"} = stored
+    end
+
+    test "a deleted message can be neither edited nor deleted again", ctx do
+      {:ok, message, :created} = send_message(ctx, "adios")
+      {:ok, _} = Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+
+      assert {:error, :not_found} =
+               Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, %{
+                 "content" => "x"
+               })
+
+      assert {:error, :not_found} =
+               Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+    end
+
+    test "an archived group rejects both", ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+      archived = %{ctx.group | archived_at: DateTime.utc_now()}
+
+      assert {:error, :group_archived} =
+               Messaging.edit_message(ctx.channel, archived, ctx.owner, message.id, %{
+                 "content" => "x"
+               })
+
+      assert {:error, :group_archived} =
+               Messaging.delete_message(ctx.channel, archived, ctx.owner, message.id)
+    end
+
+    test "concurrent edit and delete never resurrect the message", ctx do
+      {:ok, message, :created} = send_message(ctx, "hola")
+
+      results =
+        [
+          Task.async(fn ->
+            Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, message.id, %{
+              "content" => "nuevo"
+            })
+          end),
+          Task.async(fn ->
+            Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, message.id)
+          end)
+        ]
+        |> Task.await_many(10_000)
+
+      assert Enum.any?(results, &match?({:ok, %{deleted: true}}, &1))
+
+      assert {:ok, %{messages: [%{deleted: true, content: nil}]}} =
+               Messaging.list_messages(ctx.channel, %{})
+    end
+  end
+
   test "responder a un mensaje del mismo canal (CU-17)", ctx do
     {:ok, original, :created} = send_message(ctx, "pregunta")
 
