@@ -438,6 +438,60 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/channels/{channel_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/ChannelId"
+    patch:
+      operationId: updateChannel
+      summary: Editar nombre o descripción de un canal (CU-13 FA-01); rol admin
+      description: >-
+        Requiere el permiso `manage_channels`. Solo se envían los campos que
+        cambian. El tipo y `min_role` no se pueden cambiar. Los miembros que
+        ven el canal reciben [`channel.updated`](../events/channel.updated.md).
+        No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateChannel" }
+      responses:
+        "200":
+          description: Canal actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            Nombre repetido en el grupo (`/problems/conflict`, CU-13 EX-01) o
+            grupo archivado (`/problems/group-archived`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: deleteChannel
+      summary: Eliminar un canal (CU-13 FA-02); rol admin
+      description: >-
+        Requiere el permiso `manage_channels`. Borrado lógico: el canal y su
+        historial dejan de servirse y el nombre queda libre. Core cierra los
+        temas `channel:<channel_id>` y `voice:<channel_id>` de todos los
+        conectados y avisa con
+        [`channel.deleted`](../events/channel.deleted.md). Eliminar un canal ya
+        eliminado responde 404. No se admite en grupos archivados.
+      responses:
+        "204": { description: Canal eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/channels/{channel_id}/messages:
     parameters:
       - name: channel_id
@@ -790,6 +844,13 @@ components:
         description: { type: string, maxLength: 500 }
         type: { type: string, enum: [text, voice] }
         min_role: { $ref: "#/components/schemas/Role" }
+    UpdateChannel:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, pattern: "^[a-z0-9-]+$" }
+        description: { type: [string, "null"], maxLength: 500 }
     Channel:
       type: object
       required: [id, group_id, name, type, min_role, created_at]
