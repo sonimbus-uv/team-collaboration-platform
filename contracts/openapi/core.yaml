@@ -91,6 +91,196 @@ paths:
                     items: { $ref: "#/components/schemas/Member" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      operationId: changeMemberRole
+      summary: Cambiar el rol de un miembro (CU-14); solo administradores
+      description: >-
+        Requiere el permiso `manage_roles`, exclusivo del rol `admin`. El nuevo
+        rol rige desde la siguiente acción del miembro. Si el cambio dejaría al
+        grupo sin administradores (CU-14 EX-01) responde 409
+        `/problems/last-admin`; la comprobación bloquea las filas de los
+        administradores y es segura ante cambios concurrentes. No se admite en
+        grupos archivados. Core avisa al miembro por el tema
+        `user:<user_id>` con el evento `member.role.changed`
+        ([contrato](../events/member.role.changed.md)).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangeMemberRole" }
+      responses:
+        "200":
+          description: Miembro con su nuevo rol
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Member" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            El grupo está archivado (`/problems/group-archived`) o el cambio
+            dejaría al grupo sin administradores (`/problems/last-admin`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/members/{user_id}/expel:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: expelMember
+      summary: Expulsar a un miembro (CU-15 FA-02)
+      description: >-
+        Requiere el permiso `moderate` y un rol estrictamente superior al del
+        afectado (EX-01); no se puede moderar a uno mismo. Elimina la
+        membresía, cierra sus canales de texto y su participación en la voz del
+        grupo, y deja una fila en el registro de moderación. El afectado puede
+        volver con una invitación nueva. Core le avisa por `user:<user_id>`
+        con `moderation.applied`
+        ([contrato](../events/moderation.applied.md)). Se admite también en
+        grupos archivados.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "204": { description: Miembro expulsado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/members/{user_id}/ban:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: banMember
+      summary: Bloquear a un miembro (CU-15 FA-03)
+      description: >-
+        Igual que la expulsión, y además impide el reingreso: unirse con una
+        invitación responde 403 `/problems/banned` hasta que se retire el
+        bloqueo.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "204": { description: Miembro bloqueado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/bans:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listBans
+      summary: Usuarios bloqueados del grupo (CU-15 FA-04, paso 1)
+      description: >-
+        Requiere el permiso `moderate`. Del más reciente al más antiguo. El
+        nombre sale de la copia local `user_profiles`; es nulo si no existe o
+        la cuenta está eliminada.
+      responses:
+        "200":
+          description: Bloqueos vigentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ban" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/bans/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      operationId: unbanUser
+      summary: Retirar un bloqueo (CU-15 FA-04)
+      description: >-
+        Requiere el permiso `moderate`. El usuario puede volver con una
+        invitación; no recupera su membresía. Queda registrado en el registro
+        de moderación.
+      responses:
+        "204": { description: Bloqueo retirado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/roles:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listRoles
+      summary: Permisos de cada rol del grupo (CU-14)
+      description: >-
+        Solo para miembros del grupo. Devuelve los tres roles, de menor a
+        mayor, con todos los permisos del catálogo cerrado (D-18) y si cada uno
+        está activo. `manage_group` y `manage_roles` son exclusivos de `admin`
+        y siempre están activos para él.
+      responses:
+        "200":
+          description: Roles con sus permisos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RolePermissions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/roles/{role}/permissions:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/RoleName"
+    put:
+      operationId: updateRolePermissions
+      summary: Activar o desactivar permisos de un rol (CU-14 FA-01); solo administradores
+      description: >-
+        Requiere `manage_roles`. Solo se envían los permisos que cambian; los
+        demás se conservan. Se aplican a todos los miembros que tengan ese rol,
+        desde su siguiente acción. Los permisos `manage_group` y
+        `manage_roles` no son ajustables: intentar cambiarlos, o un permiso
+        fuera del catálogo, responde 422. No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRolePermissions" }
+      responses:
+        "200":
+          description: Permisos vigentes del rol
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/RolePermissions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/groups/{group_id}/invitations:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -393,6 +583,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RoleName:
+      name: role
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Role" }
   schemas:
     VoiceToken:
       type: object
@@ -465,6 +665,49 @@ components:
           description: >-
             Nulo si el usuario nunca guardó su nombre o si su cuenta está
             eliminada (se muestra anonimizado)
+    Permission:
+      type: string
+      enum: [invite_members, moderate, manage_channels, manage_projects, manage_group, manage_roles]
+      description: >-
+        Catálogo cerrado (D-18). `manage_group` y `manage_roles` son exclusivos
+        de `admin`.
+    ChangeMemberRole:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+    RolePermissions:
+      type: object
+      required: [role, permissions]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+        permissions:
+          type: object
+          description: Un booleano por cada permiso del catálogo
+          propertyNames: { $ref: "#/components/schemas/Permission" }
+          additionalProperties: { type: boolean }
+    UpdateRolePermissions:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: object
+          minProperties: 1
+          propertyNames: { $ref: "#/components/schemas/Permission" }
+          additionalProperties: { type: boolean }
+    ModerationRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500, description: Motivo opcional }
+    Ban:
+      type: object
+      required: [user_id, banned_by, created_at, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        banned_by: { type: string, format: uuid }
+        reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        display_name: { type: [string, "null"] }
     CreateInvitation:
       type: object
       properties:
