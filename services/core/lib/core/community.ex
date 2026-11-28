@@ -62,6 +62,72 @@ defmodule Core.Community do
     end
   end
 
+  def update_group(group_id, user_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         :ok <- require_writable(group),
+         {:ok, updated} <-
+           group
+           |> Group.update_changeset(Map.take(attrs, ["name", "description", "image_id"]))
+           |> Repo.update() do
+      if updated != group do
+        Core.Realtime.broadcast_to_members(updated.id, "group.updated", group_event(updated))
+      end
+
+      {:ok, updated, role}
+    end
+  end
+
+  def archive_group(group_id, user_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         {1, [archived]} <-
+           Repo.update_all(
+             from(g in Group,
+               where: g.id == ^group.id and is_nil(g.archived_at) and is_nil(g.deleted_at),
+               select: g
+             ),
+             set: [archived_at: DateTime.utc_now()]
+           ) do
+      Core.Realtime.broadcast_to_members(archived.id, "group.archived", group_event(archived))
+      {:ok, archived, role}
+    else
+      {0, _} -> {:error, :group_archived}
+      error -> error
+    end
+  end
+
+  def delete_group(group_id, user_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_group),
+         :ok <- confirm_group_name(group, attrs),
+         {1, _} <-
+           Repo.update_all(
+             from(g in Group, where: g.id == ^group.id and is_nil(g.deleted_at)),
+             set: [deleted_at: DateTime.utc_now()]
+           ) do
+      Core.Realtime.broadcast_to_members(group.id, "group.deleted", %{id: group.id})
+      Core.Realtime.close_group(group.id)
+      :ok
+    else
+      {0, _} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp confirm_group_name(%Group{name: name}, %{"name" => name}), do: :ok
+  defp confirm_group_name(_group, _attrs), do: {:error, field_error(:name, "does not match")}
+
+  defp group_event(%Group{} = group) do
+    %{
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      image_id: group.image_id,
+      archived_at: group.archived_at
+    }
+  end
+
   ## Miembros
 
   @doc """

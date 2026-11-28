@@ -48,6 +48,11 @@ defmodule Core.Realtime do
     :ok
   end
 
+  def close_group(group_id) do
+    Repo.all(from c in Channel, where: c.group_id == ^group_id and is_nil(c.deleted_at))
+    |> Enum.each(&close_channel/1)
+  end
+
   def disconnect_user_from_group(group_id, user_id) do
     for channel_id <- channel_ids(group_id, :all),
         topic <- ["channel:#{channel_id}", "voice:#{channel_id}"] do
