@@ -549,6 +549,53 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/channels/{channel_id}/messages/{message_id}/reactions:
+    parameters:
+      - $ref: "#/components/parameters/ChannelId"
+      - $ref: "#/components/parameters/MessageId"
+    post:
+      operationId: toggleReaction
+      summary: Reaccionar a un mensaje o retirar la reacción (CU-18)
+      description: >-
+        Alterna la reacción del usuario con ese emoji: si no la tenía, la
+        agrega; si ya la tenía, la retira (FA-01). Cada usuario tiene como
+        máximo una reacción de cada emoji por mensaje, incluso con peticiones
+        simultáneas. `emoji` es un único emoji (un grafema de hasta 32 bytes,
+        no una letra ni un número). No se admite en grupos archivados ni sobre
+        mensajes eliminados (EX-01). Core difunde `reaction.updated` al tema
+        `channel:<channel_id>` ([contrato](../events/reaction.updated.md)).
+        Equivale al evento `reaction.toggle` del WebSocket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReaction" }
+      responses:
+        "200":
+          description: Estado de la reacción del usuario y total del emoji
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ReactionState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            El grupo está archivado (`/problems/group-archived`), el mensaje se
+            eliminó (`/problems/message-deleted`) o el canal es de voz
+            (`/problems/not-a-text-channel`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/channels/{channel_id}/voice-token:
     parameters:
       - $ref: "#/components/parameters/ChannelId"
@@ -887,6 +934,12 @@ components:
             - { $ref: "#/components/schemas/ReplyPreview" }
           description: Nulo si el mensaje no responde a otro (CU-17)
         file_id: { type: [string, "null"], format: uuid }
+        reactions:
+          type: array
+          description: >-
+            Reacciones por emoji, en orden alfabético; vacío en un mensaje
+            eliminado o sin reacciones
+          items: { $ref: "#/components/schemas/ReactionSummary" }
         created_at: { type: string, format: date-time }
         edited_at: { type: [string, "null"], format: date-time }
         deleted: { type: boolean }
@@ -918,6 +971,27 @@ components:
           type: string
           maxLength: 100
           description: Primeros 100 caracteres del original; solo cuando `unavailable` es `false`
+    ReactionSummary:
+      type: object
+      required: [emoji, count, reacted_by_me]
+      properties:
+        emoji: { type: string }
+        count: { type: integer, minimum: 1 }
+        reacted_by_me:
+          type: boolean
+          description: Si quien consulta ha reaccionado con ese emoji
+    ToggleReaction:
+      type: object
+      required: [emoji]
+      properties:
+        emoji: { type: string, maxLength: 32 }
+    ReactionState:
+      type: object
+      required: [emoji, count, active]
+      properties:
+        emoji: { type: string }
+        count: { type: integer, minimum: 0, description: Reacciones activas con ese emoji }
+        active: { type: boolean, description: Si el usuario tiene ahora la reacción }
     EditMessage:
       type: object
       required: [content]

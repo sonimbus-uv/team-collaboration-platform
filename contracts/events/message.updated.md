@@ -18,6 +18,7 @@ autor, cuando el autor edita un mensaje (CU-19). Mismo sobre y conexión que
     "reply_to": null,
     "reply_preview": null,
     "file_id": null,
+    "reactions": [],
     "created_at": "2026-10-29T15:04:05.123456Z",
     "edited_at": "2026-10-29T15:10:00.000000Z",
     "deleted": false,
