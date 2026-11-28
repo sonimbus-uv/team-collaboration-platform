@@ -1,0 +1,12 @@
+_build
+deps
+test
+cover
+doc
+tmp
+erl_crash.dump
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore
