@@ -166,6 +166,55 @@ defmodule Core.Community do
 
   defp anonymize(member), do: Map.delete(member, :account_status)
 
+  def leave_group(group_id, user_id) do
+    with {:ok, group, _role} <- get_group_for_member(group_id, user_id),
+         {:ok, _member} <- remove_own_membership(group.id, user_id) do
+      Core.Realtime.disconnect_user_from_group(group.id, user_id)
+
+      Core.Realtime.broadcast_to_members(group.id, "member.left", %{
+        group_id: group.id,
+        user_id: user_id
+      })
+
+      :ok
+    end
+  end
+
+  defp remove_own_membership(group_id, user_id) do
+    Repo.transact(fn ->
+      admin_ids =
+        Repo.all(
+          from m in Member,
+            where: m.group_id == ^group_id and m.role == :admin,
+            order_by: m.user_id,
+            select: m.user_id,
+            lock: "FOR UPDATE"
+        )
+
+      member =
+        Repo.one(
+          from m in Member,
+            where: m.group_id == ^group_id and m.user_id == ^user_id,
+            lock: "FOR UPDATE"
+        )
+
+      cond do
+        is_nil(member) ->
+          {:error, :not_found}
+
+        member.role == :admin and admin_ids == [user_id] ->
+          {:error, :last_admin}
+
+        true ->
+          Repo.delete_all(
+            from m in Member, where: m.group_id == ^group_id and m.user_id == ^user_id
+          )
+
+          {:ok, member}
+      end
+    end)
+  end
+
   ## Roles y permisos
 
   def change_role(group_id, actor_id, target_id, role) do

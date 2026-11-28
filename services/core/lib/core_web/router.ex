@@ -25,6 +25,7 @@ defmodule CoreWeb.Router do
     end
 
     post "/groups/:id/archive", GroupController, :archive
+    delete "/groups/:group_id/members/me", MemberController, :leave
     patch "/groups/:group_id/members/:user_id", MemberController, :update
     post "/groups/:group_id/members/:user_id/expel", ModerationController, :expel
     post "/groups/:group_id/members/:user_id/ban", ModerationController, :ban
