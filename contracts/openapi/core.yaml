@@ -493,14 +493,32 @@ paths:
               schema: { $ref: "#/components/schemas/Problem" }
     delete:
       operationId: deleteMessage
-      summary: Eliminar un mensaje propio (CU-19 FA-01)
+      summary: Eliminar un mensaje, propio (CU-19 FA-01) o ajeno por moderación (CU-15 FA-01)
       description: >-
-        Solo el autor. El mensaje no se borra: queda con `deleted = true`,
-        `deleted_reason = author` y sin `content` ni `file_id`, de modo que el
-        historial muestra el aviso "Mensaje eliminado" y sus adjuntos dejan de
-        estar disponibles. No se admite en grupos archivados. Core difunde
-        `message.deleted` ([contrato](../events/message.deleted.md)). Equivale
-        al evento `message.delete` del WebSocket.
+        El mensaje no se borra: queda con `deleted = true` y sin `content` ni
+        `file_id`, de modo que el historial muestra el aviso y sus adjuntos
+        dejan de estar disponibles. Equivale al evento `message.delete` del
+        WebSocket. Core difunde `message.deleted`
+        ([contrato](../events/message.deleted.md)).
+
+
+        - **El autor** lo elimina con `deleted_reason = author` ("Mensaje
+        eliminado"). No se admite en grupos archivados.
+
+        - **Moderación:** quien tenga el permiso `moderate` y un rol
+        estrictamente superior al del autor (o el autor ya no sea miembro) lo
+        elimina con `deleted_reason = moderation` ("Mensaje eliminado por
+        moderación"), aunque el grupo esté archivado. Queda en el registro de
+        moderación y Core avisa al autor por `user:<user_id>` con
+        `moderation.applied` ([contrato](../events/moderation.applied.md)).
+        `reason` es opcional y solo se usa en este caso.
+
+        Un rol igual o superior, o sin permiso, responde 403.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
       responses:
         "204": { description: Mensaje eliminado }
         "401": { $ref: "#/components/responses/Unauthorized" }

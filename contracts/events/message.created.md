@@ -67,14 +67,15 @@ por campo.
 
 ## Cliente → servidor: `message.update` y `message.delete`
 
-Solo el autor (CU-19). Equivalen a `PATCH` y `DELETE` de
+El autor (CU-19) y, para `message.delete`, quien modere (CU-15). Equivalen a `PATCH` y `DELETE` de
 `/api/v1/channels/{channel_id}/messages/{message_id}`.
 
 ```json
 { "id": "0955f155-d37a-11f1-bf48-3f32a97dd8eb", "content": "Hola a todos" }
 ```
 
-`message.update` lleva `id` y `content`; `message.delete` solo `id`. Respuesta
+`message.update` lleva `id` y `content`; `message.delete` lleva `id` y, para
+moderación, un `reason` opcional (CU-15 FA-01). Respuesta
 `ok`: `{"message": Message}` para `message.update` y `{}` para `message.delete`.
 Respuesta `error`: `{"type": "<tipo>"}`, con los tipos de `message.create` y
 además `forbidden` (no es el autor).
