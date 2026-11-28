@@ -24,6 +24,10 @@ defmodule CoreWeb.Router do
       resources "/invitations", InvitationController, only: [:create]
     end
 
+    patch "/groups/:group_id/members/:user_id", MemberController, :update
+    get "/groups/:group_id/roles", RoleController, :index
+    put "/groups/:group_id/roles/:role/permissions", RoleController, :update
+
     get "/channels/:channel_id/messages", MessageController, :index
     post "/channels/:channel_id/voice-token", VoiceController, :create
 

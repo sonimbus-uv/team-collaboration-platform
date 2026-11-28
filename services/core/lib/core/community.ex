@@ -100,6 +100,161 @@ defmodule Core.Community do
 
   defp anonymize(member), do: Map.delete(member, :account_status)
 
+  ## Roles y permisos
+
+  def change_role(group_id, actor_id, target_id, role) do
+    with {:ok, group, actor_role} <- get_group_for_member(group_id, actor_id),
+         :ok <- Authorization.authorize(group.id, actor_role, :manage_roles),
+         :ok <- require_writable(group),
+         {:ok, new_role} <- cast_role(role),
+         {:ok, target_id} <- cast_user_id(target_id),
+         {:ok, change} <- apply_role_change(group.id, actor_id, target_id, new_role) do
+      if change.previous_role != change.role do
+        Core.Realtime.broadcast_to_user(target_id, "member.role.changed", %{
+          group_id: group.id,
+          role: change.role,
+          previous_role: change.previous_role
+        })
+      end
+
+      {:ok, change.member}
+    end
+  end
+
+  defp apply_role_change(group_id, actor_id, target_id, new_role) do
+    Repo.transact(fn ->
+      admin_ids =
+        Repo.all(
+          from m in Member,
+            where: m.group_id == ^group_id and m.role == :admin,
+            order_by: m.user_id,
+            select: m.user_id,
+            lock: "FOR UPDATE"
+        )
+
+      target =
+        Repo.one(
+          from m in Member,
+            where: m.group_id == ^group_id and m.user_id == ^target_id,
+            lock: "FOR UPDATE"
+        )
+
+      cond do
+        actor_id not in admin_ids ->
+          {:error, :forbidden}
+
+        is_nil(target) ->
+          {:error, :not_found}
+
+        target.role == :admin and new_role != :admin and admin_ids == [target_id] ->
+          {:error, :last_admin}
+
+        true ->
+          if target.role != new_role do
+            Repo.update_all(
+              from(m in Member, where: m.group_id == ^group_id and m.user_id == ^target_id),
+              set: [role: new_role]
+            )
+          end
+
+          %{^target_id => display_name} = Core.Profiles.display_names([target_id])
+
+          {:ok,
+           %{
+             previous_role: target.role,
+             role: new_role,
+             member: %{
+               user_id: target_id,
+               role: new_role,
+               joined_at: target.joined_at,
+               display_name: display_name
+             }
+           }}
+      end
+    end)
+  end
+
+  def list_roles(group_id, user_id) do
+    with {:ok, group, _role} <- get_group_for_member(group_id, user_id) do
+      {:ok, Enum.map(Member.roles(), &role_permissions(group.id, &1))}
+    end
+  end
+
+  def update_role_permissions(group_id, actor_id, role, changes) do
+    with {:ok, group, actor_role} <- get_group_for_member(group_id, actor_id),
+         :ok <- Authorization.authorize(group.id, actor_role, :manage_roles),
+         :ok <- require_writable(group),
+         {:ok, role} <- cast_role(role),
+         {:ok, changes} <- cast_permission_changes(changes) do
+      rows =
+        for {permission, enabled} <- changes do
+          %{group_id: group.id, role: role, permission: permission, enabled: enabled}
+        end
+
+      {_count, _rows} =
+        Repo.insert_all(Core.Authorization.RolePermission, rows,
+          on_conflict: {:replace, [:enabled]},
+          conflict_target: [:group_id, :role, :permission]
+        )
+
+      Authorization.invalidate_group(group.id)
+      {:ok, role_permissions(group.id, role)}
+    end
+  end
+
+  defp role_permissions(group_id, role) do
+    enabled = Authorization.permissions(group_id, role)
+    %{role: role, permissions: Map.new(Authorization.permissions(), &{&1, &1 in enabled})}
+  end
+
+  defp cast_role(role) when is_binary(role) do
+    case Enum.find(Member.roles(), &(Atom.to_string(&1) == role)) do
+      nil -> {:error, field_error(:role, "is invalid")}
+      role -> {:ok, role}
+    end
+  end
+
+  defp cast_role(_role), do: {:error, field_error(:role, "is invalid")}
+
+  defp cast_user_id(user_id) do
+    case Ecto.UUID.cast(user_id) do
+      {:ok, user_id} -> {:ok, user_id}
+      :error -> {:error, :not_found}
+    end
+  end
+
+  defp cast_permission_changes(changes) when is_map(changes) and map_size(changes) > 0 do
+    known = Map.new(Authorization.permissions(), &{Atom.to_string(&1), &1})
+
+    errors =
+      for {name, value} <- changes, reduce: [] do
+        errors ->
+          cond do
+            not is_map_key(known, name) -> ["unknown permission #{inspect(name)}" | errors]
+            known[name] in Authorization.admin_only() -> ["#{name} cannot be changed" | errors]
+            not is_boolean(value) -> ["#{name} must be a boolean" | errors]
+            true -> errors
+          end
+      end
+
+    if errors == [] do
+      {:ok, Map.new(changes, fn {name, value} -> {known[name], value} end)}
+    else
+      {:error, field_errors(:permissions, Enum.reverse(errors))}
+    end
+  end
+
+  defp cast_permission_changes(_changes),
+    do: {:error, field_error(:permissions, "must be a non-empty map")}
+
+  defp field_error(field, message), do: field_errors(field, [message])
+
+  defp field_errors(field, messages) do
+    Enum.reduce(messages, Ecto.Changeset.change({%{}, %{field => :string}}), fn message, acc ->
+      Ecto.Changeset.add_error(acc, field, message)
+    end)
+  end
+
   ## Invitaciones
 
   @doc """

@@ -11,4 +11,11 @@ defmodule CoreWeb.MemberController do
       json(conn, %{data: members})
     end
   end
+
+  def update(conn, %{"group_id" => group_id, "user_id" => user_id} = params) do
+    with {:ok, member} <-
+           Community.change_role(group_id, conn.assigns.current_user_id, user_id, params["role"]) do
+      json(conn, %{data: member})
+    end
+  end
 end
