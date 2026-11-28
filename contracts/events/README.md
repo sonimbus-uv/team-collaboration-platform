@@ -17,6 +17,10 @@ Formato de nombre: `<recurso>.<evento>` (por ejemplo, `message.created`). Cada e
 | Evento | Productor | Estado |
 |---|---|---|
 | [`message.created` v1](message.created.md) | Core | Candidato; implementado en Core para la expo |
+| [`user:<user_id>` v1](user.topic.md) | Core | Candidato; tema personal, eventos concretos por caso de uso |
+| [`voice:<channel_id>` v1](voice.presence.md) | Core | Candidato; participantes, micrófono y cámara con Phoenix Presence |
+| [`member.role.changed` v1](member.role.changed.md) | Core | Candidato; por `user:<user_id>` |
+| [`moderation.applied` v1](moderation.applied.md) | Core | Candidato; por `user:<user_id>` |
 
 ## Eventos entre servicios (RabbitMQ, D-04)
 

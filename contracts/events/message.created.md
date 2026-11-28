@@ -37,15 +37,17 @@ cierra el canal. El cliente debe renovar el token y reconectar el socket.
 {
   "client_message_id": "8f0e7c52-3a59-4f7e-9d43-4a5b7a3c2e10",
   "content": "Hola, equipo",
-  "reply_to": null
+  "reply_to": null,
+  "file_id": null
 }
 ```
 
 | Campo | Regla |
 |---|---|
 | `client_message_id` | UUID que genera el cliente por mensaje; se reutiliza en cada reintento (RNF-CON-01) |
-| `content` | 1–4000 caracteres (D-22) |
+| `content` | 1–4000 caracteres (D-22); puede ir vacío solo si se envía `file_id` (CU-23 paso 4) |
 | `reply_to` | Opcional: `id` de un mensaje del mismo canal (CU-17) |
+| `file_id` | Opcional: UUID del archivo ya subido a File Service (CU-23, D-32). Core no comprueba que exista; lo valida Files. Un reintento con el mismo `client_message_id` devuelve el mensaje ya guardado y no cambia su `file_id` |
 
 Respuesta `ok`: `{"message": Message}`. Un reintento con el mismo
 `client_message_id` devuelve el mismo mensaje, con el mismo `id`, y no se

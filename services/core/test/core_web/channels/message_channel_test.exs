@@ -60,6 +60,37 @@ defmodule CoreWeb.MessageChannelTest do
     refute_broadcast "message.created", _
   end
 
+  test "envía un mensaje con archivo y lo difunde con su file_id", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+    file_id = Ecto.UUID.generate()
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "",
+        "file_id" => file_id
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id, content: "", file_id: ^file_id}}
+
+    assert_broadcast "message.created", %{
+      type: "message.created",
+      payload: %{id: ^id, file_id: ^file_id}
+    }
+  end
+
+  test "un mensaje sin texto ni archivo es un error de validación", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => ""
+      })
+
+    assert_reply ref, :error, %{type: "validation-error", errors: %{content: [_]}}
+  end
+
   test "errores de validación en la respuesta", ctx do
     {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
 

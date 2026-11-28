@@ -73,6 +73,97 @@ defmodule Core.MessagingTest do
     assert %{reply_to: [_]} = errors_on(changeset)
   end
 
+  describe "attachments (CU-23)" do
+    test "stores a message with text and a file", ctx do
+      file_id = Ecto.UUID.generate()
+
+      assert {:ok, message, :created} = send_message(ctx, "mira esto", %{"file_id" => file_id})
+      assert message.file_id == file_id
+      assert message.content == "mira esto"
+
+      assert {:ok, %{messages: [stored]}} = Messaging.list_messages(ctx.channel, %{})
+      assert stored.file_id == file_id
+      assert stored.content == "mira esto"
+    end
+
+    test "text is optional when there is a file", ctx do
+      file_id = Ecto.UUID.generate()
+
+      assert {:ok, message, :created} = send_message(ctx, "", %{"file_id" => file_id})
+      assert message.content == ""
+      assert message.file_id == file_id
+
+      assert {:ok, message, :created} =
+               Messaging.create_message(ctx.channel, ctx.group, ctx.owner, %{
+                 "client_message_id" => Ecto.UUID.generate(),
+                 "file_id" => file_id
+               })
+
+      assert message.content == ""
+    end
+
+    test "a message needs text or a file", ctx do
+      assert {:error, changeset} = send_message(ctx, "", %{"file_id" => nil})
+      assert %{content: [_]} = errors_on(changeset)
+
+      assert {:error, changeset} =
+               Messaging.create_message(ctx.channel, ctx.group, ctx.owner, %{
+                 "client_message_id" => Ecto.UUID.generate()
+               })
+
+      assert %{content: [_]} = errors_on(changeset)
+    end
+
+    test "the file id must be a uuid", ctx do
+      assert {:error, changeset} = send_message(ctx, "hola", %{"file_id" => "no-es-uuid"})
+      assert %{file_id: [_]} = errors_on(changeset)
+    end
+
+    test "text is still capped at 4000 characters with a file", ctx do
+      assert {:error, changeset} =
+               send_message(ctx, String.duplicate("a", 4_001), %{
+                 "file_id" => Ecto.UUID.generate()
+               })
+
+      assert %{content: [_]} = errors_on(changeset)
+    end
+
+    test "a retry returns the stored message and keeps its file", ctx do
+      client_id = Ecto.UUID.generate()
+      file_id = Ecto.UUID.generate()
+
+      assert {:ok, first, :created} =
+               send_message(ctx, "foto", %{"client_message_id" => client_id, "file_id" => file_id})
+
+      assert {:ok, again, :duplicate} =
+               send_message(ctx, "foto", %{
+                 "client_message_id" => client_id,
+                 "file_id" => Ecto.UUID.generate()
+               })
+
+      assert again.id == first.id
+      assert again.file_id == file_id
+    end
+
+    test "a deleted message serves neither text nor file", ctx do
+      {:ok, message, :created} =
+        send_message(ctx, "secreto", %{"file_id" => Ecto.UUID.generate()})
+
+      {:ok, datetime} = TimeUUID.to_datetime(message.id)
+
+      {:ok, _} =
+        Core.Scylla.execute(
+          "UPDATE messages_by_channel SET deleted = true WHERE channel_id = ? AND bucket = ? AND message_id = ?",
+          [ctx.channel.id, TimeUUID.bucket(datetime), message.id]
+        )
+
+      assert {:ok, %{messages: [stored]}} = Messaging.list_messages(ctx.channel, %{})
+      assert stored.deleted
+      assert stored.content == nil
+      assert stored.file_id == nil
+    end
+  end
+
   test "responder a un mensaje del mismo canal (CU-17)", ctx do
     {:ok, original, :created} = send_message(ctx, "pregunta")
 
