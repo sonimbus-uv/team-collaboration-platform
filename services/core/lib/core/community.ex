@@ -421,6 +421,55 @@ defmodule Core.Community do
     end
   end
 
+  def list_invitations(group_id, user_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :invite_members) do
+      now = DateTime.utc_now()
+
+      invitations =
+        from(i in Invitation,
+          where:
+            i.group_id == ^group.id and is_nil(i.revoked_at) and i.expires_at > ^now and
+              (is_nil(i.max_uses) or i.uses < i.max_uses),
+          order_by: [desc: i.created_at, asc: i.id]
+        )
+        |> Repo.all()
+
+      {:ok, invitations}
+    end
+  end
+
+  def revoke_invitation(group_id, user_id, invitation_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :invite_members),
+         :ok <- require_writable(group),
+         {:ok, invitation_id} <- cast_invitation_id(invitation_id) do
+      case Repo.update_all(
+             from(i in Invitation,
+               where: i.id == ^invitation_id and i.group_id == ^group.id and is_nil(i.revoked_at)
+             ),
+             set: [revoked_at: DateTime.utc_now()]
+           ) do
+        {1, _} ->
+          :ok
+
+        {0, _} ->
+          if Repo.exists?(
+               from i in Invitation, where: i.id == ^invitation_id and i.group_id == ^group.id
+             ),
+             do: :ok,
+             else: {:error, :not_found}
+      end
+    end
+  end
+
+  defp cast_invitation_id(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> {:ok, id}
+      :error -> {:error, :not_found}
+    end
+  end
+
   @doc """
   Une al usuario al grupo de la invitación `code` (CU-11).
 

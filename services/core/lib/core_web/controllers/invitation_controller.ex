@@ -7,6 +7,18 @@ defmodule CoreWeb.InvitationController do
 
   action_fallback CoreWeb.FallbackController
 
+  def index(conn, %{"group_id" => group_id}) do
+    with {:ok, invitations} <- Community.list_invitations(group_id, conn.assigns.current_user_id) do
+      json(conn, %{data: Enum.map(invitations, &CommunityJSON.invitation(&1, :listing))})
+    end
+  end
+
+  def delete(conn, %{"group_id" => group_id, "id" => id}) do
+    with :ok <- Community.revoke_invitation(group_id, conn.assigns.current_user_id, id) do
+      send_resp(conn, :no_content, "")
+    end
+  end
+
   def create(conn, %{"group_id" => group_id} = params) do
     attrs = Map.take(params, ["expires_in", "max_uses"])
 

@@ -21,7 +21,7 @@ defmodule CoreWeb.Router do
     resources "/groups", GroupController, only: [:index, :create, :show] do
       resources "/channels", ChannelController, only: [:index, :create]
       resources "/members", MemberController, only: [:index]
-      resources "/invitations", InvitationController, only: [:create]
+      resources "/invitations", InvitationController, only: [:index, :create, :delete]
     end
 
     patch "/groups/:group_id/members/:user_id", MemberController, :update
