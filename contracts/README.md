@@ -38,6 +38,7 @@ Los archivos usan OpenAPI 3.1 en sintaxis JSON compatible con YAML:
 | [auth-google.yaml](openapi/auth-google.yaml) | Login Google, vinculación, conexiones y reautenticación |
 | [auth-contact-email.yaml](openapi/auth-contact-email.yaml) | Contacto propio, solicitud, reenvío y confirmación de correo |
 | [auth-internal.yaml](openapi/auth-internal.yaml) | Consulta privada por HTTPS, independiente del contrato público |
+| [core-internal.yaml](openapi/core-internal.yaml) | Consulta privada `checkAccess` de Core para File Service (D-32); contrato propuesto, sin implementar |
 
 Cada operación tiene una única definición en su archivo funcional. `auth.yaml`
 referencia sus Path Items; las definiciones de esquemas conservan referencias

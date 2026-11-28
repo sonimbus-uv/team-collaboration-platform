@@ -1,0 +1,109 @@
+openapi: 3.1.0
+info:
+  title: Sonimbus Core, API interna de acceso a canales
+  version: 0.1.0
+  description: >-
+    Contrato propuesto de `checkAccess` (D-32). File Service, y después
+    Reports, preguntan a Core si un usuario puede subir o ver archivos de un
+    canal. Solo red privada, sin pasar por Nginx. Sin implementar: Core no sirve
+    esta consulta hasta que exista File Service (SIM-04). Errores con Problem
+    Details; `type` es una referencia relativa `/problems/<nombre>`.
+servers:
+  - url: https://core.internal.invalid
+security:
+  - ServiceBearer: []
+paths:
+  /internal/v1/channels/{channel_id}/access:
+    parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: checkChannelAccess
+      summary: Acceso de un usuario a los archivos de un canal (D-32)
+      description: >-
+        Responde `allowed: true` si el usuario es miembro del grupo vigente con
+        un rol igual o superior a `min_role` del canal (D-17) y el canal es de
+        texto y está vigente (D-19). Con `action=write` exige además que el
+        grupo no esté archivado (CU-23). Cualquier otro caso, incluido un canal
+        inexistente, responde `allowed: false` sin indicar el motivo.
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          description: Usuario de la petición original (`auth.accounts.id`)
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          required: true
+          description: "`read` para ver o descargar, `write` para subir"
+          schema: { type: string, enum: [read, write] }
+      responses:
+        "200":
+          description: Decisión de acceso
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/AccessDecision" }
+        "401":
+          description: Falta el token de servicio o no es válido, `/problems/unauthorized`
+          headers:
+            WWW-Authenticate:
+              schema: { type: string }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422":
+          description: Parámetros inválidos, `/problems/validation-error`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: Core no puede decidir ahora, `/problems/access-unavailable`
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+components:
+  securitySchemes:
+    ServiceBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Token `svc_` seguido de base64url sin padding de 32 bytes aleatorios,
+        uno por servicio consumidor (`files`, `reports`), como en
+        `auth-internal.yaml`. Solo backend y red privada; nunca se registra.
+  schemas:
+    AccessDecision:
+      type: object
+      required: [allowed]
+      properties:
+        allowed: { type: boolean }
+        group_id:
+          type: string
+          format: uuid
+          description: Solo cuando `allowed` es `true`
+        role:
+          type: string
+          enum: [member, moderator, admin]
+          description: Rol del usuario en el grupo; solo cuando `allowed` es `true`
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        errors:
+          description: Solo en 422; mensajes por campo
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }

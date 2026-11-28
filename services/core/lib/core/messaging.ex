@@ -29,8 +29,8 @@ defmodule Core.Messaging do
 
   @insert_cql """
   INSERT INTO messages_by_channel
-    (channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, deleted)
-  VALUES (?, ?, ?, ?, ?, ?, ?, false)
+    (channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, deleted)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)
   """
 
   @get_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
@@ -107,7 +107,8 @@ defmodule Core.Messaging do
       author_id,
       input.client_message_id,
       input.content,
-      input.reply_to
+      input.reply_to,
+      input.file_id
     ]
 
     with {:ok, _} <- Scylla.execute(@insert_cql, params) do
@@ -118,7 +119,7 @@ defmodule Core.Messaging do
         "client_message_id" => input.client_message_id,
         "content" => input.content,
         "reply_to" => input.reply_to,
-        "file_id" => nil,
+        "file_id" => input.file_id,
         "edited_at" => nil,
         "deleted" => false
       }
@@ -206,17 +207,41 @@ defmodule Core.Messaging do
   ## Validación
 
   defp validate_message(attrs) do
-    types = %{client_message_id: Ecto.UUID, content: :string, reply_to: Ecto.UUID}
+    types = %{
+      client_message_id: Ecto.UUID,
+      content: :string,
+      reply_to: Ecto.UUID,
+      file_id: Ecto.UUID
+    }
 
     {%{}, types}
     |> cast(attrs, Map.keys(types), empty_values: [])
-    |> validate_required([:client_message_id, :content])
-    |> validate_length(:content, min: 1, max: @max_content_length)
+    |> validate_required([:client_message_id])
+    |> validate_content()
     |> validate_change(:reply_to, &validate_timeuuid/2)
     |> apply_action(:insert)
     |> case do
-      {:ok, input} -> {:ok, Map.put_new(input, :reply_to, nil)}
-      error -> error
+      {:ok, input} ->
+        {:ok,
+         input
+         |> Map.put_new(:reply_to, nil)
+         |> Map.put_new(:file_id, nil)
+         |> Map.update(:content, "", &(&1 || ""))}
+
+      error ->
+        error
+    end
+  end
+
+  defp validate_content(changeset) do
+    changeset = validate_length(changeset, :content, max: @max_content_length)
+
+    if get_field(changeset, :file_id) do
+      changeset
+    else
+      changeset
+      |> validate_required([:content])
+      |> validate_length(:content, min: 1)
     end
   end
 
