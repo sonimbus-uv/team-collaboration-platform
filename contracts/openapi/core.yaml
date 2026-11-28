@@ -448,6 +448,74 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/channels/{channel_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/ChannelId"
+      - $ref: "#/components/parameters/MessageId"
+    patch:
+      operationId: editMessage
+      summary: Editar un mensaje propio (CU-19)
+      description: >-
+        Solo el autor. Guarda el nuevo contenido y marca `edited_at`. El
+        contenido tiene 1–4000 caracteres (D-22); puede ir vacío solo si el
+        mensaje tiene archivo. No se admite en grupos archivados. Core difunde
+        `message.updated` al tema `channel:<channel_id>`
+        ([contrato](../events/message.updated.md)). Equivale al evento
+        `message.update` del WebSocket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EditMessage" }
+      responses:
+        "200":
+          description: Mensaje editado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El grupo está archivado (`/problems/group-archived`) o el canal es de voz (`/problems/not-a-text-channel`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+    delete:
+      operationId: deleteMessage
+      summary: Eliminar un mensaje propio (CU-19 FA-01)
+      description: >-
+        Solo el autor. El mensaje no se borra: queda con `deleted = true`,
+        `deleted_reason = author` y sin `content` ni `file_id`, de modo que el
+        historial muestra el aviso "Mensaje eliminado" y sus adjuntos dejan de
+        estar disponibles. No se admite en grupos archivados. Core difunde
+        `message.deleted` ([contrato](../events/message.deleted.md)). Equivale
+        al evento `message.delete` del WebSocket.
+      responses:
+        "204": { description: Mensaje eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El grupo está archivado (`/problems/group-archived`) o el canal es de voz (`/problems/not-a-text-channel`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/channels/{channel_id}/voice-token:
     parameters:
       - $ref: "#/components/parameters/ChannelId"
@@ -577,6 +645,12 @@ components:
       name: channel_id
       in: path
       required: true
+      schema: { type: string, format: uuid }
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      description: timeuuid del mensaje
       schema: { type: string, format: uuid }
     GroupId:
       name: group_id
@@ -778,6 +852,18 @@ components:
         created_at: { type: string, format: date-time }
         edited_at: { type: [string, "null"], format: date-time }
         deleted: { type: boolean }
+        deleted_reason:
+          type: [string, "null"]
+          enum: [author, moderation, null]
+          description: >-
+            Quién eliminó el mensaje: `author` ("Mensaje eliminado") o
+            `moderation` ("Mensaje eliminado por moderación"). Nulo si no está
+            eliminado.
+    EditMessage:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, maxLength: 4000 }
     ProfileEnvelope:
       type: object
       required: [data]

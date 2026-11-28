@@ -59,11 +59,25 @@ por campo.
 | `type` | Significado |
 |---|---|
 | `validation-error` | Campos inválidos |
-| `not-found` | El usuario perdió el acceso al canal |
+| `not-found` | El usuario perdió el acceso al canal o el mensaje no existe |
 | `group-archived` | El grupo está archivado (solo lectura) |
 | `client-message-id-conflict` | Ese `client_message_id` ya se usó en otro canal |
 | `token-expired` | El access token venció |
 | `messages-unavailable` | ScyllaDB no responde; reintentar con el mismo `client_message_id` |
+
+## Cliente → servidor: `message.update` y `message.delete`
+
+Solo el autor (CU-19). Equivalen a `PATCH` y `DELETE` de
+`/api/v1/channels/{channel_id}/messages/{message_id}`.
+
+```json
+{ "id": "0955f155-d37a-11f1-bf48-3f32a97dd8eb", "content": "Hola a todos" }
+```
+
+`message.update` lleva `id` y `content`; `message.delete` solo `id`. Respuesta
+`ok`: `{"message": Message}` para `message.update` y `{}` para `message.delete`.
+Respuesta `error`: `{"type": "<tipo>"}`, con los tipos de `message.create` y
+además `forbidden` (no es el autor).
 
 ## Servidor → clientes: `message.created` v1
 
