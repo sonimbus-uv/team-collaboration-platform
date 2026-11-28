@@ -599,6 +599,61 @@ defmodule Core.Community do
     end
   end
 
+  def update_channel(group_id, user_id, channel_id, attrs) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_channels),
+         :ok <- require_writable(group),
+         {:ok, channel} <- fetch_group_channel(group.id, channel_id),
+         {:ok, updated} <-
+           channel
+           |> Channel.update_changeset(Map.take(attrs, ["name", "description"]))
+           |> Repo.update() do
+      if updated != channel do
+        Core.Realtime.broadcast_to_members(
+          group.id,
+          "channel.updated",
+          CoreWeb.CommunityJSON.channel(updated),
+          updated.min_role
+        )
+      end
+
+      {:ok, updated}
+    end
+  end
+
+  def delete_channel(group_id, user_id, channel_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :manage_channels),
+         :ok <- require_writable(group),
+         {:ok, channel} <- fetch_group_channel(group.id, channel_id),
+         {:ok, deleted} <-
+           channel |> Ecto.Changeset.change(deleted_at: DateTime.utc_now()) |> Repo.update() do
+      Core.Realtime.broadcast_to_members(
+        group.id,
+        "channel.deleted",
+        %{id: deleted.id, group_id: group.id},
+        deleted.min_role
+      )
+
+      Core.Realtime.close_channel(deleted)
+      :ok
+    end
+  end
+
+  defp fetch_group_channel(group_id, channel_id) do
+    with {:ok, channel_id} <- Ecto.UUID.cast(channel_id),
+         %Channel{} = channel <-
+           Repo.one(
+             from c in Channel,
+               where: c.id == ^channel_id and c.group_id == ^group_id and is_nil(c.deleted_at),
+               lock: "FOR UPDATE"
+           ) do
+      {:ok, channel}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
   @doc """
   Canal vigente al que el usuario tiene acceso: es miembro del grupo vigente
   y su rol alcanza `min_role` (D-17). Devuelve también el grupo y el rol.

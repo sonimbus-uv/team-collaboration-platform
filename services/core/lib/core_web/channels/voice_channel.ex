@@ -4,7 +4,7 @@ defmodule CoreWeb.VoiceChannel do
   alias Core.{Community, Profiles}
   alias CoreWeb.{Presence, SocketToken}
 
-  intercept ["access.revoked"]
+  intercept ["access.revoked", "channel.closed"]
 
   @impl true
   def join("voice:" <> channel_id, payload, socket) do
@@ -56,6 +56,9 @@ defmodule CoreWeb.VoiceChannel do
       {:noreply, socket}
     end
   end
+
+  def handle_out("channel.closed", _payload, socket),
+    do: {:stop, {:shutdown, :channel_deleted}, socket}
 
   @impl true
   def handle_info(:after_join, socket) do

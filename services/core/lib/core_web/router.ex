@@ -19,7 +19,7 @@ defmodule CoreWeb.Router do
     pipe_through [:api, :authenticated]
 
     resources "/groups", GroupController, only: [:index, :create, :show] do
-      resources "/channels", ChannelController, only: [:index, :create]
+      resources "/channels", ChannelController, only: [:index, :create, :update, :delete]
       resources "/members", MemberController, only: [:index]
       resources "/invitations", InvitationController, only: [:index, :create, :delete]
     end

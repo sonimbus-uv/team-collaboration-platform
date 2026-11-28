@@ -22,4 +22,19 @@ defmodule CoreWeb.ChannelController do
       |> json(%{data: CommunityJSON.channel(channel)})
     end
   end
+
+  def update(conn, %{"group_id" => group_id, "id" => id} = params) do
+    attrs = Map.take(params, ["name", "description"])
+
+    with {:ok, channel} <-
+           Community.update_channel(group_id, conn.assigns.current_user_id, id, attrs) do
+      json(conn, %{data: CommunityJSON.channel(channel)})
+    end
+  end
+
+  def delete(conn, %{"group_id" => group_id, "id" => id}) do
+    with :ok <- Community.delete_channel(group_id, conn.assigns.current_user_id, id) do
+      send_resp(conn, :no_content, "")
+    end
+  end
 end
