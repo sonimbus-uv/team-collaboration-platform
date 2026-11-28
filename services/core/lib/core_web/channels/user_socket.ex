@@ -17,6 +17,7 @@ defmodule CoreWeb.UserSocket do
 
   channel "channel:*", CoreWeb.MessageChannel
   channel "user:*", CoreWeb.UserChannel
+  channel "voice:*", CoreWeb.VoiceChannel
 
   @impl true
   def connect(params, socket, connect_info) do

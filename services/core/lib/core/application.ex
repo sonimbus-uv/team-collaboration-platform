@@ -12,6 +12,7 @@ defmodule Core.Application do
       Core.Repo,
       {DNSCluster, query: Application.get_env(:core, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Core.PubSub},
+      CoreWeb.Presence,
       Core.AccessToken.JWKS,
       Core.Scylla,
       # Start to serve requests, typically the last entry
