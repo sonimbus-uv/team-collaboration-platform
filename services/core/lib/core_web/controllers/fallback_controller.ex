@@ -35,6 +35,12 @@ defmodule CoreWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :last_admin}) do
+    Problem.send_problem(conn, 409, "last-admin", "Last administrator",
+      detail: "The group must keep at least one administrator."
+    )
+  end
+
   def call(conn, {:error, :invalid_invitation}) do
     Problem.send_problem(conn, 422, "invitation-invalid", "Invalid invitation",
       detail: "The invitation does not exist, has expired, was revoked or has no uses left."

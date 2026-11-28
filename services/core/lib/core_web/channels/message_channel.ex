@@ -19,16 +19,18 @@ defmodule CoreWeb.MessageChannel do
   use CoreWeb, :channel
 
   alias Core.{Community, Messaging}
-  alias CoreWeb.{MessageJSON, Problem}
+  alias CoreWeb.{MessageJSON, Problem, SocketToken}
+
+  intercept ["access.revoked"]
 
   @impl true
   def join("channel:" <> channel_id, _payload, socket) do
     user_id = socket.assigns.current_user_id
 
-    with {:ok, ms_left} <- token_time_left(socket),
+    with {:ok, ms_left} <- SocketToken.time_left(socket),
          {:ok, %{type: :text} = channel, _group, _role} <-
            Community.get_channel_for_member(channel_id, user_id) do
-      Process.send_after(self(), :token_expired, ms_left)
+      SocketToken.expire_in(ms_left)
       {:ok, assign(socket, :channel_id, channel.id)}
     else
       {:error, :token_expired} -> {:error, %{reason: "token_expired"}}
@@ -40,7 +42,7 @@ defmodule CoreWeb.MessageChannel do
   def handle_in("message.create", payload, socket) when is_map(payload) do
     user_id = socket.assigns.current_user_id
 
-    with {:ok, _ms_left} <- token_time_left(socket),
+    with {:ok, _ms_left} <- SocketToken.time_left(socket),
          {:ok, channel, group, _role} <-
            Community.get_channel_for_member(socket.assigns.channel_id, user_id),
          {:ok, message, outcome} <- Messaging.create_message(channel, group, user_id, payload) do
@@ -65,14 +67,18 @@ defmodule CoreWeb.MessageChannel do
   end
 
   @impl true
+  def handle_out("access.revoked", %{user_id: user_id}, socket) do
+    if user_id == socket.assigns.current_user_id do
+      {:stop, {:shutdown, :access_revoked}, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_info(:token_expired, socket) do
     push(socket, "token.expired", %{})
     {:stop, {:shutdown, :token_expired}, socket}
-  end
-
-  defp token_time_left(socket) do
-    ms_left = socket.assigns.token_expires_at * 1_000 - System.system_time(:millisecond)
-    if ms_left > 0, do: {:ok, ms_left}, else: {:error, :token_expired}
   end
 
   defp error_payload(%Ecto.Changeset{} = changeset),
