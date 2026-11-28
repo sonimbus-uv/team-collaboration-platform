@@ -133,6 +133,96 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/members/{user_id}/expel:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: expelMember
+      summary: Expulsar a un miembro (CU-15 FA-02)
+      description: >-
+        Requiere el permiso `moderate` y un rol estrictamente superior al del
+        afectado (EX-01); no se puede moderar a uno mismo. Elimina la
+        membresía, cierra sus canales de texto y su participación en la voz del
+        grupo, y deja una fila en el registro de moderación. El afectado puede
+        volver con una invitación nueva. Core le avisa por `user:<user_id>`
+        con `moderation.applied`
+        ([contrato](../events/moderation.applied.md)). Se admite también en
+        grupos archivados.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "204": { description: Miembro expulsado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/members/{user_id}/ban:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    post:
+      operationId: banMember
+      summary: Bloquear a un miembro (CU-15 FA-03)
+      description: >-
+        Igual que la expulsión, y además impide el reingreso: unirse con una
+        invitación responde 403 `/problems/banned` hasta que se retire el
+        bloqueo.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "204": { description: Miembro bloqueado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/bans:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listBans
+      summary: Usuarios bloqueados del grupo (CU-15 FA-04, paso 1)
+      description: >-
+        Requiere el permiso `moderate`. Del más reciente al más antiguo. El
+        nombre sale de la copia local `user_profiles`; es nulo si no existe o
+        la cuenta está eliminada.
+      responses:
+        "200":
+          description: Bloqueos vigentes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ban" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/bans/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      operationId: unbanUser
+      summary: Retirar un bloqueo (CU-15 FA-04)
+      description: >-
+        Requiere el permiso `moderate`. El usuario puede volver con una
+        invitación; no recupera su membresía. Queda registrado en el registro
+        de moderación.
+      responses:
+        "204": { description: Bloqueo retirado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/v1/groups/{group_id}/roles:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -605,6 +695,19 @@ components:
           minProperties: 1
           propertyNames: { $ref: "#/components/schemas/Permission" }
           additionalProperties: { type: boolean }
+    ModerationRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500, description: Motivo opcional }
+    Ban:
+      type: object
+      required: [user_id, banned_by, created_at, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        banned_by: { type: string, format: uuid }
+        reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        display_name: { type: [string, "null"] }
     CreateInvitation:
       type: object
       properties:
