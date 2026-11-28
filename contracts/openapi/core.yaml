@@ -66,6 +66,72 @@ paths:
               schema: { $ref: "#/components/schemas/GroupEnvelope" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateGroup
+      summary: Editar el grupo (CU-09); solo administradores
+      description: >-
+        Requiere el permiso `manage_group`. Solo se envían los campos que
+        cambian. Los miembros reciben [`group.updated`](../events/group.updated.md).
+        No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateGroup" }
+      responses:
+        "200":
+          description: Grupo actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: deleteGroup
+      summary: Eliminar el grupo (CU-09 FA-02); solo administradores
+      description: >-
+        Requiere el permiso `manage_group` y que el cuerpo lleve el nombre
+        exacto del grupo (CU-09 EX-02): si no coincide responde 422 y no se
+        elimina nada. Borrado lógico: el grupo, sus canales y su historial
+        dejan de servirse para todos. Core cierra los temas de los canales del
+        grupo y avisa con [`group.deleted`](../events/group.deleted.md). Se
+        admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteGroup" }
+      responses:
+        "204": { description: Grupo eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    post:
+      operationId: archiveGroup
+      summary: Archivar el grupo (CU-09 FA-01); solo administradores
+      description: >-
+        Requiere el permiso `manage_group`. El grupo queda en solo lectura: se
+        rechazan mensajes, canales nuevos, invitaciones y cambios de roles, y
+        el historial sigue consultable. Los miembros reciben
+        [`group.archived`](../events/group.archived.md). Archivar un grupo ya
+        archivado responde 409.
+      responses:
+        "200":
+          description: Grupo archivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
   /api/v1/groups/{group_id}/members:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -736,6 +802,19 @@ components:
         name: { type: string, minLength: 2, maxLength: 100 }
         description: { type: string, maxLength: 500 }
         image_id: { type: string, format: uuid, description: Archivo del File Service }
+    UpdateGroup:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: [string, "null"], maxLength: 500 }
+        image_id: { type: [string, "null"], format: uuid, description: Archivo del File Service }
+    DeleteGroup:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, description: Nombre exacto del grupo, como confirmación }
     Group:
       type: object
       required: [id, name, created_by, role, created_at]
