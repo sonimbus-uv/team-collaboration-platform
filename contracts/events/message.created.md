@@ -59,11 +59,38 @@ por campo.
 | `type` | Significado |
 |---|---|
 | `validation-error` | Campos inválidos |
-| `not-found` | El usuario perdió el acceso al canal |
+| `not-found` | El usuario perdió el acceso al canal o el mensaje no existe |
 | `group-archived` | El grupo está archivado (solo lectura) |
 | `client-message-id-conflict` | Ese `client_message_id` ya se usó en otro canal |
 | `token-expired` | El access token venció |
 | `messages-unavailable` | ScyllaDB no responde; reintentar con el mismo `client_message_id` |
+
+## Cliente → servidor: `message.update` y `message.delete`
+
+El autor (CU-19) y, para `message.delete`, quien modere (CU-15). Equivalen a `PATCH` y `DELETE` de
+`/api/v1/channels/{channel_id}/messages/{message_id}`.
+
+```json
+{ "id": "0955f155-d37a-11f1-bf48-3f32a97dd8eb", "content": "Hola a todos" }
+```
+
+`message.update` lleva `id` y `content`; `message.delete` lleva `id` y, para
+moderación, un `reason` opcional (CU-15 FA-01). Respuesta
+`ok`: `{"message": Message}` para `message.update` y `{}` para `message.delete`.
+Respuesta `error`: `{"type": "<tipo>"}`, con los tipos de `message.create` y
+además `forbidden` (no es el autor).
+
+## Cliente → servidor: `reaction.toggle`
+
+```json
+{ "message_id": "0955f155-d37a-11f1-bf48-3f32a97dd8eb", "emoji": "👍" }
+```
+
+Alterna la reacción del usuario (CU-18); equivale a `POST
+/api/v1/channels/{channel_id}/messages/{message_id}/reactions`. Respuesta `ok`:
+`{"emoji": "👍", "count": 3, "active": true}`. Respuesta `error`: `{"type":
+"<tipo>"}`, con los tipos de `message.create` y además `message-deleted` (el
+mensaje se eliminó).
 
 ## Servidor → clientes: `message.created` v1
 
@@ -85,7 +112,9 @@ guardar el mensaje.
     "client_message_id": "8f0e7c52-3a59-4f7e-9d43-4a5b7a3c2e10",
     "content": "Hola, equipo",
     "reply_to": null,
+    "reply_preview": null,
     "file_id": null,
+    "reactions": [],
     "created_at": "2026-10-29T15:04:05.123456Z",
     "edited_at": null,
     "deleted": false
@@ -96,6 +125,13 @@ guardar el mensaje.
 - `id` es un timeuuid que asigna Core y define el orden (D-08); `created_at`
   sale de él.
 - Con `deleted = true`, `content` y `file_id` son `null` (D-24).
+- `reactions` lista `{emoji, count, reacted_by_me}` por emoji; en `message.created` y
+  `message.updated` llega con las reacciones vigentes del lector y los cambios
+  posteriores llegan como [`reaction.updated`](reaction.updated.md).
+- `reply_preview` es `null` si el mensaje no responde a otro. Si responde, lleva
+  `{id, unavailable, author, content}` del original (primeros 100 caracteres);
+  con el original eliminado, `{id, unavailable: true}` (CU-17 EX-01). La forma
+  es la misma en el historial REST y en `message.updated`.
 - `author.display_name` es el nombre del autor al enviar (`user_profiles`);
   es `null` si no tiene perfil o su cuenta está eliminada. Un cambio
   posterior de nombre no corrige los mensajes ya recibidos: el vigente está

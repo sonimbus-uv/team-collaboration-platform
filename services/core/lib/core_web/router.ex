@@ -33,6 +33,9 @@ defmodule CoreWeb.Router do
     put "/groups/:group_id/roles/:role/permissions", RoleController, :update
 
     get "/channels/:channel_id/messages", MessageController, :index
+    patch "/channels/:channel_id/messages/:id", MessageController, :update
+    delete "/channels/:channel_id/messages/:id", MessageController, :delete
+    post "/channels/:channel_id/messages/:id/reactions", MessageController, :react
     post "/channels/:channel_id/voice-token", VoiceController, :create
 
     get "/me/profile", ProfileController, :show

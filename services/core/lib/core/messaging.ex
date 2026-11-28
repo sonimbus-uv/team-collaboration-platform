@@ -11,16 +11,21 @@ defmodule Core.Messaging do
   `003_messages_by_client_id.cql`.
   """
   import Ecto.Changeset
+  import Ecto.Query, only: [from: 2]
 
-  alias Core.Community.{Channel, Group}
+  require Logger
+
+  alias Core.{Authorization, Community, Profiles, Realtime, Repo}
+  alias Core.Community.{Channel, Group, Member, ModerationAction}
   alias Core.Messaging.TimeUUID
   alias Core.Scylla
 
   @max_content_length 4_000
   @default_page_size 50
   @max_page_size 100
+  @preview_length 100
 
-  @columns "channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, edited_at, deleted"
+  @columns "channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, edited_at, deleted, deleted_reason"
 
   @reserve_cql """
   INSERT INTO messages_by_client_id (author_id, client_message_id, channel_id, bucket, message_id)
@@ -33,8 +38,36 @@ defmodule Core.Messaging do
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)
   """
 
+  @update_cql """
+  UPDATE messages_by_channel SET content = ?, edited_at = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ?
+  IF deleted = false
+  """
+
+  @delete_cql """
+  UPDATE messages_by_channel SET deleted = true, deleted_reason = ?, deleted_by = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ?
+  IF deleted = false
+  """
+
   @get_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
   @page_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? LIMIT ?"
+  @reaction_insert_cql """
+  INSERT INTO reactions_by_channel (channel_id, bucket, message_id, emoji, user_id, active, updated_at)
+  VALUES (?, ?, ?, ?, ?, true, ?) IF NOT EXISTS
+  """
+
+  @reaction_flip_cql """
+  UPDATE reactions_by_channel SET active = ?, updated_at = ?
+  WHERE channel_id = ? AND bucket = ? AND message_id = ? AND emoji = ? AND user_id = ?
+  IF active = ?
+  """
+
+  @reactions_of_message_cql "SELECT emoji, user_id, active FROM reactions_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
+  @reactions_in_cql "SELECT message_id, emoji, user_id, active FROM reactions_by_channel WHERE channel_id = ? AND bucket = ? AND message_id IN ?"
+  @reaction_attempts 4
+  @newer_after_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id > ? ORDER BY message_id ASC LIMIT ?"
+  @newer_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? ORDER BY message_id ASC LIMIT ?"
   @page_before_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id < ? LIMIT ?"
 
   @doc """
@@ -51,6 +84,12 @@ defmodule Core.Messaging do
   segundo caso no se debe volver a difundir.
   """
   def create_message(%Channel{} = channel, %Group{} = group, author_id, attrs) do
+    with {:ok, message, outcome} <- store_message(channel, group, author_id, attrs) do
+      {:ok, with_reply_preview(message, channel.id), outcome}
+    end
+  end
+
+  defp store_message(%Channel{} = channel, %Group{} = group, author_id, attrs) do
     with :ok <- require_text(channel),
          :ok <- require_writable(group),
          {:ok, input} <- validate_message(attrs),
@@ -129,6 +168,313 @@ defmodule Core.Messaging do
   end
 
   @doc """
+  Edita el contenido de un mensaje propio (CU-19). La condición `IF deleted =
+  false` evita editar un mensaje que se eliminó entretanto.
+  """
+  def edit_message(%Channel{} = channel, %Group{} = group, user_id, message_id, attrs) do
+    with :ok <- require_text(channel),
+         :ok <- require_writable(group),
+         {:ok, message} <- fetch_visible(channel, message_id),
+         :ok <- require_author(message, user_id),
+         {:ok, content} <- validate_edit(message, attrs) do
+      edited_at = DateTime.utc_now()
+      params = [content, edited_at, channel.id, bucket_of!(message.id), message.id]
+
+      case conditional_update(@update_cql, params) do
+        :applied ->
+          edited = %{message | content: content, edited_at: edited_at}
+
+          {:ok,
+           [with_reply_preview(edited, channel.id)]
+           |> with_reactions(channel.id, user_id)
+           |> hd()}
+
+        :not_applied ->
+          {:error, :not_found}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  @doc """
+  Elimina un mensaje (CU-19 FA-01, CU-15 FA-01). No borra la fila: marca
+  `deleted` con su motivo (D-24).
+
+  - El autor lo elimina con `deleted_reason = "author"`; no se admite en un
+    grupo archivado.
+  - Quien tenga el permiso `moderate` y un rol estrictamente superior al del
+    autor (o el autor ya no sea miembro) lo elimina con `deleted_reason =
+    "moderation"`, aunque el grupo esté archivado. Se registra la acción y se
+    avisa al autor. No hay transacción entre ScyllaDB y PostgreSQL: si la
+    auditoría falla, el borrado se mantiene y el fallo queda en el registro.
+  """
+  def delete_message(
+        %Channel{} = channel,
+        %Group{} = group,
+        actor_id,
+        actor_role,
+        message_id,
+        attrs \\ %{}
+      ) do
+    with :ok <- require_text(channel),
+         {:ok, message} <- fetch_visible(channel, message_id) do
+      if message.author_id == actor_id do
+        with :ok <- require_writable(group) do
+          mark_deleted(channel, message, "author", actor_id)
+        end
+      else
+        moderate_delete(channel, group, actor_id, actor_role, message, attrs)
+      end
+    end
+  end
+
+  defp moderate_delete(channel, group, actor_id, actor_role, message, attrs) do
+    with :ok <- Authorization.authorize(group.id, actor_role, :moderate),
+         :ok <- require_higher_role(actor_role, author_role(group.id, message.author_id)),
+         {:ok, reason} <- Community.cast_reason(attrs),
+         {:ok, deleted} <- mark_deleted(channel, message, "moderation", actor_id) do
+      audit_deletion(group, actor_id, message, reason)
+
+      Realtime.broadcast_to_user(message.author_id, "moderation.applied", %{
+        group_id: group.id,
+        action: :delete_message,
+        message_id: message.id,
+        reason: reason
+      })
+
+      {:ok, deleted}
+    end
+  end
+
+  defp audit_deletion(group, actor_id, message, reason) do
+    case Repo.insert(%ModerationAction{
+           group_id: group.id,
+           actor_id: actor_id,
+           target_user_id: message.author_id,
+           action: :delete_message,
+           target_ref: message.id,
+           reason: reason
+         }) do
+      {:ok, _action} ->
+        :ok
+
+      {:error, _changeset} ->
+        Logger.error("no se pudo registrar la eliminación moderada del mensaje #{message.id}")
+    end
+  end
+
+  defp author_role(group_id, author_id) do
+    Repo.one(
+      from m in Member, where: m.group_id == ^group_id and m.user_id == ^author_id, select: m.role
+    )
+  end
+
+  defp require_higher_role(_actor_role, nil), do: :ok
+
+  defp require_higher_role(actor_role, author_role) do
+    if actor_role != author_role and Member.role_at_least?(actor_role, author_role),
+      do: :ok,
+      else: {:error, :forbidden}
+  end
+
+  defp mark_deleted(channel, message, reason, deleted_by) do
+    params = [reason, deleted_by, channel.id, bucket_of!(message.id), message.id]
+
+    case conditional_update(@delete_cql, params) do
+      :applied ->
+        {:ok, %{message | deleted: true, content: nil, file_id: nil, deleted_reason: reason}}
+
+      :not_applied ->
+        {:error, :not_found}
+
+      error ->
+        error
+    end
+  end
+
+  defp conditional_update(cql, params) do
+    with {:ok, result} <- Scylla.execute(cql, params) do
+      case Scylla.rows(result) do
+        [%{"[applied]" => true}] -> :applied
+        [%{"[applied]" => false}] -> :not_applied
+        _ -> {:error, :unavailable}
+      end
+    end
+  end
+
+  defp fetch_visible(channel, message_id) do
+    case fetch_existing(channel, message_id) do
+      {:ok, %{deleted: false} = message} -> {:ok, message}
+      {:ok, _deleted} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp fetch_reactable(channel, message_id) do
+    case fetch_existing(channel, message_id) do
+      {:ok, %{deleted: false} = message} -> {:ok, message}
+      {:ok, _deleted} -> {:error, :message_deleted}
+      error -> error
+    end
+  end
+
+  defp fetch_existing(channel, message_id) do
+    with {:ok, message_id} <- Ecto.UUID.cast(message_id),
+         {:ok, _datetime} <- TimeUUID.to_datetime(message_id),
+         {:ok, message} <- fetch(channel.id, bucket_of!(message_id), message_id) do
+      if message, do: {:ok, message}, else: {:error, :not_found}
+    else
+      :error -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp require_author(%{author_id: author_id}, author_id), do: :ok
+  defp require_author(_message, _user_id), do: {:error, :forbidden}
+
+  defp validate_edit(message, attrs) do
+    {%{}, %{content: :string}}
+    |> cast(attrs, [:content], empty_values: [])
+    |> validate_required([:content], message: "can't be blank")
+    |> validate_length(:content, max: @max_content_length)
+    |> validate_edit_minimum(message)
+    |> apply_action(:update)
+    |> case do
+      {:ok, %{content: content}} -> {:ok, content}
+      error -> error
+    end
+  end
+
+  defp validate_edit_minimum(changeset, %{file_id: nil}),
+    do: validate_length(changeset, :content, min: 1)
+
+  defp validate_edit_minimum(changeset, _message), do: changeset
+
+  @doc """
+  Agrega o retira la reacción del usuario (CU-18). Una fila por `(mensaje,
+  emoji, usuario)`: `INSERT ... IF NOT EXISTS` para la primera vez y `UPDATE ...
+  IF active = ?` para alternar, con reintento si otra petición cambió la fila
+  entretanto. Sin contadores `counter` (D-05).
+  """
+  def toggle_reaction(%Channel{} = channel, %Group{} = group, user_id, message_id, emoji) do
+    with :ok <- require_text(channel),
+         :ok <- require_writable(group),
+         {:ok, emoji} <- validate_emoji(emoji),
+         {:ok, message} <- fetch_reactable(channel, message_id),
+         bucket = bucket_of!(message.id),
+         {:ok, active} <-
+           flip_reaction(channel.id, bucket, message.id, emoji, user_id, @reaction_attempts),
+         {:ok, count} <- count_reaction(channel.id, bucket, message.id, emoji) do
+      {:ok,
+       %{
+         channel_id: channel.id,
+         message_id: message.id,
+         emoji: emoji,
+         count: count,
+         active: active,
+         user_id: user_id
+       }}
+    end
+  end
+
+  defp flip_reaction(_channel_id, _bucket, _message_id, _emoji, _user_id, 0),
+    do: {:error, :unavailable}
+
+  defp flip_reaction(channel_id, bucket, message_id, emoji, user_id, attempts) do
+    now = DateTime.utc_now()
+
+    with {:ok, result} <-
+           Scylla.execute(@reaction_insert_cql, [
+             channel_id,
+             bucket,
+             message_id,
+             emoji,
+             user_id,
+             now
+           ]) do
+      case Scylla.rows(result) do
+        [%{"[applied]" => true}] ->
+          {:ok, true}
+
+        [%{"[applied]" => false, "active" => current}] ->
+          flip_existing(channel_id, bucket, message_id, emoji, user_id, current, attempts, now)
+
+        _ ->
+          {:error, :unavailable}
+      end
+    end
+  end
+
+  defp flip_existing(channel_id, bucket, message_id, emoji, user_id, current, attempts, now) do
+    params = [!current, now, channel_id, bucket, message_id, emoji, user_id, current]
+
+    case conditional_update(@reaction_flip_cql, params) do
+      :applied -> {:ok, !current}
+      :not_applied -> flip_reaction(channel_id, bucket, message_id, emoji, user_id, attempts - 1)
+      error -> error
+    end
+  end
+
+  defp count_reaction(channel_id, bucket, message_id, emoji) do
+    with {:ok, result} <-
+           Scylla.execute(@reactions_of_message_cql, [channel_id, bucket, message_id]) do
+      {:ok,
+       result |> Scylla.rows() |> Enum.count(&(&1["emoji"] == emoji and &1["active"] == true))}
+    end
+  end
+
+  defp with_reactions(messages, channel_id, viewer_id) do
+    summaries =
+      messages
+      |> Enum.reject(& &1.deleted)
+      |> Enum.group_by(&bucket_of!(&1.id), & &1.id)
+      |> Enum.reduce(%{}, fn {bucket, ids}, acc ->
+        case Scylla.execute(@reactions_in_cql, [channel_id, bucket, ids]) do
+          {:ok, result} ->
+            Enum.reduce(Scylla.rows(result), acc, &tally_reaction(&1, &2, viewer_id))
+
+          _error ->
+            acc
+        end
+      end)
+
+    Enum.map(messages, fn message ->
+      Map.put(message, :reactions, reaction_list(Map.get(summaries, message.id, %{})))
+    end)
+  end
+
+  defp tally_reaction(%{"active" => true} = row, acc, viewer_id) do
+    mine = viewer_id != nil and row["user_id"] == viewer_id
+
+    Map.update(acc, row["message_id"], %{row["emoji"] => {1, mine}}, fn emojis ->
+      Map.update(emojis, row["emoji"], {1, mine}, fn {count, was_mine} ->
+        {count + 1, was_mine or mine}
+      end)
+    end)
+  end
+
+  defp tally_reaction(_row, acc, _viewer_id), do: acc
+
+  defp reaction_list(emojis) do
+    emojis
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(fn {emoji, {count, mine}} ->
+      %{emoji: emoji, count: count, reacted_by_me: mine}
+    end)
+  end
+
+  defp validate_emoji(emoji) when is_binary(emoji) do
+    if byte_size(emoji) <= 32 and length(String.graphemes(emoji)) == 1 and
+         not Regex.match?(~r/^[\p{L}\p{N}\p{Z}\p{C}]+$/u, emoji),
+       do: {:ok, emoji},
+       else: {:error, invalid(:emoji, "is not a valid emoji")}
+  end
+
+  defp validate_emoji(_emoji), do: {:error, invalid(:emoji, "is not a valid emoji")}
+
+  @doc """
   Página del historial, del más reciente al más antiguo (CU-20).
 
   Opciones: `"before"` (cursor: el `id` del último mensaje entregado) y
@@ -136,16 +482,118 @@ defmodule Core.Messaging do
   atrás hasta llenar la página o llegar al mes de creación del canal.
   `next_cursor` es `nil` cuando no quedan mensajes.
   """
-  def list_messages(%Channel{} = channel, params) do
+  def list_messages(%Channel{} = channel, params, viewer_id \\ nil) do
     with :ok <- require_text(channel),
-         {:ok, before, limit} <- validate_page(params) do
-      start = if before, do: bucket_of!(before), else: TimeUUID.bucket(DateTime.utc_now())
-      floor = TimeUUID.bucket(channel.inserted_at)
+         {:ok, page} <- validate_page(params),
+         {:ok, messages} <- history(channel, page) do
+      next_cursor = if length(messages) == page.limit, do: List.last(messages).id
 
-      with {:ok, messages} <- collect(channel.id, start, floor, before, limit, []) do
-        next_cursor = if length(messages) == limit, do: List.last(messages).id
-        {:ok, %{messages: messages, next_cursor: next_cursor}}
-      end
+      messages =
+        messages
+        |> with_reply_previews(channel.id)
+        |> with_reactions(channel.id, viewer_id)
+
+      {:ok, %{messages: messages, next_cursor: next_cursor}}
+    end
+  end
+
+  defp history(channel, %{around: nil, before: before, limit: limit}) do
+    start = if before, do: bucket_of!(before), else: TimeUUID.bucket(DateTime.utc_now())
+    collect(channel.id, start, floor_bucket(channel), before, limit, [])
+  end
+
+  defp history(channel, %{around: around, limit: limit}) do
+    bucket = bucket_of!(around)
+    last_bucket = TimeUUID.bucket(DateTime.utc_now())
+
+    with {:ok, target} <- fetch_around(channel, bucket, around),
+         {:ok, newer} <- collect_newer(channel.id, bucket, last_bucket, around, div(limit, 2), []),
+         older_limit = limit - 1 - length(newer),
+         {:ok, older} <-
+           collect(channel.id, bucket, floor_bucket(channel), around, older_limit, []) do
+      {:ok, Enum.reverse(newer) ++ [target] ++ older}
+    end
+  end
+
+  defp floor_bucket(channel), do: TimeUUID.bucket(channel.inserted_at)
+
+  defp fetch_around(channel, bucket, around) do
+    case fetch(channel.id, bucket, around) do
+      {:ok, nil} -> {:error, :not_found}
+      other -> other
+    end
+  end
+
+  defp collect_newer(_channel_id, bucket, last_bucket, _after, _remaining, acc)
+       when bucket > last_bucket,
+       do: {:ok, acc}
+
+  defp collect_newer(_channel_id, _bucket, _last_bucket, _after, 0, acc), do: {:ok, acc}
+
+  defp collect_newer(channel_id, bucket, last_bucket, after_id, remaining, acc) do
+    {cql, params} =
+      if after_id,
+        do: {@newer_after_cql, [channel_id, bucket, after_id, remaining]},
+        else: {@newer_cql, [channel_id, bucket, remaining]}
+
+    with {:ok, result} <- Scylla.execute(cql, params) do
+      page = result |> Scylla.rows() |> Enum.map(&to_message/1)
+
+      collect_newer(
+        channel_id,
+        TimeUUID.next_bucket(bucket),
+        last_bucket,
+        nil,
+        remaining - length(page),
+        acc ++ page
+      )
+    end
+  end
+
+  defp with_reply_previews(messages, channel_id) do
+    originals =
+      messages
+      |> Enum.map(& &1.reply_to)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Map.new(&{&1, original(channel_id, &1)})
+
+    names =
+      originals
+      |> Map.values()
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(& &1.author_id)
+      |> Profiles.display_names()
+
+    Enum.map(messages, fn message ->
+      Map.put(message, :reply_preview, reply_preview(message.reply_to, originals, names))
+    end)
+  end
+
+  defp with_reply_preview(message, channel_id),
+    do: hd(with_reply_previews([message], channel_id))
+
+  defp original(channel_id, message_id) do
+    case fetch(channel_id, bucket_of!(message_id), message_id) do
+      {:ok, %{deleted: false} = original} -> original
+      _ -> nil
+    end
+  end
+
+  defp reply_preview(nil, _originals, _names), do: nil
+
+  defp reply_preview(reply_to, originals, names) do
+    case Map.fetch!(originals, reply_to) do
+      nil ->
+        %{id: reply_to, unavailable: true}
+
+      original ->
+        %{
+          id: reply_to,
+          unavailable: false,
+          author: %{id: original.author_id, display_name: Map.get(names, original.author_id)},
+          content: String.slice(original.content || "", 0, @preview_length)
+        }
     end
   end
 
@@ -200,7 +648,9 @@ defmodule Core.Messaging do
       file_id: if(deleted, do: nil, else: row["file_id"]),
       created_at: created_at,
       edited_at: row["edited_at"],
-      deleted: deleted
+      deleted: deleted,
+      deleted_reason: if(deleted, do: row["deleted_reason"], else: nil),
+      reactions: []
     }
   end
 
@@ -257,17 +707,33 @@ defmodule Core.Messaging do
   end
 
   defp validate_page(params) do
-    types = %{before: Ecto.UUID, limit: :integer}
+    types = %{before: Ecto.UUID, around: Ecto.UUID, limit: :integer}
 
     {%{}, types}
     |> cast(params, Map.keys(types))
     |> validate_number(:limit, greater_than_or_equal_to: 1, less_than_or_equal_to: @max_page_size)
     |> validate_change(:before, &validate_timeuuid/2)
+    |> validate_change(:around, &validate_timeuuid/2)
+    |> validate_exclusive(:before, :around)
     |> apply_action(:validate)
     |> case do
-      {:ok, page} -> {:ok, Map.get(page, :before), Map.get(page, :limit, @default_page_size)}
-      error -> error
+      {:ok, page} ->
+        {:ok,
+         %{
+           before: Map.get(page, :before),
+           around: Map.get(page, :around),
+           limit: Map.get(page, :limit, @default_page_size)
+         }}
+
+      error ->
+        error
     end
+  end
+
+  defp validate_exclusive(changeset, first, second) do
+    if get_field(changeset, first) && get_field(changeset, second),
+      do: add_error(changeset, second, "cannot be combined with #{first}"),
+      else: changeset
   end
 
   defp validate_timeuuid(field, value) do

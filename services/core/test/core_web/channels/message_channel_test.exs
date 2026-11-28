@@ -91,6 +91,109 @@ defmodule CoreWeb.MessageChannelTest do
     assert_reply ref, :error, %{type: "validation-error", errors: %{content: [_]}}
   end
 
+  test "edita y elimina un mensaje propio y difunde ambos cambios", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "hola"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+
+    ref = push(socket, "message.update", %{"id" => id, "content" => "hola a todos"})
+    assert_reply ref, :ok, %{message: %{id: ^id, content: "hola a todos", edited_at: %DateTime{}}}
+
+    assert_push "message.updated", %{
+      type: "message.updated",
+      version: 1,
+      payload: %{id: ^id, content: "hola a todos"}
+    }
+
+    ref = push(socket, "message.delete", %{"id" => id})
+    assert_reply ref, :ok, %{}
+
+    assert_push "message.deleted", %{
+      type: "message.deleted",
+      version: 1,
+      payload: %{id: ^id, deleted_reason: "author"}
+    }
+  end
+
+  test "otro miembro no puede editar ni eliminar mensajes ajenos", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "mio"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+
+    guest = user_id()
+    member_fixture(ctx.group, guest, :member)
+    {:ok, guest_socket} = connect(UserSocket, %{}, connect_info: %{auth_token: token_for(guest)})
+    {:ok, _, guest_socket} = subscribe_and_join(guest_socket, "channel:#{ctx.channel.id}", %{})
+
+    ref = push(guest_socket, "message.update", %{"id" => id, "content" => "x"})
+    assert_reply ref, :error, %{type: "forbidden"}
+
+    ref = push(guest_socket, "message.delete", %{"id" => id})
+    assert_reply ref, :error, %{type: "forbidden"}
+  end
+
+  test "un moderador elimina un mensaje ajeno y el canal ve el motivo", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    guest = user_id()
+    member_fixture(ctx.group, guest, :member)
+    {:ok, guest_socket} = connect(UserSocket, %{}, connect_info: %{auth_token: token_for(guest)})
+    {:ok, _, guest_socket} = subscribe_and_join(guest_socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(guest_socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "ofensivo"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+
+    ref = push(socket, "message.delete", %{"id" => id, "reason" => "Spam"})
+    assert_reply ref, :ok, %{}
+
+    assert_push "message.deleted", %{payload: %{id: ^id, deleted_reason: "moderation"}}
+  end
+
+  test "reacciona por el canal, alterna y difunde reaction.updated", ctx do
+    {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
+
+    ref =
+      push(socket, "message.create", %{
+        "client_message_id" => Ecto.UUID.generate(),
+        "content" => "hola"
+      })
+
+    assert_reply ref, :ok, %{message: %{id: id}}
+    owner = ctx.owner
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "👍"})
+    assert_reply ref, :ok, %{emoji: "👍", count: 1, active: true}
+
+    assert_push "reaction.updated", %{
+      type: "reaction.updated",
+      version: 1,
+      payload: %{message_id: ^id, emoji: "👍", count: 1, active: true, user_id: ^owner}
+    }
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "👍"})
+    assert_reply ref, :ok, %{count: 0, active: false}
+
+    ref = push(socket, "reaction.toggle", %{"message_id" => id, "emoji" => "a"})
+    assert_reply ref, :error, %{type: "validation-error", errors: %{emoji: [_]}}
+  end
+
   test "errores de validación en la respuesta", ctx do
     {:ok, _, socket} = subscribe_and_join(ctx.socket, "channel:#{ctx.channel.id}", %{})
 

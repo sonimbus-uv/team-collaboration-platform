@@ -409,11 +409,26 @@ paths:
       description: >-
         Paginación por cursor. El envío va por WebSocket
         (contracts/events/message.created.md).
+
+
+        Con `around` la página se centra en ese mensaje (CU-20 FA-01, "ir al
+        mensaje original"): lo incluye, hasta `limit / 2` mensajes posteriores
+        y el resto anteriores, siempre del más reciente al más antiguo.
+        `next_cursor` sigue siendo el cursor hacia atrás. Cargar páginas más
+        nuevas que la entregada no está en esta versión. `around` y `before` no
+        se combinan.
       parameters:
         - name: before
           in: query
           required: false
           description: Cursor; `next_cursor` de la página anterior
+          schema: { type: string, format: uuid }
+        - name: around
+          in: query
+          required: false
+          description: >-
+            `id` de un mensaje del canal; el mensaje no existe en el canal:
+            404. Con `before` responde 422.
           schema: { type: string, format: uuid }
         - name: limit
           in: query
@@ -439,6 +454,139 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: El canal es de voz, `/problems/not-a-text-channel`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/channels/{channel_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/ChannelId"
+      - $ref: "#/components/parameters/MessageId"
+    patch:
+      operationId: editMessage
+      summary: Editar un mensaje propio (CU-19)
+      description: >-
+        Solo el autor. Guarda el nuevo contenido y marca `edited_at`. El
+        contenido tiene 1–4000 caracteres (D-22); puede ir vacío solo si el
+        mensaje tiene archivo. No se admite en grupos archivados. Core difunde
+        `message.updated` al tema `channel:<channel_id>`
+        ([contrato](../events/message.updated.md)). Equivale al evento
+        `message.update` del WebSocket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EditMessage" }
+      responses:
+        "200":
+          description: Mensaje editado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El grupo está archivado (`/problems/group-archived`) o el canal es de voz (`/problems/not-a-text-channel`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+    delete:
+      operationId: deleteMessage
+      summary: Eliminar un mensaje, propio (CU-19 FA-01) o ajeno por moderación (CU-15 FA-01)
+      description: >-
+        El mensaje no se borra: queda con `deleted = true` y sin `content` ni
+        `file_id`, de modo que el historial muestra el aviso y sus adjuntos
+        dejan de estar disponibles. Equivale al evento `message.delete` del
+        WebSocket. Core difunde `message.deleted`
+        ([contrato](../events/message.deleted.md)).
+
+
+        - **El autor** lo elimina con `deleted_reason = author` ("Mensaje
+        eliminado"). No se admite en grupos archivados.
+
+        - **Moderación:** quien tenga el permiso `moderate` y un rol
+        estrictamente superior al del autor (o el autor ya no sea miembro) lo
+        elimina con `deleted_reason = moderation` ("Mensaje eliminado por
+        moderación"), aunque el grupo esté archivado. Queda en el registro de
+        moderación y Core avisa al autor por `user:<user_id>` con
+        `moderation.applied` ([contrato](../events/moderation.applied.md)).
+        `reason` es opcional y solo se usa en este caso.
+
+        Un rol igual o superior, o sin permiso, responde 403.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "204": { description: Mensaje eliminado }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El grupo está archivado (`/problems/group-archived`) o el canal es de voz (`/problems/not-a-text-channel`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: ScyllaDB no responde, `/problems/messages-unavailable`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/channels/{channel_id}/messages/{message_id}/reactions:
+    parameters:
+      - $ref: "#/components/parameters/ChannelId"
+      - $ref: "#/components/parameters/MessageId"
+    post:
+      operationId: toggleReaction
+      summary: Reaccionar a un mensaje o retirar la reacción (CU-18)
+      description: >-
+        Alterna la reacción del usuario con ese emoji: si no la tenía, la
+        agrega; si ya la tenía, la retira (FA-01). Cada usuario tiene como
+        máximo una reacción de cada emoji por mensaje, incluso con peticiones
+        simultáneas. `emoji` es un único emoji (un grafema de hasta 32 bytes,
+        no una letra ni un número). No se admite en grupos archivados ni sobre
+        mensajes eliminados (EX-01). Core difunde `reaction.updated` al tema
+        `channel:<channel_id>` ([contrato](../events/reaction.updated.md)).
+        Equivale al evento `reaction.toggle` del WebSocket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToggleReaction" }
+      responses:
+        "200":
+          description: Estado de la reacción del usuario y total del emoji
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ReactionState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            El grupo está archivado (`/problems/group-archived`), el mensaje se
+            eliminó (`/problems/message-deleted`) o el canal es de voz
+            (`/problems/not-a-text-channel`)
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -577,6 +725,12 @@ components:
       name: channel_id
       in: path
       required: true
+      schema: { type: string, format: uuid }
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      description: timeuuid del mensaje
       schema: { type: string, format: uuid }
     GroupId:
       name: group_id
@@ -774,10 +928,75 @@ components:
         client_message_id: { type: string, format: uuid }
         content: { type: [string, "null"], description: Nulo si está eliminado }
         reply_to: { type: [string, "null"], format: uuid }
+        reply_preview:
+          oneOf:
+            - type: "null"
+            - { $ref: "#/components/schemas/ReplyPreview" }
+          description: Nulo si el mensaje no responde a otro (CU-17)
         file_id: { type: [string, "null"], format: uuid }
+        reactions:
+          type: array
+          description: >-
+            Reacciones por emoji, en orden alfabético; vacío en un mensaje
+            eliminado o sin reacciones
+          items: { $ref: "#/components/schemas/ReactionSummary" }
         created_at: { type: string, format: date-time }
         edited_at: { type: [string, "null"], format: date-time }
         deleted: { type: boolean }
+        deleted_reason:
+          type: [string, "null"]
+          enum: [author, moderation, null]
+          description: >-
+            Quién eliminó el mensaje: `author` ("Mensaje eliminado") o
+            `moderation` ("Mensaje eliminado por moderación"). Nulo si no está
+            eliminado.
+    ReplyPreview:
+      type: object
+      required: [id, unavailable]
+      description: >-
+        Vista previa del mensaje al que responde (CU-17). Si el original se
+        eliminó o ya no existe, `unavailable` es `true` y el cliente muestra
+        "Mensaje original no disponible" (EX-01).
+      properties:
+        id: { type: string, format: uuid }
+        unavailable: { type: boolean }
+        author:
+          type: object
+          required: [id, display_name]
+          description: Solo cuando `unavailable` es `false`
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: [string, "null"] }
+        content:
+          type: string
+          maxLength: 100
+          description: Primeros 100 caracteres del original; solo cuando `unavailable` es `false`
+    ReactionSummary:
+      type: object
+      required: [emoji, count, reacted_by_me]
+      properties:
+        emoji: { type: string }
+        count: { type: integer, minimum: 1 }
+        reacted_by_me:
+          type: boolean
+          description: Si quien consulta ha reaccionado con ese emoji
+    ToggleReaction:
+      type: object
+      required: [emoji]
+      properties:
+        emoji: { type: string, maxLength: 32 }
+    ReactionState:
+      type: object
+      required: [emoji, count, active]
+      properties:
+        emoji: { type: string }
+        count: { type: integer, minimum: 0, description: Reacciones activas con ese emoji }
+        active: { type: boolean, description: Si el usuario tiene ahora la reacción }
+    EditMessage:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, maxLength: 4000 }
     ProfileEnvelope:
       type: object
       required: [data]

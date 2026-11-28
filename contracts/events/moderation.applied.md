@@ -22,11 +22,12 @@ Si el usuario no está conectado no se reenvía; la notificación persistida
 | Campo | Significado |
 |---|---|
 | `group_id` | Grupo donde se aplicó la acción |
-| `action` | `expel` (expulsión) o `ban` (bloqueo) |
+| `action` | `expel` (expulsión), `ban` (bloqueo) o `delete_message` (mensaje eliminado por moderación) |
 | `reason` | Motivo capturado por el moderador, o `null` |
+| `message_id` | Solo con `delete_message`: el mensaje eliminado (CU-15 FA-01) |
 
 El quién y el cuándo no se envían al afectado; quedan en el registro de
-moderación del grupo. Retirar un bloqueo (`unban`) no genera este evento.
+moderación del grupo. Retirar un bloqueo (`unban`) no genera este evento. Con `delete_message` el afectado conserva su membresía y sus canales.
 
 Además del aviso, Core cierra los temas `channel:<channel_id>` y
 `voice:<channel_id>` del grupo para ese usuario

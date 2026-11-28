@@ -13,10 +13,13 @@ defmodule CoreWeb.MessageJSON do
     :client_message_id,
     :content,
     :reply_to,
+    :reply_preview,
     :file_id,
+    :reactions,
     :created_at,
     :edited_at,
-    :deleted
+    :deleted,
+    :deleted_reason
   ]
 
   @doc "Mensajes con su autor; una sola consulta a `user_profiles`."
@@ -26,6 +29,9 @@ defmodule CoreWeb.MessageJSON do
   end
 
   def message(message), do: hd(messages([message]))
+
+  def deleted(message),
+    do: %{id: message.id, channel_id: message.channel_id, deleted_reason: message.deleted_reason}
 
   defp message(message, names) do
     message

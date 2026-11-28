@@ -383,7 +383,7 @@ defmodule Core.Community do
       else: {:error, :forbidden}
   end
 
-  defp cast_reason(attrs) do
+  def cast_reason(attrs) do
     case attrs do
       %{"reason" => reason} when is_binary(reason) ->
         reason = String.trim(reason)

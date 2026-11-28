@@ -2,7 +2,7 @@ defmodule CoreWeb.MessageController do
   @moduledoc "Historial paginado de un canal de texto (CU-20)."
   use CoreWeb, :controller
 
-  alias Core.{Community, Messaging}
+  alias Core.{Community, Messaging, Realtime}
   alias CoreWeb.MessageJSON
 
   action_fallback CoreWeb.FallbackController
@@ -10,11 +10,49 @@ defmodule CoreWeb.MessageController do
   def index(conn, %{"channel_id" => channel_id} = params) do
     with {:ok, channel, _group, _role} <-
            Community.get_channel_for_member(channel_id, conn.assigns.current_user_id),
-         {:ok, page} <- Messaging.list_messages(channel, Map.take(params, ["before", "limit"])) do
+         {:ok, page} <-
+           Messaging.list_messages(
+             channel,
+             Map.take(params, ["before", "around", "limit"]),
+             conn.assigns.current_user_id
+           ) do
       json(conn, %{
         data: MessageJSON.messages(page.messages),
         next_cursor: page.next_cursor
       })
+    end
+  end
+
+  def update(conn, %{"channel_id" => channel_id, "id" => message_id} = params) do
+    user_id = conn.assigns.current_user_id
+
+    with {:ok, channel, group, _role} <- Community.get_channel_for_member(channel_id, user_id),
+         {:ok, message} <- Messaging.edit_message(channel, group, user_id, message_id, params) do
+      data = MessageJSON.message(message)
+      Realtime.broadcast_to_channel(channel.id, "message.updated", data)
+      json(conn, %{data: data})
+    end
+  end
+
+  def delete(conn, %{"channel_id" => channel_id, "id" => message_id} = params) do
+    user_id = conn.assigns.current_user_id
+
+    with {:ok, channel, group, role} <- Community.get_channel_for_member(channel_id, user_id),
+         {:ok, message} <-
+           Messaging.delete_message(channel, group, user_id, role, message_id, params) do
+      Realtime.broadcast_to_channel(channel.id, "message.deleted", MessageJSON.deleted(message))
+      send_resp(conn, :no_content, "")
+    end
+  end
+
+  def react(conn, %{"channel_id" => channel_id, "id" => message_id} = params) do
+    user_id = conn.assigns.current_user_id
+
+    with {:ok, channel, group, _role} <- Community.get_channel_for_member(channel_id, user_id),
+         {:ok, reaction} <-
+           Messaging.toggle_reaction(channel, group, user_id, message_id, params["emoji"]) do
+      Realtime.broadcast_to_channel(channel.id, "reaction.updated", reaction)
+      json(conn, %{data: Map.take(reaction, [:emoji, :count, :active])})
     end
   end
 end
