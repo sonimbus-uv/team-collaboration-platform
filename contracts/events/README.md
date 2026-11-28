@@ -26,6 +26,7 @@ Formato de nombre: `<recurso>.<evento>` (por ejemplo, `message.created`). Cada e
 | [`group.updated` v1](group.updated.md) | Core | Candidato; por `user:<user_id>` |
 | [`group.archived` v1](group.archived.md) | Core | Candidato; por `user:<user_id>` |
 | [`group.deleted` v1](group.deleted.md) | Core | Candidato; por `user:<user_id>` |
+| [`member.left` v1](member.left.md) | Core | Candidato; por `user:<user_id>` |
 
 ## Eventos entre servicios (RabbitMQ, D-04)
 

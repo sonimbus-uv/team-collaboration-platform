@@ -157,6 +157,31 @@ paths:
                     items: { $ref: "#/components/schemas/Member" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/members/me:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    delete:
+      operationId: leaveGroup
+      summary: Abandonar el grupo (CU-12)
+      description: >-
+        El usuario autenticado deja el grupo. Sus mensajes permanecen. Si es el
+        único administrador responde 409 `/problems/last-admin` (CU-12 EX-01):
+        debe transferir el rol de administrador con `changeMemberRole` o
+        eliminar el grupo. La comprobación bloquea las filas de los
+        administradores y es segura ante salidas concurrentes. Se admite en
+        grupos archivados. Core cierra sus temas `channel:<channel_id>` y
+        `voice:<channel_id>` del grupo y avisa a los demás miembros con
+        [`member.left`](../events/member.left.md). La confirmación previa
+        (CU-12 FA-01) es del cliente.
+      responses:
+        "204": { description: El usuario dejó el grupo }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Es el único administrador, `/problems/last-admin`
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/groups/{group_id}/members/{user_id}:
     parameters:
       - $ref: "#/components/parameters/GroupId"
