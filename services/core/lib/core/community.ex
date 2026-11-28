@@ -7,12 +7,11 @@ defmodule Core.Community do
   inexistentes. Quien no es miembro de un grupo recibe `:not_found`, para no
   revelar que el grupo existe.
 
-  Mientras no exista `group_role_permissions` (D-18), los permisos usan los
-  valores por defecto del catálogo: invitaciones para `moderator` y
-  superiores, canales para `admin`.
+  Los permisos por rol salen de `Core.Authorization` (D-18).
   """
   import Ecto.Query
 
+  alias Core.Authorization
   alias Core.Repo
   alias Core.Community.{Ban, Channel, Group, Invitation, Member}
   alias Core.Profiles.UserProfile
@@ -27,7 +26,8 @@ defmodule Core.Community do
     Repo.transact(fn ->
       with {:ok, group} <- %Group{} |> Group.create_changeset(attrs, user_id) |> Repo.insert(),
            {:ok, _member} <-
-             Repo.insert(%Member{group_id: group.id, user_id: user_id, role: :admin}) do
+             Repo.insert(%Member{group_id: group.id, user_id: user_id, role: :admin}),
+           :ok <- Authorization.seed(group.id) do
         {:ok, group}
       end
     end)
@@ -108,7 +108,7 @@ defmodule Core.Community do
   """
   def create_invitation(group_id, user_id, attrs) do
     with {:ok, group, role} <- get_group_for_member(group_id, user_id),
-         :ok <- require_role(role, :moderator),
+         :ok <- Authorization.authorize(group.id, role, :invite_members),
          :ok <- require_writable(group) do
       %Invitation{group_id: group.id, created_by: user_id}
       |> Invitation.create_changeset(attrs, DateTime.utc_now())
@@ -237,7 +237,7 @@ defmodule Core.Community do
   @doc "Crea un canal (CU-13). Requiere rol `admin` y un grupo no archivado."
   def create_channel(group_id, user_id, attrs) do
     with {:ok, group, role} <- get_group_for_member(group_id, user_id),
-         :ok <- require_role(role, :admin),
+         :ok <- Authorization.authorize(group.id, role, :manage_channels),
          :ok <- require_writable(group) do
       %Channel{group_id: group.id}
       |> Channel.create_changeset(attrs)
@@ -269,10 +269,6 @@ defmodule Core.Community do
   end
 
   ## Reglas comunes
-
-  defp require_role(role, required) do
-    if Member.role_at_least?(role, required), do: :ok, else: {:error, :forbidden}
-  end
 
   defp require_writable(%Group{archived_at: nil}), do: :ok
   defp require_writable(%Group{}), do: {:error, :group_archived}

@@ -10,6 +10,7 @@ defmodule Core.Application do
     children = [
       CoreWeb.Telemetry,
       Core.Repo,
+      Core.Authorization.Cache,
       {DNSCluster, query: Application.get_env(:core, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Core.PubSub},
       CoreWeb.Presence,
