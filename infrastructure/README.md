@@ -25,6 +25,7 @@ Entorno de desarrollo reproducible y despliegue de los servicios de apoyo:
 | `scylladb` | Perfil `messaging` | 1 *shard*, `SCYLLA_MEMORY` (750 MB por defecto) y `SCYLLA_RESERVE_MEMORY` (250 MB) dentro de `SCYLLA_MEM_LIMIT` (1200 MB), modo desarrollo (T-01) |
 | `minio` | Perfil `storage` | Con *health check* |
 | `minio-init` | Perfil `storage` | Se ejecuta y termina: crea `MINIO_BUCKET` (T-05) |
+| `core` | Perfil `core` | Imagen de `services/core` (release de Mix); aplica las migraciones al iniciar. Puerto `127.0.0.1:${CORE_PORT:-3002}`. Requiere `scylladb` (perfil `messaging`) y su *keyspace* aplicado |
 | `livekit` | Perfil `voice` | Red del anfitrión; 7880/TCP, 7881/TCP y 50000-50200/UDP. Ver [`livekit/`](livekit/README.md) |
 
 La VM además fija `fs.aio-max-nr` para ScyllaDB e instala Erlang/OTP y Elixir con `mise` según [`.tool-versions`](../.tool-versions).
@@ -40,6 +41,14 @@ docker volume rm team-collaboration-platform_cassandra_data
 ```
 
 Pendiente ([`docs/PLAN.md`](../docs/PLAN.md#tareas-abiertas)): RabbitMQ (T-03), *keyspace* de ScyllaDB creado al iniciar, medición de memoria (T-09), Nginx completo y LiveKit.
+
+### Core en Compose
+
+```bash
+docker compose --profile messaging --profile core up -d --build
+```
+
+Variables de `.env` (ver `.env.example`): `CORE_SECRET_KEY_BASE`, `CORE_JWT_ISSUER` (igual a `AUTH_JWT_ISSUER` de Auth) y `CORE_JWKS_URL`. Auth corre fuera de Compose (SIM-08), por eso el JWKS se pide a `host.docker.internal:3001`. `CORE_DB_PASSWORD` viaja dentro de `DATABASE_URL`: debe ser segura para una URL (solo letras, dígitos, `-`, `_`, `.`). El *keyspace* de ScyllaDB se aplica con los CQL de [`database/scylla/`](../database/scylla/README.md).
 
 ## Fuera de alcance
 

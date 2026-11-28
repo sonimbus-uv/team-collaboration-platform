@@ -226,6 +226,41 @@ services:
         bind:
           create_host_path: false
 
+  core:
+    build:
+      context: ../services/core
+    image: sonimbus-core:local
+    profiles:
+      - core
+    restart: unless-stopped
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      scylladb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ecto://core_service:${CORE_DB_PASSWORD:?Define CORE_DB_PASSWORD en infrastructure/.env}@postgres:5432/${POSTGRES_DB:-team_collaboration}
+      SECRET_KEY_BASE: ${CORE_SECRET_KEY_BASE:?Define CORE_SECRET_KEY_BASE en infrastructure/.env}
+      CORE_JWT_ISSUER: ${CORE_JWT_ISSUER:?Define CORE_JWT_ISSUER en infrastructure/.env}
+      CORE_JWKS_URL: ${CORE_JWKS_URL:-http://host.docker.internal:3001/.well-known/jwks.json}
+      CORE_SCYLLA_NODES: scylladb:9042
+      CORE_WS_ALLOWED_ORIGINS: ${CORE_WS_ALLOWED_ORIGINS:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${CORE_PORT:-3002}:3002"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+
 networks:
   backend:
     driver: bridge
