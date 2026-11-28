@@ -25,6 +25,10 @@ defmodule CoreWeb.Router do
     end
 
     patch "/groups/:group_id/members/:user_id", MemberController, :update
+    post "/groups/:group_id/members/:user_id/expel", ModerationController, :expel
+    post "/groups/:group_id/members/:user_id/ban", ModerationController, :ban
+    get "/groups/:group_id/bans", ModerationController, :index
+    delete "/groups/:group_id/bans/:user_id", ModerationController, :delete
     get "/groups/:group_id/roles", RoleController, :index
     put "/groups/:group_id/roles/:role/permissions", RoleController, :update
 

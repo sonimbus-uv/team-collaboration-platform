@@ -13,7 +13,7 @@ defmodule Core.Community do
 
   alias Core.Authorization
   alias Core.Repo
-  alias Core.Community.{Ban, Channel, Group, Invitation, Member}
+  alias Core.Community.{Ban, Channel, Group, Invitation, Member, ModerationAction}
   alias Core.Profiles.UserProfile
 
   ## Grupos
@@ -253,6 +253,156 @@ defmodule Core.Community do
     Enum.reduce(messages, Ecto.Changeset.change({%{}, %{field => :string}}), fn message, acc ->
       Ecto.Changeset.add_error(acc, field, message)
     end)
+  end
+
+  ## Moderación
+
+  def expel_member(group_id, actor_id, target_id, attrs),
+    do: moderate_member(:expel, group_id, actor_id, target_id, attrs)
+
+  def ban_member(group_id, actor_id, target_id, attrs),
+    do: moderate_member(:ban, group_id, actor_id, target_id, attrs)
+
+  defp moderate_member(action, group_id, actor_id, target_id, attrs) do
+    with {:ok, group, actor_role} <- get_group_for_member(group_id, actor_id),
+         :ok <- Authorization.authorize(group.id, actor_role, :moderate),
+         {:ok, target_id} <- cast_user_id(target_id),
+         {:ok, reason} <- cast_reason(attrs),
+         :ok <- reject_self(actor_id, target_id),
+         {:ok, _action} <- apply_moderation(action, group.id, actor_id, target_id, reason) do
+      Core.Realtime.disconnect_user_from_group(group.id, target_id)
+
+      Core.Realtime.broadcast_to_user(target_id, "moderation.applied", %{
+        group_id: group.id,
+        action: action,
+        reason: reason
+      })
+
+      :ok
+    end
+  end
+
+  defp apply_moderation(action, group_id, actor_id, target_id, reason) do
+    Repo.transact(fn ->
+      rows =
+        Repo.all(
+          from m in Member,
+            where: m.group_id == ^group_id and m.user_id in ^[actor_id, target_id],
+            order_by: m.user_id,
+            lock: "FOR UPDATE"
+        )
+
+      actor = Enum.find(rows, &(&1.user_id == actor_id))
+      target = Enum.find(rows, &(&1.user_id == target_id))
+
+      with %Member{} <- actor,
+           :ok <- Authorization.authorize(group_id, actor.role, :moderate),
+           %Member{} <- target || {:error, :not_found},
+           :ok <- require_higher_role(actor.role, target.role) do
+        Repo.delete_all(
+          from m in Member, where: m.group_id == ^group_id and m.user_id == ^target_id
+        )
+
+        if action == :ban do
+          Repo.insert!(%Ban{
+            group_id: group_id,
+            user_id: target_id,
+            banned_by: actor_id,
+            reason: reason
+          })
+        end
+
+        record_action(action, group_id, actor_id, target_id, reason)
+      else
+        nil -> {:error, :not_found}
+        {:error, reason} -> {:error, reason}
+      end
+    end)
+  end
+
+  def unban_member(group_id, actor_id, target_id) do
+    with {:ok, group, actor_role} <- get_group_for_member(group_id, actor_id),
+         :ok <- Authorization.authorize(group.id, actor_role, :moderate),
+         {:ok, target_id} <- cast_user_id(target_id) do
+      Repo.transact(fn ->
+        case Repo.delete_all(
+               from b in Ban, where: b.group_id == ^group.id and b.user_id == ^target_id
+             ) do
+          {1, _} -> record_action(:unban, group.id, actor_id, target_id, nil)
+          {0, _} -> {:error, :not_found}
+        end
+      end)
+      |> case do
+        {:ok, _action} -> :ok
+        error -> error
+      end
+    end
+  end
+
+  def list_bans(group_id, user_id) do
+    with {:ok, group, role} <- get_group_for_member(group_id, user_id),
+         :ok <- Authorization.authorize(group.id, role, :moderate) do
+      bans =
+        from(b in Ban,
+          left_join: p in UserProfile,
+          on: p.user_id == b.user_id,
+          where: b.group_id == ^group.id,
+          order_by: [desc: b.created_at, asc: b.user_id],
+          select: %{
+            user_id: b.user_id,
+            banned_by: b.banned_by,
+            reason: b.reason,
+            created_at: b.created_at,
+            display_name: p.display_name,
+            account_status: p.account_status
+          }
+        )
+        |> Repo.all()
+        |> Enum.map(&anonymize/1)
+
+      {:ok, bans}
+    end
+  end
+
+  defp record_action(action, group_id, actor_id, target_id, reason) do
+    Repo.insert(%ModerationAction{
+      group_id: group_id,
+      actor_id: actor_id,
+      target_user_id: target_id,
+      action: action,
+      reason: reason
+    })
+  end
+
+  defp reject_self(user_id, user_id), do: {:error, :forbidden}
+  defp reject_self(_actor_id, _target_id), do: :ok
+
+  defp require_higher_role(actor_role, target_role) do
+    if actor_role != target_role and Member.role_at_least?(actor_role, target_role),
+      do: :ok,
+      else: {:error, :forbidden}
+  end
+
+  defp cast_reason(attrs) do
+    case attrs do
+      %{"reason" => reason} when is_binary(reason) ->
+        reason = String.trim(reason)
+
+        cond do
+          reason == "" -> {:ok, nil}
+          String.length(reason) > 500 -> {:error, field_error(:reason, "is too long")}
+          true -> {:ok, reason}
+        end
+
+      %{"reason" => nil} ->
+        {:ok, nil}
+
+      %{"reason" => _other} ->
+        {:error, field_error(:reason, "is invalid")}
+
+      _ ->
+        {:ok, nil}
+    end
   end
 
   ## Invitaciones
