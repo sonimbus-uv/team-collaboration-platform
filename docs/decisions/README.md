@@ -27,6 +27,7 @@ Una decisión que cambia la arquitectura, que tiene alternativas serias o que es
 | D-15 | VoiceService (en Core) emite los tokens de LiveKit | Aceptada | 2026-10 | — |
 | D-16 | Sesiones absolutas de 20 días, refresh rotativo y comprobación privada de sesión | Confirmada por solicitante; revisión del equipo pendiente | 2026-10-22 | [ADR-007](ADR-007-auth-sessions.md) |
 | D-31 | La cámara entra al MVP; la pantalla compartida queda aparte | Propuesta; revisión del equipo pendiente | 2026-11-18 | — |
+| D-32 | Core decide el acceso a los archivos con `checkAccess` por HTTP/JSON privado | Propuesta; revisión del equipo pendiente | 2026-11-28 | — |
 
 ## Detalle
 
@@ -133,6 +134,17 @@ La PoC de voz y video ([sonimbus-uv/poc-voice-javafx](https://github.com/sonimbu
 - **No probado:** red real, NAT/TURN y TLS; Windows y macOS; más de dos participantes con video; CPU y memoria de la ventana recibiendo video.
 
 Sustituye la exclusión de «videollamadas» de `docs/requirements/README.md` para el video de cámara.
+
+### D-32. Core decide el acceso a los archivos con `checkAccess` por HTTP/JSON privado
+
+File Service guarda el contenido y los metadatos; quién puede subir o ver un archivo lo decide Core, porque solo Core conoce grupos, roles y canales (D-13, D-17). Files consulta a Core antes de aceptar una subida y antes de entregar un archivo.
+
+- **Consulta:** `GET /internal/v1/channels/{channel_id}/access?user_id=<uuid>&action=read|write`, contrato en [`core-internal.yaml`](../../contracts/openapi/core-internal.yaml). Responde `{"data": {"allowed": bool, "group_id": uuid, "role": role}}`; sin acceso, `allowed` es `false` sin indicar el motivo (el canal no existe, es de voz, el usuario no es miembro o su rol no alcanza `min_role`).
+- **Criterio:** el usuario es miembro del grupo vigente con un rol igual o superior a `min_role` del canal (D-17) y el canal es de texto y está vigente (D-19). `write` exige además que el grupo no esté archivado (CU-23). Un mensaje eliminado deja de servir su `file_id` (D-24).
+- **Autenticación entre servicios:** `Authorization: Bearer svc_<secreto>` por servicio consumidor (`files`, después `reports`), como la API interna de Auth ([contrato](../../contracts/auth/internal-api.md)). Red privada, sin pasar por Nginx.
+- **Mensajes:** `message.create` acepta un `file_id` opcional y, solo con él, un `content` vacío (CU-23 paso 4). Core no comprueba que el archivo exista ni que sea del autor: lo valida Files cuando se publica el mensaje.
+- **Diferencia con la arquitectura:** [`docs/architecture/README.md`](../architecture/README.md) menciona gRPC para `checkAccess`. Esta decisión propone HTTP/JSON porque Core no tiene dependencias gRPC, Files aún no existe y la API interna de Auth ya usa este formato; no agrega dependencias. Si el equipo de Files prefiere gRPC, se cambia antes de implementar.
+- **Estado:** solo contrato. Core no sirve la consulta hasta que exista Files (SIM-04).
 
 ## Decisiones pendientes
 
