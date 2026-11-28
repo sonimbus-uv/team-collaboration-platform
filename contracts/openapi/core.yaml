@@ -91,6 +91,106 @@ paths:
                     items: { $ref: "#/components/schemas/Member" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      operationId: changeMemberRole
+      summary: Cambiar el rol de un miembro (CU-14); solo administradores
+      description: >-
+        Requiere el permiso `manage_roles`, exclusivo del rol `admin`. El nuevo
+        rol rige desde la siguiente acción del miembro. Si el cambio dejaría al
+        grupo sin administradores (CU-14 EX-01) responde 409
+        `/problems/last-admin`; la comprobación bloquea las filas de los
+        administradores y es segura ante cambios concurrentes. No se admite en
+        grupos archivados. Core avisa al miembro por el tema
+        `user:<user_id>` con el evento `member.role.changed`
+        ([contrato](../events/member.role.changed.md)).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangeMemberRole" }
+      responses:
+        "200":
+          description: Miembro con su nuevo rol
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Member" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >-
+            El grupo está archivado (`/problems/group-archived`) o el cambio
+            dejaría al grupo sin administradores (`/problems/last-admin`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/groups/{group_id}/roles:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      operationId: listRoles
+      summary: Permisos de cada rol del grupo (CU-14)
+      description: >-
+        Solo para miembros del grupo. Devuelve los tres roles, de menor a
+        mayor, con todos los permisos del catálogo cerrado (D-18) y si cada uno
+        está activo. `manage_group` y `manage_roles` son exclusivos de `admin`
+        y siempre están activos para él.
+      responses:
+        "200":
+          description: Roles con sus permisos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RolePermissions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/groups/{group_id}/roles/{role}/permissions:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/RoleName"
+    put:
+      operationId: updateRolePermissions
+      summary: Activar o desactivar permisos de un rol (CU-14 FA-01); solo administradores
+      description: >-
+        Requiere `manage_roles`. Solo se envían los permisos que cambian; los
+        demás se conservan. Se aplican a todos los miembros que tengan ese rol,
+        desde su siguiente acción. Los permisos `manage_group` y
+        `manage_roles` no son ajustables: intentar cambiarlos, o un permiso
+        fuera del catálogo, responde 422. No se admite en grupos archivados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRolePermissions" }
+      responses:
+        "200":
+          description: Permisos vigentes del rol
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/RolePermissions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/GroupArchived" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/groups/{group_id}/invitations:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -393,6 +493,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RoleName:
+      name: role
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Role" }
   schemas:
     VoiceToken:
       type: object
@@ -465,6 +575,36 @@ components:
           description: >-
             Nulo si el usuario nunca guardó su nombre o si su cuenta está
             eliminada (se muestra anonimizado)
+    Permission:
+      type: string
+      enum: [invite_members, moderate, manage_channels, manage_projects, manage_group, manage_roles]
+      description: >-
+        Catálogo cerrado (D-18). `manage_group` y `manage_roles` son exclusivos
+        de `admin`.
+    ChangeMemberRole:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+    RolePermissions:
+      type: object
+      required: [role, permissions]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+        permissions:
+          type: object
+          description: Un booleano por cada permiso del catálogo
+          propertyNames: { $ref: "#/components/schemas/Permission" }
+          additionalProperties: { type: boolean }
+    UpdateRolePermissions:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: object
+          minProperties: 1
+          propertyNames: { $ref: "#/components/schemas/Permission" }
+          additionalProperties: { type: boolean }
     CreateInvitation:
       type: object
       properties:
