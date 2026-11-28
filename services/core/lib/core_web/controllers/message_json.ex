@@ -13,6 +13,7 @@ defmodule CoreWeb.MessageJSON do
     :client_message_id,
     :content,
     :reply_to,
+    :reply_preview,
     :file_id,
     :created_at,
     :edited_at,

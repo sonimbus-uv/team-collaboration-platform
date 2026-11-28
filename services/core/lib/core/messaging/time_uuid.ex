@@ -49,6 +49,10 @@ defmodule Core.Messaging.TimeUUID do
   @doc "Bucket mensual `AAAAMM` (UTC) de una fecha (`002_messages.cql`)."
   def bucket(%DateTime{year: year, month: month}), do: year * 100 + month
 
+  @doc "Bucket del mes siguiente."
+  def next_bucket(bucket) when rem(bucket, 100) == 12, do: (div(bucket, 100) + 1) * 100 + 1
+  def next_bucket(bucket), do: bucket + 1
+
   @doc "Bucket del mes anterior."
   def previous_bucket(bucket) when rem(bucket, 100) == 1, do: (div(bucket, 100) - 1) * 100 + 12
   def previous_bucket(bucket), do: bucket - 1

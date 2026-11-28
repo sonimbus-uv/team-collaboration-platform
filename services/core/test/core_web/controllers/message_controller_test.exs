@@ -35,12 +35,14 @@ defmodule CoreWeb.MessageControllerTest do
     }
   end
 
-  defp post_message(ctx, user, content) do
+  defp post_message(ctx, user, content, extra \\ %{}) do
     {:ok, message, :created} =
-      Messaging.create_message(ctx.channel, ctx.group, user, %{
-        "client_message_id" => Ecto.UUID.generate(),
-        "content" => content
-      })
+      Messaging.create_message(
+        ctx.channel,
+        ctx.group,
+        user,
+        Map.merge(%{"client_message_id" => Ecto.UUID.generate(), "content" => content}, extra)
+      )
 
     message
   end
@@ -136,6 +138,50 @@ defmodule CoreWeb.MessageControllerTest do
       delete(ctx.guest_conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages/#{owner_message.id}")
 
     assert json_response(conn, 403)
+  end
+
+  test "GET with around centers the history and embeds the reply preview", ctx do
+    reply = post_message(ctx, ctx.owner, "respondo", %{"reply_to" => ctx.message.id})
+
+    conn =
+      get(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages", %{
+        "around" => ctx.message.id,
+        "limit" => "5"
+      })
+
+    reply_id = reply.id
+    original_id = ctx.message.id
+
+    assert %{
+             "data" => [
+               %{
+                 "id" => ^reply_id,
+                 "reply_preview" => %{
+                   "id" => ^original_id,
+                   "unavailable" => false,
+                   "content" => "hola"
+                 }
+               },
+               %{"id" => ^original_id, "reply_preview" => nil}
+             ]
+           } = json_response(conn, 200)
+  end
+
+  test "GET with an unknown around is 404 and with around plus before is 422", ctx do
+    conn =
+      get(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages", %{
+        "around" => Core.Messaging.TimeUUID.generate()
+      })
+
+    assert json_response(conn, 404)
+
+    conn =
+      get(ctx.conn, ~p"/api/v1/channels/#{ctx.channel.id}/messages", %{
+        "around" => ctx.message.id,
+        "before" => ctx.message.id
+      })
+
+    assert %{"errors" => %{"around" => [_]}} = json_response(conn, 422)
   end
 
   test "a non member gets 404", ctx do

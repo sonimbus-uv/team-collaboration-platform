@@ -15,7 +15,7 @@ defmodule Core.Messaging do
 
   require Logger
 
-  alias Core.{Authorization, Community, Realtime, Repo}
+  alias Core.{Authorization, Community, Profiles, Realtime, Repo}
   alias Core.Community.{Channel, Group, Member, ModerationAction}
   alias Core.Messaging.TimeUUID
   alias Core.Scylla
@@ -23,6 +23,7 @@ defmodule Core.Messaging do
   @max_content_length 4_000
   @default_page_size 50
   @max_page_size 100
+  @preview_length 100
 
   @columns "channel_id, bucket, message_id, author_id, client_message_id, content, reply_to, file_id, edited_at, deleted, deleted_reason"
 
@@ -51,6 +52,8 @@ defmodule Core.Messaging do
 
   @get_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id = ?"
   @page_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? LIMIT ?"
+  @newer_after_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id > ? ORDER BY message_id ASC LIMIT ?"
+  @newer_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? ORDER BY message_id ASC LIMIT ?"
   @page_before_cql "SELECT #{@columns} FROM messages_by_channel WHERE channel_id = ? AND bucket = ? AND message_id < ? LIMIT ?"
 
   @doc """
@@ -67,6 +70,12 @@ defmodule Core.Messaging do
   segundo caso no se debe volver a difundir.
   """
   def create_message(%Channel{} = channel, %Group{} = group, author_id, attrs) do
+    with {:ok, message, outcome} <- store_message(channel, group, author_id, attrs) do
+      {:ok, with_reply_preview(message, channel.id), outcome}
+    end
+  end
+
+  defp store_message(%Channel{} = channel, %Group{} = group, author_id, attrs) do
     with :ok <- require_text(channel),
          :ok <- require_writable(group),
          {:ok, input} <- validate_message(attrs),
@@ -158,9 +167,15 @@ defmodule Core.Messaging do
       params = [content, edited_at, channel.id, bucket_of!(message.id), message.id]
 
       case conditional_update(@update_cql, params) do
-        :applied -> {:ok, %{message | content: content, edited_at: edited_at}}
-        :not_applied -> {:error, :not_found}
-        error -> error
+        :applied ->
+          {:ok,
+           with_reply_preview(%{message | content: content, edited_at: edited_at}, channel.id)}
+
+        :not_applied ->
+          {:error, :not_found}
+
+        error ->
+          error
       end
     end
   end
@@ -315,14 +330,110 @@ defmodule Core.Messaging do
   """
   def list_messages(%Channel{} = channel, params) do
     with :ok <- require_text(channel),
-         {:ok, before, limit} <- validate_page(params) do
-      start = if before, do: bucket_of!(before), else: TimeUUID.bucket(DateTime.utc_now())
-      floor = TimeUUID.bucket(channel.inserted_at)
+         {:ok, page} <- validate_page(params),
+         {:ok, messages} <- history(channel, page) do
+      next_cursor = if length(messages) == page.limit, do: List.last(messages).id
+      {:ok, %{messages: with_reply_previews(messages, channel.id), next_cursor: next_cursor}}
+    end
+  end
 
-      with {:ok, messages} <- collect(channel.id, start, floor, before, limit, []) do
-        next_cursor = if length(messages) == limit, do: List.last(messages).id
-        {:ok, %{messages: messages, next_cursor: next_cursor}}
-      end
+  defp history(channel, %{around: nil, before: before, limit: limit}) do
+    start = if before, do: bucket_of!(before), else: TimeUUID.bucket(DateTime.utc_now())
+    collect(channel.id, start, floor_bucket(channel), before, limit, [])
+  end
+
+  defp history(channel, %{around: around, limit: limit}) do
+    bucket = bucket_of!(around)
+    last_bucket = TimeUUID.bucket(DateTime.utc_now())
+
+    with {:ok, target} <- fetch_around(channel, bucket, around),
+         {:ok, newer} <- collect_newer(channel.id, bucket, last_bucket, around, div(limit, 2), []),
+         older_limit = limit - 1 - length(newer),
+         {:ok, older} <-
+           collect(channel.id, bucket, floor_bucket(channel), around, older_limit, []) do
+      {:ok, Enum.reverse(newer) ++ [target] ++ older}
+    end
+  end
+
+  defp floor_bucket(channel), do: TimeUUID.bucket(channel.inserted_at)
+
+  defp fetch_around(channel, bucket, around) do
+    case fetch(channel.id, bucket, around) do
+      {:ok, nil} -> {:error, :not_found}
+      other -> other
+    end
+  end
+
+  defp collect_newer(_channel_id, bucket, last_bucket, _after, _remaining, acc)
+       when bucket > last_bucket,
+       do: {:ok, acc}
+
+  defp collect_newer(_channel_id, _bucket, _last_bucket, _after, 0, acc), do: {:ok, acc}
+
+  defp collect_newer(channel_id, bucket, last_bucket, after_id, remaining, acc) do
+    {cql, params} =
+      if after_id,
+        do: {@newer_after_cql, [channel_id, bucket, after_id, remaining]},
+        else: {@newer_cql, [channel_id, bucket, remaining]}
+
+    with {:ok, result} <- Scylla.execute(cql, params) do
+      page = result |> Scylla.rows() |> Enum.map(&to_message/1)
+
+      collect_newer(
+        channel_id,
+        TimeUUID.next_bucket(bucket),
+        last_bucket,
+        nil,
+        remaining - length(page),
+        acc ++ page
+      )
+    end
+  end
+
+  defp with_reply_previews(messages, channel_id) do
+    originals =
+      messages
+      |> Enum.map(& &1.reply_to)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Map.new(&{&1, original(channel_id, &1)})
+
+    names =
+      originals
+      |> Map.values()
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(& &1.author_id)
+      |> Profiles.display_names()
+
+    Enum.map(messages, fn message ->
+      Map.put(message, :reply_preview, reply_preview(message.reply_to, originals, names))
+    end)
+  end
+
+  defp with_reply_preview(message, channel_id),
+    do: hd(with_reply_previews([message], channel_id))
+
+  defp original(channel_id, message_id) do
+    case fetch(channel_id, bucket_of!(message_id), message_id) do
+      {:ok, %{deleted: false} = original} -> original
+      _ -> nil
+    end
+  end
+
+  defp reply_preview(nil, _originals, _names), do: nil
+
+  defp reply_preview(reply_to, originals, names) do
+    case Map.fetch!(originals, reply_to) do
+      nil ->
+        %{id: reply_to, unavailable: true}
+
+      original ->
+        %{
+          id: reply_to,
+          unavailable: false,
+          author: %{id: original.author_id, display_name: Map.get(names, original.author_id)},
+          content: String.slice(original.content || "", 0, @preview_length)
+        }
     end
   end
 
@@ -435,17 +546,33 @@ defmodule Core.Messaging do
   end
 
   defp validate_page(params) do
-    types = %{before: Ecto.UUID, limit: :integer}
+    types = %{before: Ecto.UUID, around: Ecto.UUID, limit: :integer}
 
     {%{}, types}
     |> cast(params, Map.keys(types))
     |> validate_number(:limit, greater_than_or_equal_to: 1, less_than_or_equal_to: @max_page_size)
     |> validate_change(:before, &validate_timeuuid/2)
+    |> validate_change(:around, &validate_timeuuid/2)
+    |> validate_exclusive(:before, :around)
     |> apply_action(:validate)
     |> case do
-      {:ok, page} -> {:ok, Map.get(page, :before), Map.get(page, :limit, @default_page_size)}
-      error -> error
+      {:ok, page} ->
+        {:ok,
+         %{
+           before: Map.get(page, :before),
+           around: Map.get(page, :around),
+           limit: Map.get(page, :limit, @default_page_size)
+         }}
+
+      error ->
+        error
     end
+  end
+
+  defp validate_exclusive(changeset, first, second) do
+    if get_field(changeset, first) && get_field(changeset, second),
+      do: add_error(changeset, second, "cannot be combined with #{first}"),
+      else: changeset
   end
 
   defp validate_timeuuid(field, value) do

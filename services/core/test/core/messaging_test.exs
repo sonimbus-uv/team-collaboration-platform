@@ -295,6 +295,161 @@ defmodule Core.MessagingTest do
     end
   end
 
+  describe "reply preview (CU-17)" do
+    test "a reply carries the original's author and text", ctx do
+      {:ok, _} = Core.Profiles.put_display_name(ctx.owner, %{"display_name" => "Ana"})
+      {:ok, original, :created} = send_message(ctx, "pregunta")
+
+      assert {:ok, reply, :created} = send_message(ctx, "respuesta", %{"reply_to" => original.id})
+
+      assert %{
+               id: original_id,
+               unavailable: false,
+               author: %{id: author_id, display_name: "Ana"},
+               content: "pregunta"
+             } = reply.reply_preview
+
+      assert original_id == original.id
+      assert author_id == ctx.owner
+
+      assert {:ok, %{messages: [stored, _]}} = Messaging.list_messages(ctx.channel, %{})
+      assert stored.reply_preview == reply.reply_preview
+    end
+
+    test "a message that is not a reply has no preview", ctx do
+      assert {:ok, message, :created} = send_message(ctx, "suelto")
+      assert message.reply_preview == nil
+    end
+
+    test "the preview keeps only the first 100 characters", ctx do
+      {:ok, original, :created} = send_message(ctx, String.duplicate("a", 150))
+      {:ok, reply, :created} = send_message(ctx, "ok", %{"reply_to" => original.id})
+
+      assert String.length(reply.reply_preview.content) == 100
+    end
+
+    test "a deleted original becomes unavailable (EX-01)", ctx do
+      {:ok, original, :created} = send_message(ctx, "borrame")
+      {:ok, reply, :created} = send_message(ctx, "respuesta", %{"reply_to" => original.id})
+      {:ok, _} = Messaging.delete_message(ctx.channel, ctx.group, ctx.owner, :admin, original.id)
+
+      assert {:ok, %{messages: [stored, _deleted]}} = Messaging.list_messages(ctx.channel, %{})
+      assert stored.id == reply.id
+      assert stored.reply_preview == %{id: original.id, unavailable: true}
+    end
+
+    test "editing a reply keeps its preview", ctx do
+      {:ok, original, :created} = send_message(ctx, "pregunta")
+      {:ok, reply, :created} = send_message(ctx, "respuesta", %{"reply_to" => original.id})
+
+      assert {:ok, edited} =
+               Messaging.edit_message(ctx.channel, ctx.group, ctx.owner, reply.id, %{
+                 "content" => "mejor respuesta"
+               })
+
+      assert %{unavailable: false, content: "pregunta"} = edited.reply_preview
+    end
+  end
+
+  describe "history around a message (CU-20 FA-01)" do
+    setup ctx do
+      ids = for i <- 1..7, do: elem(send_message(ctx, "m#{i}"), 1).id
+      %{ids: ids}
+    end
+
+    defp contents(page), do: Enum.map(page.messages, & &1.content)
+
+    test "centers the page on the message, newest first", ctx do
+      around = Enum.at(ctx.ids, 3)
+
+      assert {:ok, page} =
+               Messaging.list_messages(ctx.channel, %{"around" => around, "limit" => "5"})
+
+      assert contents(page) == ["m6", "m5", "m4", "m3", "m2"]
+      assert page.next_cursor == Enum.at(ctx.ids, 1)
+
+      assert {:ok, older} =
+               Messaging.list_messages(ctx.channel, %{
+                 "before" => page.next_cursor,
+                 "limit" => "5"
+               })
+
+      assert contents(older) == ["m1"]
+      assert older.next_cursor == nil
+    end
+
+    test "around the newest message fills the page with older ones", ctx do
+      assert {:ok, page} =
+               Messaging.list_messages(ctx.channel, %{
+                 "around" => List.last(ctx.ids),
+                 "limit" => "5"
+               })
+
+      assert contents(page) == ["m7", "m6", "m5", "m4", "m3"]
+    end
+
+    test "around the oldest message returns what exists and no cursor", ctx do
+      assert {:ok, page} =
+               Messaging.list_messages(ctx.channel, %{"around" => hd(ctx.ids), "limit" => "5"})
+
+      assert contents(page) == ["m3", "m2", "m1"]
+      assert page.next_cursor == nil
+    end
+
+    test "a limit of one returns just the message", ctx do
+      assert {:ok, page} =
+               Messaging.list_messages(ctx.channel, %{
+                 "around" => Enum.at(ctx.ids, 2),
+                 "limit" => "1"
+               })
+
+      assert contents(page) == ["m3"]
+    end
+
+    test "an id that is not in the channel is not found", ctx do
+      assert {:error, :not_found} =
+               Messaging.list_messages(ctx.channel, %{"around" => TimeUUID.generate()})
+    end
+
+    test "invalid ids and the combination with before are validation errors", ctx do
+      assert {:error, changeset} =
+               Messaging.list_messages(ctx.channel, %{"around" => Ecto.UUID.generate()})
+
+      assert %{around: [_]} = errors_on(changeset)
+
+      assert {:error, changeset} =
+               Messaging.list_messages(ctx.channel, %{
+                 "around" => hd(ctx.ids),
+                 "before" => List.last(ctx.ids)
+               })
+
+      assert %{around: [_]} = errors_on(changeset)
+    end
+
+    test "newer messages are found across month boundaries", ctx do
+      last_month = DateTime.utc_now() |> DateTime.add(-35 * 86_400)
+      old_id = TimeUUID.generate(last_month)
+
+      {:ok, _} =
+        Core.Scylla.execute(
+          "INSERT INTO messages_by_channel (channel_id, bucket, message_id, author_id, client_message_id, content, deleted) VALUES (?, ?, ?, ?, ?, ?, false)",
+          [
+            ctx.channel.id,
+            TimeUUID.bucket(last_month),
+            old_id,
+            ctx.owner,
+            Ecto.UUID.generate(),
+            "viejo"
+          ]
+        )
+
+      assert {:ok, page} =
+               Messaging.list_messages(ctx.channel, %{"around" => old_id, "limit" => "4"})
+
+      assert contents(page) == ["m2", "m1", "viejo"]
+    end
+  end
+
   test "responder a un mensaje del mismo canal (CU-17)", ctx do
     {:ok, original, :created} = send_message(ctx, "pregunta")
 
