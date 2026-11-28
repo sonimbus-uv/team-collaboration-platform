@@ -16,6 +16,7 @@ defmodule CoreWeb.UserSocket do
   alias Core.AccessToken
 
   channel "channel:*", CoreWeb.MessageChannel
+  channel "user:*", CoreWeb.UserChannel
 
   @impl true
   def connect(params, socket, connect_info) do
